@@ -1,0 +1,142 @@
+# Transformer types, defined by nameplate / factory-test values.
+#
+#   s_rated_kva : rated apparent power [kVA]
+#   uk_percent  : short-circuit (impedance) voltage [%]
+#   pk_kw       : load (copper) losses at rated load [kW]   (short-circuit test)
+#   p0_kw       : no-load (iron) losses [kW]                (open-circuit test)
+#   i0_percent  : no-load (magnetizing) current [%]         (optional, 0 if unknown)
+#   hv_kv / lv_kv : nominal line-to-line voltages of each winding
+#   brand       : manufacturer, used for the "POWER kVA - BRAND" dropdown label
+#
+transformers:
+  # The MV/HV interconnection transformer is sized automatically by the tool
+  # (powertool.architecture.auto_hv_transformer) from the plant power and the
+  # chosen HV voltage — it is NOT a catalogue entry.
+  #
+  # --- PV transformer stations for string inverters -------------------------------
+  # Ratings, LV/MV voltages and vector groups are from the manufacturer datasheets
+  # (see data/links_datasheets_transformers). The datasheets do NOT publish the
+  # load/no-load losses, so per the project's design assumptions:
+  #   uk_percent = 8.0  (uniform, per user instruction). Datasheets where stated:
+  #                      Sungrow MVS3200 7%, MVS4480/6400/7040 8%, MVS8960 9.5%;
+  #                      Huawei & TBEA do not publish uk. (MVS8960's real 9.5% is
+  #                      higher than the uniform 8% — flagged; switch if preferred.)
+  #   p0_kw      = 0.1% of the rating   (no-load loss)
+  #   pk_kw      = 1.0% of the rating   (load loss)
+  #   i0_percent = 0.0  (not on the datasheets; set to 0 per user instruction)
+  # LV = 0.8 kV; MV configurable 10-35 kV (hv_kv left null). The MV section voltage
+  # is chosen per study in Stage 2, not fixed on the transformer type.
+
+  # Sungrow MVS-LV series (1500 Vdc string inverter SG350HX), Dy11 / Dy11y11
+  SUNGROW_MVS3200:        # MVS3200-LV, 3200 kVA @40C, datasheet uk 7%
+    s_rated_kva: 3200
+    uk_percent: 8.0
+    pk_kw: 32.0
+    p0_kw: 3.2
+    i0_percent: 0.0
+    hv_kv: null
+    lv_kv: 0.8
+    brand: Sungrow
+
+  SUNGROW_MVS4480:        # MVS4480-LV, 4480 kVA @40C, datasheet uk 8%
+    s_rated_kva: 4480
+    uk_percent: 8.0
+    pk_kw: 44.8
+    p0_kw: 4.48
+    i0_percent: 0.0
+    hv_kv: null
+    lv_kv: 0.8
+    brand: Sungrow
+
+  SUNGROW_MVS6400:        # MVS6400-LV, 6400 kVA @40C, dual-LV, datasheet uk 8%
+    s_rated_kva: 6400
+    uk_percent: 8.0
+    pk_kw: 64.0
+    p0_kw: 6.4
+    i0_percent: 0.0
+    hv_kv: null
+    lv_kv: 0.8
+    brand: Sungrow
+
+  SUNGROW_MVS7040:        # MVS7040-LV, 7040 kVA @40C, dual-LV, datasheet uk 8%
+    s_rated_kva: 7040
+    uk_percent: 8.0
+    pk_kw: 70.4
+    p0_kw: 7.04
+    i0_percent: 0.0
+    hv_kv: null
+    lv_kv: 0.8
+    brand: Sungrow
+
+  SUNGROW_MVS8960:        # MVS8960-LV, 8960 kVA @40C, dual-LV, datasheet uk 9.5% (MV 20-35kV)
+    s_rated_kva: 8960
+    uk_percent: 8.0
+    pk_kw: 89.6
+    p0_kw: 8.96
+    i0_percent: 0.0
+    hv_kv: null
+    lv_kv: 0.8
+    brand: Sungrow
+
+  # Huawei JUPITER Smart Transformer Station (SUN2000-330KTL string inverters)
+  HUAWEI_JUPITER3000:     # JUPITER-3000K-H1, 3300 kVA @40C, Dy11
+    s_rated_kva: 3300
+    uk_percent: 8.0
+    pk_kw: 33.0
+    p0_kw: 3.3
+    i0_percent: 0.0
+    hv_kv: null
+    lv_kv: 0.8
+    brand: Huawei
+
+  HUAWEI_JUPITER6000:     # JUPITER-6000K-H1, 6600 kVA @40C, Dy11-y11
+    s_rated_kva: 6600
+    uk_percent: 8.0
+    pk_kw: 66.0
+    p0_kw: 6.6
+    i0_percent: 0.0
+    hv_kv: null
+    lv_kv: 0.8
+    brand: Huawei
+
+  HUAWEI_JUPITER9000:     # JUPITER-9000K-H1, 9000 kVA @40C, Dy11-y11
+    s_rated_kva: 9000
+    uk_percent: 8.0
+    pk_kw: 90.0
+    p0_kw: 9.0
+    i0_percent: 0.0
+    hv_kv: null
+    lv_kv: 0.8
+    brand: Huawei
+
+  # TBEA TS-KT-EL Smart Transformer Station (ratings are the @40C AC power;
+  # uk not published by TBEA). MV 10-35 kV (TS9000: 20-35 kV).
+  TBEA_TS3000:            # TS3000KT-EL, 3300 kVA @40C (3000@50C), Dy11
+    s_rated_kva: 3300
+    uk_percent: 8.0
+    pk_kw: 33.0
+    p0_kw: 3.3
+    i0_percent: 0.0
+    hv_kv: null
+    lv_kv: 0.8
+    brand: TBEA
+
+  TBEA_TS6000:            # TS6000KT-EL, 6600 kVA @40C (6000@50C), Dy11y11
+    s_rated_kva: 6600
+    uk_percent: 8.0
+    pk_kw: 66.0
+    p0_kw: 6.6
+    i0_percent: 0.0
+    hv_kv: null
+    lv_kv: 0.8
+    brand: TBEA
+
+  TBEA_TS9000:            # TS9000KT-EL, 9240 kVA @40C (8400@50C), Dy11y11
+    s_rated_kva: 9240
+    uk_percent: 8.0
+    pk_kw: 92.4
+    p0_kw: 9.24
+    i0_percent: 0.0
+    hv_kv: null
+    lv_kv: 0.8
+    brand: TBEA

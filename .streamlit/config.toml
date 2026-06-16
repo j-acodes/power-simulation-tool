@@ -1,0 +1,11 @@
+# RP Global premium/minimal theme (Chronicle-inspired) — foundational colours.
+# Streamlit reads this from the working directory the app is launched from
+# (the project root, per the app docstring). Typography, rounded cards and soft
+# shadows are layered on top via app/theme.py (CSS injection).
+[theme]
+base = "light"
+primaryColor = "#00a438"              # Energy Green
+backgroundColor = "#ffffff"           # clean white canvas
+secondaryBackgroundColor = "#f4f6f9"  # very light grey-blue (sidebar / cards)
+textColor = "#011d3f"                 # Business Blue
+font = "sans serif"

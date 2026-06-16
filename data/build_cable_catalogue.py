@@ -1,0 +1,132 @@
+"""Generate data/cables.yaml — the AC cable catalogue for PV plant sizing.
+
+This script documents the *provenance* of every value so the catalogue can be
+validated and maintained. Run it from the project root to (re)build cables.yaml:
+
+    python data/build_cable_catalogue.py
+
+SCOPE (most-used cables for solar PV AC systems):
+  * Material: ALUMINIUM, XLPE insulated (the standard for PV power cables).
+  * LV: 0.6/1 kV (IEC 60502-1).
+  * MV: 12/20 kV, 18/30 kV and 20/35 kV — i.e. up to 40.5 kV maximum voltage (Um),
+        IEC 60502-2.
+  * Max cross-section 630 mm²: the practical maximum a single MV cable termination
+    on PV secondary switchgear / ring-main-units (24 kV, 630 A) accepts. Larger
+    loads are handled with parallel circuits by the sizing tool.
+
+VALUE PROVENANCE (REVIEW BEFORE TRUSTING — see README / chat for source links):
+  * r_ohm_per_km : conductor AC resistance at 90 °C (max operating temp), derived
+                   from IEC 60228 Class 2 aluminium DC resistance at 20 °C times a
+                   temperature factor 1.28 (= 1 + 0.004*(90-20)). Using the hot
+                   resistance is conservative for loss-budget sizing.
+  * x_ohm_per_km : representative manufacturer-catalogue reactance for XLPE cables;
+                   increases slightly with voltage class (thicker insulation).
+  * rated_current_a : representative ampacity for ALUMINIUM XLPE laid DIRECT IN GROUND
+                   (buried direct), single circuit, reference conditions: ground temp
+                   20 °C, soil thermal resistivity ~1.0 K·m/W, depth ~0.8 m.
+                   Drier soils (1.5-2.5 K·m/W, common on PV sites) and grouping of
+                   several circuits in one trench REDUCE these by ~15-30 % — apply a
+                   derating factor for your site / validate against supplier tables.
+  * b_us_per_km : representative charging susceptance (informational only; not used
+                   in worst-case sizing). Decreases with voltage class.
+"""
+
+from pathlib import Path
+
+import yaml
+
+# --- IEC 60228 Class 2 aluminium DC resistance at 20 C [ohm/km] ----------------
+DC_R_20C = {
+    95: 0.320, 120: 0.253, 150: 0.206, 185: 0.164, 240: 0.125,
+    300: 0.100, 400: 0.0778, 500: 0.0605, 630: 0.0469,
+}
+TEMP_FACTOR_90C = 1.28  # AC@90C ~= DC@20C * (1 + 0.004*(90-20))
+
+
+def r_ac_90(section: int) -> float:
+    return round(DC_R_20C[section] * TEMP_FACTOR_90C, 4)
+
+
+# --- Representative reactance [ohm/km] -----------------------------------------
+X_20KV = {
+    95: 0.123, 120: 0.117, 150: 0.112, 185: 0.108, 240: 0.103,
+    300: 0.100, 400: 0.097, 500: 0.094, 630: 0.092,
+}
+X_CLASS_DELTA = {20: 0.0, 30: 0.008, 35: 0.013}  # higher class -> higher reactance
+X_LV = {95: 0.082, 120: 0.080, 150: 0.079, 185: 0.078, 240: 0.077, 300: 0.076}
+
+# --- Representative ampacity [A], aluminium XLPE, BURIED DIRECT in ground -------
+# Reference: single circuit, ground 20 C, soil resistivity ~1.0 K.m/W, depth ~0.8 m.
+AMP_BURIED = {
+    95: 220, 120: 250, 150: 280, 185: 320, 240: 370,
+    300: 415, 400: 470, 500: 530, 630: 600,
+}
+
+# Global derating applied to every ampacity (set < 1.0 for drier soils and/or several
+# circuits grouped in one trench). 1.0 = the reference conditions above, no derating.
+# Examples: ~0.85 for dry soil (1.5 K.m/W), ~0.70 for very dry / several grouped circuits.
+AMPACITY_DERATING = 1.0
+
+# --- Representative charging susceptance [uS/km] (informational only) ----------
+B_20KV = {
+    95: 57, 120: 63, 150: 69, 185: 75, 240: 84,
+    300: 92, 400: 100, 500: 107, 630: 115,
+}
+B_CLASS_FACTOR = {20: 1.0, 30: 0.62, 35: 0.50}  # thicker insulation -> less capacitance
+
+LV_SIZES = [95, 120, 150, 185, 240, 300]
+MV_SIZES = [95, 120, 150, 185, 240, 300, 400, 500, 630]
+MV_CLASSES = [20, 30, 35]  # nominal kV; 35 kV => 40.5 kV Um (max)
+
+
+def build() -> dict:
+    cables: dict[str, dict] = {}
+
+    # Low voltage 0.6/1 kV aluminium
+    for s in LV_SIZES:
+        cables[f"AL_{s}_1kV"] = {
+            "r_ohm_per_km": r_ac_90(s),
+            "x_ohm_per_km": X_LV[s],
+            "b_us_per_km": 0.0,
+            "cross_section_mm2": s,
+            "material": "aluminium",
+            "rated_current_a": round(AMP_BURIED[s] * AMPACITY_DERATING),
+            "rated_voltage_kv": 1.0,
+        }
+
+    # Medium voltage aluminium, per class
+    for cls in MV_CLASSES:
+        for s in MV_SIZES:
+            cables[f"AL_{s}_{cls}kV"] = {
+                "r_ohm_per_km": r_ac_90(s),
+                "x_ohm_per_km": round(X_20KV[s] + X_CLASS_DELTA[cls], 4),
+                "b_us_per_km": round(B_20KV[s] * B_CLASS_FACTOR[cls], 1),
+                "cross_section_mm2": s,
+                "material": "aluminium",
+                "rated_current_a": round(AMP_BURIED[s] * AMPACITY_DERATING),
+                "rated_voltage_kv": float(cls),
+            }
+
+    return {"cables": cables}
+
+
+HEADER = (
+    "# AC cable catalogue for PV plant sizing — GENERATED by build_cable_catalogue.py.\n"
+    "# Aluminium XLPE. LV 0.6/1 kV; MV 12/20, 18/30, 20/35 kV (up to 40.5 kV Um).\n"
+    "# r = AC resistance at 90 C (IEC 60228 DC@20C x 1.28). rated_current_a = ampacity\n"
+    "# laid DIRECT IN GROUND, single circuit, soil ~1.0 K.m/W (apply AMPACITY_DERATING\n"
+    "# in the generator for drier/grouped conditions). x and b are representative.\n"
+    "# VALIDATE against your supplier datasheets before trusting results.\n"
+    "# Edit the source values in build_cable_catalogue.py and re-run to regenerate.\n"
+)
+
+
+def main() -> None:
+    out = Path(__file__).resolve().parent / "cables.yaml"
+    body = yaml.dump(build(), sort_keys=False, default_flow_style=False)
+    out.write_text(HEADER + body)
+    print(f"Wrote {out}")
+
+
+if __name__ == "__main__":
+    main()
