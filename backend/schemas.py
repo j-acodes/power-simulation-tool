@@ -91,6 +91,10 @@ class TransformerInfo(BaseModel):
     hv_kv: float | None
     lv_kv: float | None
     brand: str | None
+    uk_percent: float
+    pk_kw: float
+    p0_kw: float
+    i0_percent: float
 
 
 class CableInfo(BaseModel):

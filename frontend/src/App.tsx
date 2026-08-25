@@ -1,54 +1,53 @@
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import './App.css'
-
-interface TransformerInfo {
-  key: string
-  display_name: string
-  s_rated_kva: number
-}
-
-interface CatalogueResponse {
-  transformers: TransformerInfo[]
-  cables: Record<string, unknown[]>
-}
+import { Editor } from './canvas/Editor'
+import { EXAMPLE_DIAGRAM } from './example'
+import { useAutoSolve } from './hooks/useAutoSolve'
+import { IssuesBanner } from './panels/IssuesBanner'
+import { Inspector } from './panels/Inspector'
+import { Palette } from './panels/Palette'
+import { ResultsSummary } from './panels/ResultsSummary'
+import { SettingsPanel } from './panels/SettingsPanel'
+import { EMPTY_DIAGRAM, useStore } from './store'
 
 function App() {
-  const [catalogue, setCatalogue] = useState<CatalogueResponse | null>(null)
-  const [error, setError] = useState<string | null>(null)
-
-  useEffect(() => {
-    fetch('/api/catalogue')
-      .then((res) => {
-        if (!res.ok) throw new Error(`HTTP ${res.status}`)
-        return res.json() as Promise<CatalogueResponse>
-      })
-      .then(setCatalogue)
-      .catch((err) => setError(String(err)))
-  }, [])
-
-  const cableTypeCount = catalogue
-    ? Object.values(catalogue.cables).reduce((sum, group) => sum + group.length, 0)
-    : 0
+  useAutoSolve()
+  const [showSettings, setShowSettings] = useState(false)
+  const loadDiagram = useStore((s) => s.loadDiagram)
 
   return (
-    <main>
-      <h1>PV Plant Sizing</h1>
-      {error && <p role="alert">Could not load catalogue: {error}</p>}
-      {!catalogue && !error && <p>Loading catalogue…</p>}
-      {catalogue && (
-        <>
-          <p>{cableTypeCount} cable type(s) across {Object.keys(catalogue.cables).length} voltage class(es).</p>
-          <h2>Transformers</h2>
-          <ul>
-            {catalogue.transformers.map((tx) => (
-              <li key={tx.key}>
-                {tx.display_name} — {tx.s_rated_kva} kVA
-              </li>
-            ))}
-          </ul>
-        </>
-      )}
-    </main>
+    <div className="app">
+      <header className="app-header">
+        <h1>PV Plant Sizing — Diagram Editor</h1>
+        <div className="app-header-actions">
+          <button type="button" onClick={() => loadDiagram(EXAMPLE_DIAGRAM)}>
+            Load example plant
+          </button>
+          <button type="button" onClick={() => loadDiagram(EMPTY_DIAGRAM)}>
+            Clear
+          </button>
+          <button type="button" onClick={() => setShowSettings((v) => !v)}>
+            Settings
+          </button>
+        </div>
+      </header>
+      <IssuesBanner />
+      <div className="app-body">
+        <Palette />
+        <div className="canvas-area">
+          <Editor />
+          {showSettings && (
+            <div className="settings-overlay">
+              <SettingsPanel />
+            </div>
+          )}
+          <div className="results-overlay">
+            <ResultsSummary />
+          </div>
+        </div>
+        <Inspector />
+      </div>
+    </div>
   )
 }
 

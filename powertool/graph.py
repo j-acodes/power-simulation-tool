@@ -805,6 +805,7 @@ def _segment_payload(segment, forced: bool) -> dict:
         "dp_kw": segment.dp_kw,
         "dq_series_kvar": segment.dq_series_kvar,
         "q_charging_kvar": segment.q_charging_kvar,
+        "current_a": selection.current_per_circuit_a if selection else None,
         "utilization": selection.utilization if selection else None,
         "loss_percent": selection.loss_percent if selection else None,
         "vdrop_percent": selection.vdrop_percent if selection else None,

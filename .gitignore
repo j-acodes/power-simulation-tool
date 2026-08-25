@@ -22,3 +22,4 @@ frontend/dist/
 
 # Databases
 *.db
+.claude/

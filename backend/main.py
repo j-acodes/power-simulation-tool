@@ -60,6 +60,10 @@ def get_catalogue() -> CatalogueResponse:
             hv_kv=tx.hv_kv,
             lv_kv=tx.lv_kv,
             brand=tx.brand,
+            uk_percent=tx.uk_percent,
+            pk_kw=tx.pk_kw,
+            p0_kw=tx.p0_kw,
+            i0_percent=tx.i0_percent,
         )
         for key, tx in db.transformers.items()
     ]

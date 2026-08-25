@@ -519,6 +519,7 @@ def test_golden_45mw_example_drawn_equals_the_auto_path():
             assert drawn["s_kva"] == segment.s_kva
             assert drawn["dp_kw"] == segment.dp_kw
             assert drawn["utilization"] == segment.selection.utilization
+            assert drawn["current_a"] == segment.selection.current_per_circuit_a
 
     # Every station: same share, same loading, keyed to the drawn block.
     for circuit, ids in zip(arch.circuits, station_ids):
