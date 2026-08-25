@@ -1,0 +1,144 @@
+import { useEffect, useRef, useState } from 'react'
+import { Link, useNavigate, useParams } from 'react-router-dom'
+import { ConflictError, createDesign, getDesign, updateDesign } from '../api'
+import { ConflictDialog } from '../components/ConflictDialog'
+import { DisplayNameControl } from '../components/DisplayName'
+import { usePromptDialog } from '../components/Modal'
+import { useStore } from '../store'
+import type { DesignFull } from '../types'
+import { EditorView } from './EditorView'
+
+/** `/design/:id` — GETs the design on mount, loads its payload into the
+ * shared editor store, and adds a Save button (PUT with optimistic locking)
+ * with a dirty indicator and a 409 conflict dialog. Never silently
+ * overwrites a concurrent edit. */
+export function DesignEditorPage() {
+  const { id } = useParams<{ id: string }>()
+  const designId = Number(id)
+  const navigate = useNavigate()
+
+  const diagram = useStore((s) => s.diagram)
+  const designMeta = useStore((s) => s.designMeta)
+  const dirty = useStore((s) => s.diagram !== s.savedDiagramRef)
+  const displayName = useStore((s) => s.displayName)
+  const loadDesign = useStore((s) => s.loadDesign)
+  const markSaved = useStore((s) => s.markSaved)
+
+  const [loadError, setLoadError] = useState<string | null>(null)
+  const [saving, setSaving] = useState(false)
+  const [saveError, setSaveError] = useState<string | null>(null)
+  const [conflict, setConflict] = useState<DesignFull | null>(null)
+  const { prompt, dialog: promptDialog } = usePromptDialog()
+  // Needed for "save as new design" (POST target); not part of designMeta's
+  // {id, name, version} shape, so it's kept as page-local state instead.
+  const projectIdRef = useRef<number | null>(null)
+
+  useEffect(() => {
+    setLoadError(null)
+    setConflict(null)
+    getDesign(designId)
+      .then((design) => {
+        projectIdRef.current = design.project_id
+        loadDesign(design.payload, { id: design.id, name: design.name, version: design.version })
+      })
+      .catch((err: unknown) => setLoadError(String(err)))
+  }, [designId, loadDesign])
+
+  const handleSave = async () => {
+    if (!designMeta) return
+    setSaving(true)
+    setSaveError(null)
+    try {
+      const saved = await updateDesign(designMeta.id, {
+        payload: diagram,
+        version: designMeta.version,
+        last_edited_by: displayName ?? 'Anonymous',
+      })
+      markSaved(saved.version)
+    } catch (err) {
+      if (err instanceof ConflictError) {
+        setConflict(err.design)
+      } else {
+        setSaveError(String(err))
+      }
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const handleReloadTheirs = () => {
+    if (!conflict) return
+    loadDesign(conflict.payload, { id: conflict.id, name: conflict.name, version: conflict.version })
+    setConflict(null)
+  }
+
+  const handleSaveAsNew = async () => {
+    if (!conflict || projectIdRef.current == null) return
+    const name = await prompt({ title: 'Save as new design', label: 'Design name', initialValue: `${conflict.name} (copy)` })
+    if (!name) return
+    try {
+      const created = await createDesign(projectIdRef.current, {
+        name,
+        payload: diagram,
+        last_edited_by: displayName ?? 'Anonymous',
+      })
+      setConflict(null)
+      navigate(`/design/${created.id}`)
+    } catch (err) {
+      setSaveError(String(err))
+    }
+  }
+
+  if (loadError) {
+    return (
+      <div className="app">
+        <p className="error">Could not load design: {loadError}</p>
+        <Link to="/">← Back to projects</Link>
+      </div>
+    )
+  }
+
+  if (!designMeta || designMeta.id !== designId) {
+    return (
+      <div className="app">
+        <p className="panel-hint">Loading design…</p>
+      </div>
+    )
+  }
+
+  return (
+    <>
+      <EditorView
+        title={
+          <>
+            {designMeta.name}
+            {dirty && <span className="dirty-dot" title="Unsaved changes" />}
+          </>
+        }
+        headerLeft={
+          <Link to="/" className="header-link">
+            ← Projects
+          </Link>
+        }
+        headerRight={
+          <>
+            {saveError && <span className="error inline">{saveError}</span>}
+            <button type="button" onClick={handleSave} disabled={saving || !dirty}>
+              {saving ? 'Saving…' : 'Save'}
+            </button>
+            <DisplayNameControl />
+          </>
+        }
+      />
+      {conflict && (
+        <ConflictDialog
+          serverDesign={conflict}
+          onReloadTheirs={handleReloadTheirs}
+          onSaveAsNew={handleSaveAsNew}
+          onCancel={() => setConflict(null)}
+        />
+      )}
+      {promptDialog}
+    </>
+  )
+}

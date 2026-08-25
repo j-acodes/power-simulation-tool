@@ -13,6 +13,22 @@ export type Selection =
   | { type: 'palette'; key: string }
   | null
 
+export interface DesignMeta {
+  id: number
+  name: string
+  version: number
+}
+
+const DISPLAY_NAME_KEY = 'powertool.displayName'
+
+function readDisplayName(): string | null {
+  try {
+    return localStorage.getItem(DISPLAY_NAME_KEY)
+  } catch {
+    return null
+  }
+}
+
 export const EMPTY_DIAGRAM: Diagram = {
   schema_version: 1,
   settings: {
@@ -36,7 +52,20 @@ interface State {
   solving: boolean
   selection: Selection
 
+  /** Set only while editing a persisted design (null on the scratch page). */
+  designMeta: DesignMeta | null
+  /** The exact diagram object last loaded from / saved to the server — dirty
+   * is `diagram !== savedDiagramRef` (every mutation replaces the object). */
+  savedDiagramRef: Diagram | null
+
+  displayName: string | null
+
   loadDiagram: (diagram: Diagram) => void
+  /** Load a persisted design: sets the diagram AND marks it clean/attributed
+   * to `meta`, in one shot (mount, and the conflict dialog's "reload theirs"). */
+  loadDesign: (diagram: Diagram, meta: DesignMeta) => void
+  /** Record a successful save: current diagram becomes the clean baseline. */
+  markSaved: (version: number) => void
   addNode: (node: DiagramNode) => void
   updateNodeProps: (id: string, props: Record<string, unknown>) => void
   moveNode: (id: string, x: number, y: number) => void
@@ -49,6 +78,7 @@ interface State {
   setSelection: (selection: Selection) => void
   setSolveResult: (issues: Issue[], results: SolveResults | null) => void
   setSolving: (solving: boolean) => void
+  setDisplayName: (name: string) => void
 }
 
 export const useStore = create<State>((set) => ({
@@ -58,9 +88,28 @@ export const useStore = create<State>((set) => ({
   solvePaused: false,
   solving: false,
   selection: null,
+  designMeta: null,
+  savedDiagramRef: null,
+  displayName: readDisplayName(),
 
   loadDiagram: (diagram) =>
     set({ diagram, results: null, issues: [], selection: null }),
+
+  loadDesign: (diagram, meta) =>
+    set({
+      diagram,
+      savedDiagramRef: diagram,
+      designMeta: meta,
+      results: null,
+      issues: [],
+      selection: null,
+    }),
+
+  markSaved: (version) =>
+    set((s) => ({
+      savedDiagramRef: s.diagram,
+      designMeta: s.designMeta ? { ...s.designMeta, version } : s.designMeta,
+    })),
 
   addNode: (node) =>
     set((s) => ({ diagram: { ...s.diagram, nodes: [...s.diagram.nodes, node] } })),
@@ -125,4 +174,12 @@ export const useStore = create<State>((set) => ({
   setSelection: (selection) => set({ selection }),
   setSolveResult: (issues, results) => set({ issues, results }),
   setSolving: (solving) => set({ solving }),
+  setDisplayName: (name) => {
+    try {
+      localStorage.setItem(DISPLAY_NAME_KEY, name)
+    } catch {
+      // localStorage unavailable (private mode, etc.) — keep in-memory only.
+    }
+    set({ displayName: name })
+  },
 }))

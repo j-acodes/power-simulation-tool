@@ -228,3 +228,39 @@ export interface CatalogueResponse {
   cables: Record<string, CableInfo[]> // keyed by rated_voltage_kv formatted "%g"
   defaults: CatalogueDefaults
 }
+
+// --- Projects / Designs (M4 persistence) ------------------------------------
+// Mirrors backend/schemas.py's Project/Design Pydantic models.
+
+export interface ProjectSummary {
+  id: number
+  name: string
+  created_at: string
+  design_count: number
+}
+
+export interface DesignSummary {
+  id: number
+  name: string
+  version: number
+  last_edited_by: string
+  updated_at: string
+}
+
+export interface ProjectDetail {
+  id: number
+  name: string
+  created_at: string
+  designs: DesignSummary[]
+}
+
+export interface DesignFull {
+  id: number
+  project_id: number
+  name: string
+  payload: Diagram
+  version: number
+  last_edited_by: string
+  created_at: string
+  updated_at: string
+}

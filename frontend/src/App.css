@@ -29,12 +29,20 @@
   letter-spacing: normal;
 }
 
+.app-header-title {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
 .app-header-actions {
   display: flex;
+  align-items: center;
   gap: 0.5rem;
 }
 
-.app-header-actions button {
+.app-header-actions button,
+.app-header-actions a {
   font: inherit;
   padding: 0.4rem 0.8rem;
   border: 1px solid var(--border);
@@ -42,6 +50,184 @@
   background: var(--bg);
   color: var(--text-h);
   cursor: pointer;
+  text-decoration: none;
+}
+
+.header-link {
+  font: inherit;
+  color: var(--text);
+  text-decoration: none;
+  background: none;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+}
+
+.header-link:hover {
+  color: var(--text-h);
+}
+
+.display-name-control {
+  font: inherit;
+  font-size: 13px;
+  padding: 0.4rem 0.7rem;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--code-bg);
+  color: var(--text-h);
+  cursor: pointer;
+}
+
+.dirty-dot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--accent);
+}
+
+.error {
+  color: #dc2626;
+  font-size: 13px;
+  padding: 0.5rem 1rem;
+  margin: 0;
+}
+
+.error.inline {
+  padding: 0;
+  margin-right: 0.25rem;
+}
+
+/* Modal overlay (display-name prompt, save conflict dialog, Prompt/ConfirmDialog) */
+
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.5);
+  z-index: 50;
+}
+
+.modal {
+  width: 360px;
+  max-width: calc(100vw - 2rem);
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  box-shadow: var(--shadow);
+  padding: 1.25rem;
+}
+
+.modal h2 {
+  font-size: 16px;
+  margin: 0 0 0.5rem;
+  text-align: left;
+  color: var(--text-h);
+}
+
+.modal .panel-hint {
+  margin-bottom: 0.75rem;
+}
+
+.modal input[type='text'] {
+  width: 100%;
+  font: inherit;
+  padding: 0.45rem 0.6rem;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg);
+  color: var(--text-h);
+  box-sizing: border-box;
+}
+
+.modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.5rem;
+  margin-top: 1rem;
+}
+
+.modal-actions button {
+  font: inherit;
+  padding: 0.4rem 0.8rem;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg);
+  color: var(--text-h);
+  cursor: pointer;
+}
+
+.modal-actions button.danger {
+  margin-top: 0;
+}
+
+/* Projects page */
+
+.projects-body {
+  padding: 1rem;
+  overflow-y: auto;
+  justify-content: center;
+}
+
+.panel-wide {
+  width: 100%;
+  max-width: 640px;
+  margin: 0 auto;
+}
+
+.panel-wide h2 {
+  text-align: left;
+  font-size: 18px;
+  margin: 0.75rem 0;
+}
+
+.panel-wide > button:first-child {
+  font: inherit;
+  padding: 0.4rem 0.8rem;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg);
+  color: var(--text-h);
+  cursor: pointer;
+  margin-bottom: 0.75rem;
+}
+
+.entity-list {
+  list-style: none;
+  margin: 0.75rem 0 0;
+  padding: 0;
+  border-top: 1px solid var(--border);
+}
+
+.entity-row {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.6rem 0.2rem;
+  border-bottom: 1px solid var(--border);
+}
+
+.entity-name {
+  font: inherit;
+  font-weight: 500;
+  color: var(--text-h);
+  background: none;
+  border: none;
+  padding: 0;
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.entity-name:hover {
+  color: var(--accent);
+}
+
+.entity-meta {
+  flex: 1;
+  font-size: 12px;
+  color: var(--text);
 }
 
 .app-body {
