@@ -1,24 +1,38 @@
 """FastAPI app: sizing API, wrapping the unchanged ``powertool`` engine.
 
 M0/M1 scope: catalogue, Stage-1 solve and the diagram solve, plus serving the
-built frontend (``frontend/dist``) when it exists. No DB, no auth yet.
+built frontend (``frontend/dist``) when it exists. M4 adds Projects/Designs
+persistence (SQLite by default, no auth yet).
 """
 
 from __future__ import annotations
 
+from datetime import datetime, timezone
 from pathlib import Path
+from typing import Iterator
 
-from fastapi import Body, FastAPI
+from fastapi import Body, Depends, FastAPI, HTTPException
+from fastapi.encoders import jsonable_encoder
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
+from sqlalchemy import delete, func, select, update
+from sqlalchemy.orm import Session
 
 from powertool import ComponentDatabase, size_pv_inverters
 
+from .models import Base, Design, Project, make_engine, make_session_factory
 from .schemas import (
     CableInfo,
     CatalogueDefaults,
     CatalogueResponse,
+    DesignCreate,
+    DesignFull,
+    DesignSummary,
+    DesignUpdate,
     LossItem,
+    ProjectCreate,
+    ProjectDetail,
+    ProjectSummary,
     RulesDefaults,
     SolveResponse,
     Stage1Request,
@@ -40,6 +54,10 @@ MAX_CIRCUIT_CURRENT_A = 400.0
 
 db = ComponentDatabase.load()
 
+engine = make_engine()
+SessionLocal = make_session_factory(engine)
+Base.metadata.create_all(engine)
+
 app = FastAPI(title="PV Plant Sizing API")
 
 app.add_middleware(
@@ -48,6 +66,14 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+def get_session() -> Iterator[Session]:
+    session = SessionLocal()
+    try:
+        yield session
+    finally:
+        session.close()
 
 
 @app.get("/api/catalogue", response_model=CatalogueResponse)
@@ -128,6 +154,134 @@ def post_solve(diagram: dict = Body(...)) -> SolveResponse:
     which reports problems as issues instead of raising 422s at the user.
     """
     return SolveResponse(**solve_diagram(diagram, db))
+
+
+@app.get("/api/projects", response_model=list[ProjectSummary])
+def list_projects(session: Session = Depends(get_session)) -> list[ProjectSummary]:
+    rows = session.execute(
+        select(Project, func.count(Design.id))
+        .outerjoin(Design, Design.project_id == Project.id)
+        .group_by(Project.id)
+        .order_by(Project.id)
+    ).all()
+    return [
+        ProjectSummary(id=p.id, name=p.name, created_at=p.created_at, design_count=count)
+        for p, count in rows
+    ]
+
+
+@app.post("/api/projects", response_model=ProjectSummary, status_code=201)
+def create_project(body: ProjectCreate, session: Session = Depends(get_session)) -> ProjectSummary:
+    project = Project(name=body.name)
+    session.add(project)
+    session.commit()
+    session.refresh(project)
+    return ProjectSummary(id=project.id, name=project.name, created_at=project.created_at, design_count=0)
+
+
+@app.get("/api/projects/{project_id}", response_model=ProjectDetail)
+def get_project(project_id: int, session: Session = Depends(get_session)) -> ProjectDetail:
+    project = session.get(Project, project_id)
+    if project is None:
+        raise HTTPException(status_code=404, detail="Project not found")
+    designs = session.execute(
+        select(Design).where(Design.project_id == project_id).order_by(Design.id)
+    ).scalars().all()
+    return ProjectDetail(
+        id=project.id,
+        name=project.name,
+        created_at=project.created_at,
+        designs=[DesignSummary.model_validate(d) for d in designs],
+    )
+
+
+@app.delete("/api/projects/{project_id}", status_code=204)
+def delete_project(project_id: int, session: Session = Depends(get_session)) -> None:
+    project = session.get(Project, project_id)
+    if project is None:
+        raise HTTPException(status_code=404, detail="Project not found")
+    session.execute(delete(Design).where(Design.project_id == project_id))
+    session.delete(project)
+    session.commit()
+
+
+@app.post("/api/projects/{project_id}/designs", response_model=DesignFull, status_code=201)
+def create_design(
+    project_id: int, body: DesignCreate, session: Session = Depends(get_session)
+) -> DesignFull:
+    project = session.get(Project, project_id)
+    if project is None:
+        raise HTTPException(status_code=404, detail="Project not found")
+    design = Design(
+        project_id=project_id,
+        name=body.name,
+        payload=body.payload,
+        version=1,
+        last_edited_by=body.last_edited_by,
+    )
+    session.add(design)
+    session.commit()
+    session.refresh(design)
+    return DesignFull.model_validate(design)
+
+
+@app.get("/api/designs/{design_id}", response_model=DesignFull)
+def get_design(design_id: int, session: Session = Depends(get_session)) -> DesignFull:
+    design = session.get(Design, design_id)
+    if design is None:
+        raise HTTPException(status_code=404, detail="Design not found")
+    return DesignFull.model_validate(design)
+
+
+@app.delete("/api/designs/{design_id}", status_code=204)
+def delete_design(design_id: int, session: Session = Depends(get_session)) -> None:
+    design = session.get(Design, design_id)
+    if design is None:
+        raise HTTPException(status_code=404, detail="Design not found")
+    session.delete(design)
+    session.commit()
+
+
+@app.put("/api/designs/{design_id}", response_model=DesignFull)
+def update_design(
+    design_id: int, body: DesignUpdate, session: Session = Depends(get_session)
+) -> DesignFull:
+    """Optimistic-locking save: a single ``UPDATE ... WHERE id AND version``.
+
+    0 rows matched means either the design is gone (404) or someone else saved
+    first (409, with the server's current copy so the client can show a
+    conflict dialog) — we never silently overwrite a concurrent edit.
+    """
+    existing = session.get(Design, design_id)
+    if existing is None:
+        raise HTTPException(status_code=404, detail="Design not found")
+
+    values: dict = {
+        "payload": body.payload,
+        "version": Design.version + 1,
+        "last_edited_by": body.last_edited_by,
+        "updated_at": datetime.now(timezone.utc),
+    }
+    if body.name is not None:
+        values["name"] = body.name
+
+    result = session.execute(
+        update(Design).where(Design.id == design_id, Design.version == body.version).values(**values)
+    )
+    if result.rowcount == 0:
+        session.rollback()
+        current = session.get(Design, design_id)
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "message": "Design was modified by someone else — reload and retry.",
+                "design": jsonable_encoder(DesignFull.model_validate(current)),
+            },
+        )
+
+    session.commit()
+    session.refresh(existing)
+    return DesignFull.model_validate(existing)
 
 
 # Serve the built frontend, if present. Mounted last so /api routes above take
