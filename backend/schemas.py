@@ -9,7 +9,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Annotated, Literal, Union
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 
 class TransformerElement(BaseModel):
@@ -62,6 +62,36 @@ class Stage1Response(BaseModel):
     pf_inv: float
     losses: list[LossItem]
     power_balance_ok: bool
+
+
+class SeedRequest(BaseModel):
+    """Wizard params for ``POST /api/seed`` — see backend.seed.seed_diagram.
+
+    A response is the diagram dict it produces (no response_model: the diagram
+    schema lives in ``powertool.graph``, not here).
+    """
+
+    p_poc_mw: float
+    pf_target: float
+    interconnection: Literal["HV", "MV"]
+    v_hv_kv: float | None = None
+    export_m: float = 0.0
+    v_mv_kv: float
+    station_model: str
+    max_loading: float = 1.0
+    trunk_m: float
+    spacing_m: float
+    max_circuit_current_a: float
+    aux_p_kw: float = 0.0
+    aux_q_kvar: float = 0.0
+
+    @model_validator(mode="after")
+    def _hv_needs_a_voltage(self) -> "SeedRequest":
+        if self.interconnection == "HV" and not (self.v_hv_kv and self.v_hv_kv > 0):
+            raise ValueError(
+                "v_hv_kv is required (and must be positive) for an HV interconnection."
+            )
+        return self
 
 
 class IssueItem(BaseModel):
