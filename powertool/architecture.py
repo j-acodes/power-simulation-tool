@@ -230,6 +230,94 @@ def arrange_plant(
     )
 
 
+def arrange_plant_manual(
+    stage1: SizingResult,
+    circuits: list[list[Transformer]],
+    *,
+    max_circuit_current_a: float,
+    v_mv_kv: float,
+    max_loading: float = 1.0,
+) -> PlantLayout:
+    """Arrange the plant from a DRAWN circuit layout — the given order is kept.
+
+    Same per-station physics as :func:`arrange_plant`: every station runs at the
+    fleet's uniform per-unit loading r = S_inv / S_fleet, so its LV share of the
+    inverter P and Q is proportional to its OWN rating, and its MV-side output
+    (that share minus its own transformer losses, see
+    :func:`station_mv_output`) sets its current. What is dropped is all the
+    planning: no circuit assignment, no sorting by rating, no reordering of the
+    circuits. ``circuits[c][k]`` becomes ``circuit_plans[c][k]`` verbatim, with
+    position 0 nearest the substation — the user drew the plant, the engine only
+    computes it.
+
+    That positional stability is a hard invariant, not a convenience: the caller
+    maps every result back to a canvas element by (circuit index, position), so
+    no engine-side identifier is needed. Reordering here would silently mislabel
+    every cable and station on the drawing.
+
+    Nothing raises when the drawing exceeds a limit: a circuit above the current
+    cap is flagged downstream by ``CircuitResult.current_ok`` and an undersized
+    fleet by ``loading_ok``. ``max_loading`` is a check threshold only, exactly
+    as in :func:`arrange_plant`.
+
+    ``trunk_length_km`` / ``spacing_km`` are meaningless for a drawn plant (each
+    run has its own length) and are set to a 1.0 km PLACEHOLDER. Callers must
+    therefore pass a COMPLETE ``segment_lengths`` mapping to
+    :func:`size_circuits` / :func:`size_architecture` — any run left out would
+    silently fall back to that placeholder.
+    """
+    if not circuits:
+        raise ValueError("Need at least one MV circuit to arrange the plant")
+    for i, circuit in enumerate(circuits, start=1):
+        if not circuit:
+            raise ValueError(f"Circuit {i} has no stations — every drawn circuit "
+                             f"needs at least one MV/LV station")
+
+    stations = [tx for circuit in circuits for tx in circuit]
+    s_fleet = sum(tx.s_rated_kva for tx in stations)
+    loading = stage1.s_inv_kva / s_fleet
+
+    # Fleet = (model, count) aggregated over the drawn stations, in order of
+    # first appearance; identical models drawn apart still merge into one entry.
+    fleet: list[tuple[Transformer, int]] = []
+    for tx in stations:
+        for i, (known, count) in enumerate(fleet):
+            if known == tx:
+                fleet[i] = (known, count + 1)
+                break
+        else:
+            fleet.append((tx, 1))
+
+    def _plan(tx: Transformer) -> StationPlan:
+        share = tx.s_rated_kva / s_fleet
+        p_lv = stage1.p_inv_kw * share
+        q_lv = stage1.q_inv_kvar * share
+        p_mv, q_mv = station_mv_output(p_lv, q_lv, tx)
+        s_mv = math.hypot(p_mv, q_mv)
+        return StationPlan(
+            transformer=tx,
+            p_lv_kw=p_lv,
+            q_lv_kvar=q_lv,
+            s_lv_kva=math.hypot(p_lv, q_lv),
+            p_mv_kw=p_mv,
+            q_mv_kvar=q_mv,
+            s_mv_kva=s_mv,
+            i_a=current_a(s_mv, v_mv_kv),
+            loading=loading,
+        )
+
+    return PlantLayout(
+        fleet=fleet,
+        circuit_plans=[[_plan(tx) for tx in circuit] for circuit in circuits],
+        max_circuit_current_a=max_circuit_current_a,
+        trunk_length_km=1.0,  # placeholder: drawn plants pass segment_lengths
+        spacing_km=1.0,
+        v_mv_kv=v_mv_kv,
+        fleet_loading=loading,
+        loading_ok=loading <= max_loading + 1e-9,
+    )
+
+
 @dataclass
 class StationResult:
     """One MV/LV station: an equal share of the Stage-1 inverter requirement.
@@ -307,12 +395,20 @@ def size_circuits(
     max_vdrop_percent: float | None = None,
     max_parallel: int = 12,
     segment_lengths: dict[tuple[int, int], float] | None = None,
+    segment_candidates: dict[tuple[int, int], list[Cable]] | None = None,
 ) -> list[CircuitResult]:
     """Size every cable segment of every MV circuit in the layout.
 
     ``segment_lengths`` optionally overrides individual runs: keys are
     ``(circuit_index, segment_index)`` (both 1-based, segment 1 = trunk),
     values in km. Runs without an override use the layout's trunk/spacing.
+
+    ``segment_candidates`` optionally narrows the catalogue offered to
+    individual runs, keyed the same way: a one-element list FORCES that section
+    (the user picked the cable on the drawing), while the parallel-circuit
+    escalation still applies. A forced cable that cannot carry the flow within
+    the ampacity and loss budgets raises the descriptive ``ValueError`` of
+    :func:`select_cable` — a forced section is never silently replaced.
 
     Each circuit is walked from the FAR station toward the substation,
     accumulating (P, Q): a segment carries the cumulative MV output of the
@@ -369,8 +465,12 @@ def size_circuits(
             if segment_lengths:
                 length_km = segment_lengths.get((c_idx, k), length_km)
 
+            candidates = cable_candidates
+            if segment_candidates:
+                candidates = segment_candidates.get((c_idx, k), cable_candidates)
+
             sel = select_cable(
-                cable_candidates,
+                candidates,
                 s,
                 layout.v_mv_kv,
                 length_km,
@@ -602,6 +702,7 @@ def size_architecture(
     max_vdrop_percent: float | None = None,
     max_parallel: int = 12,
     segment_lengths: dict[tuple[int, int], float] | None = None,
+    segment_candidates: dict[tuple[int, int], list[Cable]] | None = None,
     hv_transformer: Transformer | None = None,
     auto_hv: bool = False,
     hv_n_parallel: int = 1,
@@ -621,6 +722,9 @@ def size_architecture(
     POC. HV-side parameters are all optional — without them the plant is
     delivered at the MV busbar (MV interconnection).
 
+    ``segment_lengths`` and ``segment_candidates`` are passed straight through
+    to :func:`size_circuits` (per-run lengths and per-run forced sections).
+
     ``auto_hv=True`` sizes ONE MV/HV transformer automatically from the plant
     power and ``v_hv_kv`` (see :func:`auto_hv_transformer`) instead of taking
     a user-selected model.
@@ -638,6 +742,7 @@ def size_architecture(
         max_vdrop_percent=max_vdrop_percent,
         max_parallel=max_parallel,
         segment_lengths=segment_lengths,
+        segment_candidates=segment_candidates,
     )
 
     p = sum(c.p_busbar_kw for c in circuits)

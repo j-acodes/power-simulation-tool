@@ -23,6 +23,7 @@ from powertool import (
 )
 from powertool.architecture import (
     arrange_plant,
+    arrange_plant_manual,
     assign_circuits,
     size_architecture,
     size_circuits,
@@ -250,6 +251,128 @@ def test_arrange_plant_invalid_inputs():
                       trunk_length_km=0.8, spacing_km=0.35, v_mv_kv=20.0)
 
 
+# --- arrange_plant_manual (drawn arrangement) -------------------------------------
+
+def _as_drawn(layout) -> list[list[Transformer]]:
+    """The circuits of a layout as a drawing would hand them over."""
+    return [[plan.transformer for plan in circuit] for circuit in layout.circuit_plans]
+
+
+def _lengths_of(layout) -> dict[tuple[int, int], float]:
+    """A COMPLETE segment_lengths map reproducing a layout's trunk/spacing."""
+    return {
+        (c_idx, s_idx): (layout.trunk_length_km if s_idx == 1 else layout.spacing_km)
+        for c_idx, n_stations in enumerate(layout.circuit_sizes, start=1)
+        for s_idx in range(1, n_stations + 1)
+    }
+
+
+def test_manual_arrangement_equals_the_auto_one_when_fed_its_own_output():
+    # The de-risking test for the diagram editor: hand arrange_plant_manual the
+    # exact arrangement arrange_plant produced and every number downstream must
+    # be identical — the manual path changes WHO decides the layout, never the
+    # physics.
+    stage1, auto = _full_plant_inputs()
+    manual = arrange_plant_manual(
+        stage1, _as_drawn(auto),
+        max_circuit_current_a=auto.max_circuit_current_a, v_mv_kv=auto.v_mv_kv,
+    )
+
+    assert manual.fleet == auto.fleet  # 18 identical stations aggregate back
+    assert manual.circuit_sizes == auto.circuit_sizes
+    assert manual.fleet_loading == auto.fleet_loading
+    assert manual.loading_ok == auto.loading_ok
+    assert manual.circuit_plans == auto.circuit_plans
+
+    auto_arch = size_architecture(
+        auto, stage1, _catalogue(), hv_transformer=_hv_tx(),
+        aux_p_kw=120.0, aux_q_kvar=40.0, p_poc_target_kw=43_000.0)
+    manual_arch = size_architecture(
+        manual, stage1, _catalogue(), segment_lengths=_lengths_of(auto),
+        hv_transformer=_hv_tx(),
+        aux_p_kw=120.0, aux_q_kvar=40.0, p_poc_target_kw=43_000.0)
+
+    assert manual_arch.p_poc_delivered_kw == auto_arch.p_poc_delivered_kw
+    assert manual_arch.q_poc_delivered_kvar == auto_arch.q_poc_delivered_kvar
+    assert manual_arch.correction_factor == auto_arch.correction_factor
+    assert manual_arch.s_inv_refined_kva == auto_arch.s_inv_refined_kva
+    assert manual_arch.total_active_loss_kw == auto_arch.total_active_loss_kw
+    for got, expected in zip(manual_arch.circuits, auto_arch.circuits):
+        assert got.i_trunk_a == expected.i_trunk_a
+        assert [s.cable_label for s in got.segments] == \
+               [s.cable_label for s in expected.segments]
+        assert [s.dp_kw for s in got.segments] == [s.dp_kw for s in expected.segments]
+        assert [s.length_km for s in got.segments] == \
+               [s.length_km for s in expected.segments]
+
+
+def test_manual_arrangement_never_reorders_what_was_drawn():
+    # The positional bijection with the canvas: a deliberately "wrong" drawing —
+    # the small station first, the light circuit first — must survive untouched.
+    # arrange_plant would sort both the other way round.
+    stage1 = _stage1(p_inv_kw=14_500, q_inv_kvar=2_000)
+    drawn = [[_tx_3300()], [_tx_3300(), _tx_9000()]]
+    layout = arrange_plant_manual(stage1, drawn, max_circuit_current_a=10_000.0,
+                                  v_mv_kv=20.0)
+
+    assert layout.circuit_sizes == [1, 2]
+    assert [[p.transformer.s_rated_kva for p in c] for c in layout.circuit_plans] == \
+           [[3300], [3300, 9000]]
+    # Same fleet, auto-arranged: one circuit, biggest station nearest the busbar.
+    auto = arrange_plant(stage1, [(_tx_3300(), 2), (_tx_9000(), 1)],
+                         max_circuit_current_a=10_000.0, trunk_length_km=0.8,
+                         spacing_km=0.35, v_mv_kv=20.0)
+    assert auto.circuit_sizes == [3]
+    assert layout.fleet_loading == auto.fleet_loading  # same fleet, same loading
+
+    # Segment 1 of circuit 2 (the trunk) feeds the drawn order, not a sorted one.
+    (small, big) = size_circuits(layout, _catalogue(),
+                                 segment_lengths=_lengths_of(layout))
+    assert [st.s_rated_kva for st in big.stations] == [3300, 9000]
+    assert big.segments[-1].p_kw == pytest.approx(layout.circuit_plans[1][1].p_mv_kw)
+
+
+def test_manual_arrangement_mixed_models_share_by_own_rating():
+    # Mixed models on ONE drawn circuit: uniform per-unit loading, so each
+    # station's LV share is proportional to its own rating and each gets its own
+    # StationPlan (its own losses, its own current).
+    stage1 = _stage1(p_inv_kw=14_500, q_inv_kvar=2_000)
+    layout = arrange_plant_manual(
+        stage1, [[_tx_9000(), _tx_3300(), _tx_3300()]],
+        max_circuit_current_a=10_000.0, v_mv_kv=20.0,
+    )
+
+    assert layout.fleet == [(_tx_9000(), 1), (_tx_3300(), 2)]  # counts aggregated
+    assert layout.s_fleet_kva == 15_600
+    big, small, small2 = layout.circuit_plans[0]
+    assert big.p_lv_kw / small.p_lv_kw == pytest.approx(9000 / 3300)
+    assert big.loading == pytest.approx(small.loading)
+    assert big.loading == pytest.approx(stage1.s_inv_kva / 15_600)
+    assert small.i_a == pytest.approx(small2.i_a)
+    assert big.i_a > small.i_a
+    assert big.p_mv_kw < big.p_lv_kw  # own transformer losses, own share
+
+
+def test_manual_arrangement_accepts_an_over_cap_drawing():
+    # The user drew it: an over-current circuit is reported, never refused.
+    stage1 = _stage1(p_inv_kw=14_500, q_inv_kvar=2_000)
+    layout = arrange_plant_manual(stage1, [[_tx_9000(), _tx_3300()]],
+                                  max_circuit_current_a=50.0, v_mv_kv=20.0)
+    (circuit,) = size_circuits(layout, _catalogue(),
+                               segment_lengths=_lengths_of(layout))
+    assert not circuit.current_ok
+    assert circuit.i_trunk_a > 50.0
+
+
+def test_manual_arrangement_needs_stations():
+    stage1 = _stage1(43_000, 9_000)
+    with pytest.raises(ValueError):
+        arrange_plant_manual(stage1, [], max_circuit_current_a=380.0, v_mv_kv=20.0)
+    with pytest.raises(ValueError):
+        arrange_plant_manual(stage1, [[_tx_2500()], []],
+                             max_circuit_current_a=380.0, v_mv_kv=20.0)
+
+
 # --- size_circuits ----------------------------------------------------------------
 
 def _catalogue(b_us: float = 60.0) -> list[Cable]:
@@ -403,6 +526,47 @@ def test_segment_length_override_must_be_positive():
     layout = _layout_one_circuit(n_stations=3)
     with pytest.raises(ValueError):
         size_circuits(layout, _catalogue(), segment_lengths={(1, 1): 0.0})
+
+
+# --- per-run forced sections ------------------------------------------------------
+
+def test_segment_candidates_force_one_run_and_leave_the_others_auto():
+    # The drawing can pin a section on a single run (the engineer knows what is
+    # already trenched there); every other run still auto-sizes.
+    layout = _layout_one_circuit(n_stations=5, q_inv_kvar=3_000.0)
+    (base,) = size_circuits(layout, _catalogue())
+    assert base.segments[-1].selection.cable.name == "AL_95"  # auto pick
+
+    big = [c for c in _catalogue() if c.name == "AL_400"]
+    (forced,) = size_circuits(layout, _catalogue(), segment_candidates={(1, 5): big})
+
+    assert forced.segments[-1].selection.cable.name == "AL_400"
+    assert forced.segments[-1].dp_kw < base.segments[-1].dp_kw  # fatter section
+    for k in range(4):  # untouched runs keep their automatic picks
+        assert forced.segments[k].cable_label == base.segments[k].cable_label
+
+
+def test_forced_section_reaches_size_architecture():
+    stage1, layout = _full_plant_inputs()
+    big = [c for c in _catalogue() if c.name == "AL_400"]
+    arch = size_architecture(layout, stage1, _catalogue(),
+                             segment_candidates={(1, 5): big})
+    assert arch.circuits[0].segments[-1].selection.cable.name == "AL_400"
+    assert arch.circuits[1].segments[-1].selection.cable.name == "AL_95"
+    assert arch.power_balance_ok
+
+
+def test_forced_section_that_cannot_carry_the_flow_raises():
+    # A forced section is never silently replaced: when it cannot carry the
+    # flow, select_cable's descriptive error propagates (the backend turns it
+    # into an edge-scoped issue on the drawing).
+    layout = _layout_one_circuit(n_stations=5, q_inv_kvar=3_000.0)
+    thin = Cable("AL_50", r_ohm_per_km=0.641, x_ohm_per_km=0.14, b_us_per_km=40.0,
+                 cross_section_mm2=50, material="aluminium", rated_current_a=155,
+                 rated_voltage_kv=20)
+    with pytest.raises(ValueError, match="No cable can carry"):
+        size_circuits(layout, _catalogue(), segment_candidates={(1, 1): [thin]},
+                      max_parallel=2)
 
 
 # --- size_architecture ------------------------------------------------------------
