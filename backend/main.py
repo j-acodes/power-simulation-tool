@@ -34,12 +34,14 @@ from .schemas import (
     ProjectDetail,
     ProjectSummary,
     RulesDefaults,
+    SeedRequest,
     SolveResponse,
     Stage1Request,
     Stage1Response,
     TiersDefaults,
     TransformerInfo,
 )
+from .seed import seed_diagram
 from .solve import (
     COLLECTION_LOSS_PCT,
     EXPORT_LOSS_PCT_PER_KM,
@@ -158,6 +160,17 @@ def post_solve(diagram: dict = Body(...)) -> SolveResponse:
     which reports problems as issues instead of raising 422s at the user.
     """
     return SolveResponse(**solve_diagram(diagram, db))
+
+
+@app.post("/api/seed")
+def post_seed(req: SeedRequest) -> dict:
+    """Seed wizard: POC-level params -> a proposed diagram the user rearranges.
+
+    Returns the diagram dict itself (see ``powertool.graph`` for the schema),
+    not a wrapped response — the editor loads it onto the canvas exactly as it
+    would load a saved design.
+    """
+    return seed_diagram(req.model_dump(), db)
 
 
 @app.get("/api/projects", response_model=list[ProjectSummary])
