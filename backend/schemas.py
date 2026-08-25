@@ -6,9 +6,10 @@ UI (see ``app/streamlit_app.py``): a discriminated union on ``type``.
 
 from __future__ import annotations
 
+from datetime import datetime
 from typing import Annotated, Literal, Union
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class TransformerElement(BaseModel):
@@ -125,3 +126,68 @@ class CatalogueResponse(BaseModel):
     transformers: list[TransformerInfo]
     cables: dict[str, list[CableInfo]]
     defaults: CatalogueDefaults
+
+
+# --- Projects / Designs persistence (M4) ---------------------------------
+
+
+class ProjectCreate(BaseModel):
+    name: str
+
+
+class DesignSummary(BaseModel):
+    """A design as listed on a project page — no payload."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    name: str
+    version: int
+    last_edited_by: str
+    updated_at: datetime
+
+
+class ProjectSummary(BaseModel):
+    id: int
+    name: str
+    created_at: datetime
+    design_count: int
+
+
+class ProjectDetail(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    name: str
+    created_at: datetime
+    designs: list[DesignSummary]
+
+
+class DesignCreate(BaseModel):
+    name: str
+    payload: dict
+    last_edited_by: str
+
+
+class DesignFull(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    project_id: int
+    name: str
+    payload: dict
+    version: int
+    last_edited_by: str
+    created_at: datetime
+    updated_at: datetime
+
+
+class DesignUpdate(BaseModel):
+    """Optimistic-locking save: ``version`` must match the server's current
+    version or the update is rejected with a 409 (see ``PUT /api/designs/{id}``
+    in main.py)."""
+
+    name: str | None = None
+    payload: dict
+    version: int
+    last_edited_by: str
