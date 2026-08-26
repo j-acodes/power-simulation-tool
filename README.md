@@ -82,8 +82,15 @@ with Node in a first stage and ships only Python — see `Dockerfile`.
 
 ### Locally
 
+Work inside a virtualenv, so `python3`, `pytest` and `uvicorn` all resolve to this
+project's Python (3.12, matching the Docker image) rather than whatever is on your
+PATH:
+
 ```bash
+python3.12 -m venv .venv          # once
+source .venv/bin/activate         # every new shell
 pip install -r requirements.txt
+
 cd frontend && npm install && npm run build && cd ..
 uvicorn backend.main:app --port 8000
 ```
