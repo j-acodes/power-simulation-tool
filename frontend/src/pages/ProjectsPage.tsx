@@ -17,6 +17,7 @@ import { DisplayNameControl } from '../components/DisplayName'
 import { useConfirmDialog, usePromptDialog } from '../components/Modal'
 import { EXAMPLE_DIAGRAM } from '../example'
 import { useStore } from '../store'
+import { sortRows, type Sort, type SortDir } from '../sort'
 import type { Diagram, DesignSummary, ProjectDetail, ProjectSummary } from '../types'
 
 function formatDate(iso: string): string {
@@ -44,30 +45,6 @@ interface DesignExtras {
 }
 
 type DesignRow = DesignSummary & Partial<DesignExtras>
-
-// --- sorting -----------------------------------------------------------------
-
-type SortDir = 'asc' | 'desc'
-interface Sort {
-  key: string
-  dir: SortDir
-}
-
-/** Sort by any column, blanks always last so half-loaded rows don't jump to the
- * top. Numbers compare numerically, booleans true-first, everything else by
- * locale. */
-function sortRows<T extends object>(rows: T[], sort: Sort): T[] {
-  return [...rows].sort((x, y) => {
-    const a = (x as Record<string, unknown>)[sort.key]
-    const b = (y as Record<string, unknown>)[sort.key]
-    if (a == null || b == null) return a == null ? (b == null ? 0 : 1) : -1
-    let cmp: number
-    if (typeof a === 'number' && typeof b === 'number') cmp = a - b
-    else if (typeof a === 'boolean' && typeof b === 'boolean') cmp = a === b ? 0 : a ? -1 : 1
-    else cmp = String(a).localeCompare(String(b))
-    return sort.dir === 'asc' ? cmp : -cmp
-  })
-}
 
 /** Sortable column header — click to sort, click again to flip direction. */
 function Th({
