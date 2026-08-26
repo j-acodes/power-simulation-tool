@@ -187,7 +187,41 @@
 .projects-body {
   padding: 1rem;
   overflow-y: auto;
-  justify-content: center;
+  align-items: flex-start;
+  gap: 1.25rem;
+}
+
+/* Full-width, left-aligned projects/designs lists (Stage-1 keeps the centred
+   .panel-wide). */
+.projects-body .panel-wide {
+  margin: 0;
+  max-width: none;
+  flex: 1;
+  min-width: 0;
+}
+
+.projects-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  margin-bottom: 0.75rem;
+}
+
+.projects-toolbar label {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 13px;
+  color: var(--text);
+}
+
+.projects-toolbar select {
+  font: inherit;
+  padding: 0.35rem 0.5rem;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg);
+  color: var(--text-h);
 }
 
 .panel-wide {
@@ -202,7 +236,8 @@
   margin: 0.75rem 0;
 }
 
-.panel-wide > button:first-child {
+.panel-wide > button:not(.header-link):not(.danger),
+.projects-toolbar > button {
   font: inherit;
   padding: 0.4rem 0.8rem;
   border: 1px solid var(--border);
@@ -592,7 +627,7 @@ button.danger {
 
 .stage1-link-note {
   padding: 0 1rem;
-  margin-top: -0.5rem;
+  margin: 1.25rem 0 1rem;
 }
 
 .stage1-body {
@@ -765,9 +800,9 @@ button.danger {
 .rf-edge-label {
   position: absolute;
   pointer-events: none;
+  /* No border: the label reads as text on the line. The background stays so the
+     cable doesn't strike through it. */
   background: var(--bg);
-  border: 1px solid var(--border);
-  border-radius: 4px;
   padding: 0.1rem 0.35rem;
   font-size: 11px;
   color: var(--text);
@@ -775,6 +810,120 @@ button.danger {
 }
 
 .rf-edge-label.issue {
-  border-color: #dc2626;
   color: #dc2626;
+}
+
+/* Projects / designs tables */
+
+.table-scroll {
+  overflow-x: auto;
+}
+
+.data-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.data-table th,
+.data-table td {
+  text-align: left;
+  padding: 0.5rem 0.6rem;
+  border-bottom: 1px solid var(--border);
+  white-space: nowrap;
+}
+
+.data-table thead th {
+  border-bottom: 1.5px solid var(--border);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text);
+  padding: 0;
+}
+
+.data-table thead th button {
+  font: inherit;
+  letter-spacing: inherit;
+  text-transform: inherit;
+  color: inherit;
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+  width: 100%;
+  padding: 0.5rem 0.6rem;
+  background: none;
+  border: none;
+  cursor: pointer;
+}
+
+.data-table thead th.num button {
+  justify-content: flex-end;
+}
+
+.data-table thead th button:hover {
+  color: var(--text-h);
+}
+
+.sort-arrow {
+  font-size: 8px;
+}
+
+.data-table tbody tr:hover {
+  background: rgba(127, 127, 127, 0.06);
+}
+
+.data-table .num {
+  text-align: right;
+}
+
+.data-table .row-name {
+  font: inherit;
+  font-weight: 500;
+  color: var(--text-h);
+  background: none;
+  border: none;
+  padding: 0;
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.data-table .row-name:hover {
+  color: var(--accent);
+}
+
+.data-table .row-actions {
+  text-align: right;
+}
+
+/* button.danger carries a top margin for the inspector's stacked layout */
+.data-table td.row-actions button {
+  margin-top: 0;
+}
+
+.data-table td.row-actions button + button {
+  margin-left: 0.4rem;
+}
+
+.data-table thead th.row-actions {
+  padding: 0.5rem 0.6rem;
+}
+
+.btn-primary {
+  font: inherit;
+  font-weight: 700;
+  padding: 0.3rem 0.7rem;
+  border: 1px solid #7c3aed;
+  border-radius: 6px;
+  /* Fixed purple rather than var(--accent): it has to carry white text in both
+     themes, and the dark-theme accent is too light for that. */
+  background: #7c3aed;
+  color: #fff;
+  cursor: pointer;
+}
+
+.btn-primary:hover {
+  background: #6d28d9;
+  border-color: #6d28d9;
 }

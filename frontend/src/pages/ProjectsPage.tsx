@@ -7,17 +7,103 @@ import {
   deleteDesign,
   deleteProject,
   getCatalogue,
+  getDesign,
   getProject,
   listProjects,
+  solveDiagram,
 } from '../api'
+import { evaluateCompliance } from '../compliance'
 import { DisplayNameControl } from '../components/DisplayName'
 import { useConfirmDialog, usePromptDialog } from '../components/Modal'
 import { EXAMPLE_DIAGRAM } from '../example'
 import { useStore } from '../store'
-import type { Diagram, ProjectDetail, ProjectSummary } from '../types'
+import type { Diagram, DesignSummary, ProjectDetail, ProjectSummary } from '../types'
 
 function formatDate(iso: string): string {
   return new Date(iso).toLocaleString()
+}
+
+/** POC target as "45 MW @ pf 0.95", read off the diagram's poc node props
+ * (permissive Record, hence the typeof guards). */
+function formatPocTarget(diagram: Diagram): string {
+  const props = diagram.nodes.find((n) => n.kind === 'poc')?.props
+  if (typeof props?.p_target_mw !== 'number') return '—'
+  const pf = typeof props.pf === 'number' ? ` @ pf ${props.pf}` : ''
+  return `${props.p_target_mw} MW${pf}`
+}
+
+/** The design columns that aren't in the list response: read off the design's
+ * payload, plus a solve for the compliance verdict. Absent until the row's
+ * fetch lands. */
+interface DesignExtras {
+  poc_target: string
+  stations: number
+  circuits: number | null
+  /** null when the diagram doesn't solve (incomplete, invalid). */
+  compliant: boolean | null
+}
+
+type DesignRow = DesignSummary & Partial<DesignExtras>
+
+// --- sorting -----------------------------------------------------------------
+
+type SortDir = 'asc' | 'desc'
+interface Sort {
+  key: string
+  dir: SortDir
+}
+
+/** Sort by any column, blanks always last so half-loaded rows don't jump to the
+ * top. Numbers compare numerically, booleans true-first, everything else by
+ * locale. */
+function sortRows<T extends object>(rows: T[], sort: Sort): T[] {
+  return [...rows].sort((x, y) => {
+    const a = (x as Record<string, unknown>)[sort.key]
+    const b = (y as Record<string, unknown>)[sort.key]
+    if (a == null || b == null) return a == null ? (b == null ? 0 : 1) : -1
+    let cmp: number
+    if (typeof a === 'number' && typeof b === 'number') cmp = a - b
+    else if (typeof a === 'boolean' && typeof b === 'boolean') cmp = a === b ? 0 : a ? -1 : 1
+    else cmp = String(a).localeCompare(String(b))
+    return sort.dir === 'asc' ? cmp : -cmp
+  })
+}
+
+/** Sortable column header — click to sort, click again to flip direction. */
+function Th({
+  label,
+  sortKey,
+  sort,
+  onSort,
+  numeric,
+}: {
+  label: string
+  sortKey: string
+  sort: Sort
+  onSort: (key: string) => void
+  numeric?: boolean
+}) {
+  const active = sort.key === sortKey
+  return (
+    <th
+      className={numeric ? 'num' : undefined}
+      aria-sort={active ? (sort.dir === 'asc' ? 'ascending' : 'descending') : 'none'}
+    >
+      <button type="button" onClick={() => onSort(sortKey)}>
+        {label}
+        <span className="sort-arrow">{active ? (sort.dir === 'asc' ? '▲' : '▼') : ''}</span>
+      </button>
+    </th>
+  )
+}
+
+function useSort(initialKey: string, initialDir: SortDir = 'asc') {
+  const [sort, setSort] = useState<Sort>({ key: initialKey, dir: initialDir })
+  const onSort = (key: string) =>
+    setSort((s) =>
+      s.key === key ? { key, dir: s.dir === 'asc' ? 'desc' : 'asc' } : { key, dir: 'asc' },
+    )
+  return { sort, onSort }
 }
 
 /** An empty diagram seeded from the catalogue's default tiers/rules — the
@@ -41,6 +127,9 @@ export function ProjectsPage() {
   const [projects, setProjects] = useState<ProjectSummary[] | null>(null)
   const [selected, setSelected] = useState<ProjectDetail | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [extras, setExtras] = useState<Record<number, DesignExtras>>({})
+  const projectSort = useSort('name')
+  const designSort = useSort('name')
   const { prompt, dialog: promptDialog } = usePromptDialog()
   const { confirm, dialog: confirmDialog } = useConfirmDialog()
 
@@ -55,8 +144,41 @@ export function ProjectsPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
+  /** Fill the derived design columns, one row at a time, so the table renders
+   * immediately and fills in as the fetches land.
+   *
+   * ponytail: one GET + one solve per design, fine for the tens of designs a
+   * project holds. Fold the derived fields into GET /api/projects/:id if a
+   * project ever holds hundreds. */
+  useEffect(() => {
+    if (!selected) return
+    let cancelled = false
+    for (const { id } of selected.designs) {
+      void (async () => {
+        const design = await getDesign(id).catch(() => null)
+        if (!design || cancelled) return
+        const solved = await solveDiagram(design.payload).catch(() => null)
+        if (cancelled) return
+        const results = solved?.results ?? null
+        setExtras((prev) => ({
+          ...prev,
+          [id]: {
+            poc_target: formatPocTarget(design.payload),
+            stations: design.payload.nodes.filter((n) => n.kind === 'station').length,
+            circuits: results?.summary.n_circuits ?? null,
+            compliant: results ? evaluateCompliance(results, solved?.issues ?? []).compliant : null,
+          },
+        }))
+      })()
+    }
+    return () => {
+      cancelled = true
+    }
+  }, [selected])
+
   const openProject = (projectId: number) => {
     setError(null)
+    setExtras({})
     getProject(projectId).then(setSelected).catch((err: unknown) => setError(String(err)))
   }
 
@@ -127,6 +249,10 @@ export function ProjectsPage() {
     }
   }
 
+  const designRows: DesignRow[] = selected
+    ? selected.designs.map((d) => ({ ...d, ...extras[d.id] }))
+    : []
+
   return (
     <div className="app projects-page">
       <header className="app-header">
@@ -149,29 +275,53 @@ export function ProjectsPage() {
       <div className="app-body projects-body">
         {!selected ? (
           <div className="panel-wide">
-            <button type="button" onClick={handleCreateProject}>
-              New project
-            </button>
+            <div className="projects-toolbar">
+              <button type="button" onClick={handleCreateProject}>
+                New project
+              </button>
+            </div>
             {projects === null ? (
               <p className="panel-hint">Loading projects…</p>
             ) : projects.length === 0 ? (
               <p className="panel-hint">No projects yet — create one to get started.</p>
             ) : (
-              <ul className="entity-list">
-                {projects.map((p) => (
-                  <li key={p.id} className="entity-row">
-                    <button type="button" className="entity-name" onClick={() => openProject(p.id)}>
-                      {p.name}
-                    </button>
-                    <span className="entity-meta">
-                      {p.design_count} design{p.design_count === 1 ? '' : 's'} · created {formatDate(p.created_at)}
-                    </span>
-                    <button type="button" className="danger" onClick={() => handleDeleteProject(p.id, p.name)}>
-                      Delete
-                    </button>
-                  </li>
-                ))}
-              </ul>
+              <div className="table-scroll">
+                <table className="data-table">
+                  <thead>
+                    <tr>
+                      <Th label="Project" sortKey="name" {...projectSort} />
+                      <Th label="Designs" sortKey="design_count" numeric {...projectSort} />
+                      <Th label="Created" sortKey="created_at" {...projectSort} />
+                      <th className="row-actions">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {sortRows(projects, projectSort.sort).map((p) => (
+                      <tr key={p.id}>
+                        <td>
+                          <button type="button" className="row-name" onClick={() => openProject(p.id)}>
+                            {p.name}
+                          </button>
+                        </td>
+                        <td className="num">{p.design_count}</td>
+                        <td>{formatDate(p.created_at)}</td>
+                        <td className="row-actions">
+                          <button type="button" className="btn-primary" onClick={() => openProject(p.id)}>
+                            Open
+                          </button>
+                          <button
+                            type="button"
+                            className="danger"
+                            onClick={() => handleDeleteProject(p.id, p.name)}
+                          >
+                            Delete
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             )}
           </div>
         ) : (
@@ -180,31 +330,79 @@ export function ProjectsPage() {
               ← All projects
             </button>
             <h2>{selected.name}</h2>
-            <button type="button" onClick={() => handleCreateDesign(selected.id)}>
-              New design
-            </button>
+            <div className="projects-toolbar">
+              <button type="button" onClick={() => handleCreateDesign(selected.id)}>
+                New design
+              </button>
+            </div>
             {selected.designs.length === 0 ? (
               <p className="panel-hint">No designs yet — create one to get started.</p>
             ) : (
-              <ul className="entity-list">
-                {selected.designs.map((d) => (
-                  <li key={d.id} className="entity-row">
-                    <Link to={`/design/${d.id}`} className="entity-name">
-                      {d.name}
-                    </Link>
-                    <span className="entity-meta">
-                      v{d.version} · {d.last_edited_by} · updated {formatDate(d.updated_at)}
-                    </span>
-                    <button
-                      type="button"
-                      className="danger"
-                      onClick={() => handleDeleteDesign(selected.id, d.id, d.name)}
-                    >
-                      Delete
-                    </button>
-                  </li>
-                ))}
-              </ul>
+              <div className="table-scroll">
+                <table className="data-table">
+                  <thead>
+                    <tr>
+                      <Th label="Design" sortKey="name" {...designSort} />
+                      <Th label="POC target" sortKey="poc_target" {...designSort} />
+                      <Th label="Stations" sortKey="stations" numeric {...designSort} />
+                      <Th label="Circuits" sortKey="circuits" numeric {...designSort} />
+                      <Th label="Compliance" sortKey="compliant" {...designSort} />
+                      <Th label="Version" sortKey="version" numeric {...designSort} />
+                      <Th label="Last edited by" sortKey="last_edited_by" {...designSort} />
+                      <Th label="Updated" sortKey="updated_at" {...designSort} />
+                      <th className="row-actions">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {sortRows(designRows, designSort.sort).map((d) => (
+                      <tr key={d.id}>
+                        <td>
+                          <Link to={`/design/${d.id}`} className="row-name">
+                            {d.name}
+                          </Link>
+                        </td>
+                        <td>{d.poc_target ?? '…'}</td>
+                        <td className="num">{d.stations ?? '…'}</td>
+                        <td className="num">{d.circuits ?? (d.stations === undefined ? '…' : '—')}</td>
+                        <td>
+                          {d.compliant === undefined ? (
+                            '…'
+                          ) : d.compliant === null ? (
+                            'not solvable'
+                          ) : (
+                            <>
+                              {d.compliant ? 'COMPLIANT' : 'NOT COMPLIANT'}
+                              <span
+                                className={`compliance-dot ${d.compliant ? 'ok' : 'bad'}`}
+                                aria-hidden="true"
+                              />
+                            </>
+                          )}
+                        </td>
+                        <td className="num">v{d.version}</td>
+                        <td>{d.last_edited_by}</td>
+                        <td>{formatDate(d.updated_at)}</td>
+                        <td className="row-actions">
+                          <button
+                            type="button"
+                            className="btn-primary"
+                            onClick={() => navigate(`/design/${d.id}`)}
+                          >
+                            Open in editor
+                          </button>
+                          <button
+                            type="button"
+                            className="danger"
+                            onClick={() => handleDeleteDesign(selected.id, d.id, d.name)}
+                          >
+                            Delete
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             )}
           </div>
         )}

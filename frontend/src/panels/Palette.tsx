@@ -77,7 +77,7 @@ export function Palette() {
               {transformers.map((tx) => (
                 <Item
                   key={tx.key}
-                  label={tx.display_name}
+                  label={tx.key}
                   kind="station"
                   props={{ mode: 'catalogue', model: tx.key }}
                   selected={selection?.type === 'palette' && selection.key === tx.key}

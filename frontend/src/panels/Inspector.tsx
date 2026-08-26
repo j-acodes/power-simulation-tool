@@ -65,7 +65,7 @@ function CustomTransformerFields({
 function TransformerPreview({ tx }: { tx: TransformerInfo }) {
   return (
     <div>
-      <h3>{tx.display_name}</h3>
+      <h3>{tx.key}</h3>
       <Row label={LABEL.brand} value={tx.brand ?? '—'} />
       <Row label={LABEL.sRatedKva} value={fmt(tx.s_rated_kva)} />
       <Row label={LABEL.ukPercent} value={fmt(tx.uk_percent, 2)} />
@@ -111,7 +111,7 @@ function NodeProperties({ node }: { node: DiagramNode }) {
                 <option value="">— select —</option>
                 {catalogue?.transformers.map((tx) => (
                   <option key={tx.key} value={tx.key}>
-                    {tx.display_name}
+                    {tx.key}
                   </option>
                 ))}
               </select>
@@ -137,7 +137,7 @@ function NodeProperties({ node }: { node: DiagramNode }) {
                 <option value="">— select —</option>
                 {catalogue?.transformers.map((tx) => (
                   <option key={tx.key} value={tx.key}>
-                    {tx.display_name}
+                    {tx.key}
                   </option>
                 ))}
               </select>

@@ -69,6 +69,9 @@ interface State {
   addNode: (node: DiagramNode) => void
   updateNodeProps: (id: string, props: Record<string, unknown>) => void
   moveNode: (id: string, x: number, y: number) => void
+  /** Reposition many nodes at once (auto-arrange) — one diagram object, one
+   * re-render, one solve. */
+  moveNodes: (positions: Record<string, { x: number; y: number }>) => void
   removeNode: (id: string) => void
   addEdge: (edge: DiagramEdge) => void
   updateEdge: (id: string, patch: Partial<DiagramEdge>) => void
@@ -129,6 +132,14 @@ export const useStore = create<State>((set) => ({
       diagram: {
         ...s.diagram,
         nodes: s.diagram.nodes.map((n) => (n.id === id ? { ...n, x, y } : n)),
+      },
+    })),
+
+  moveNodes: (positions) =>
+    set((s) => ({
+      diagram: {
+        ...s.diagram,
+        nodes: s.diagram.nodes.map((n) => (positions[n.id] ? { ...n, ...positions[n.id] } : n)),
       },
     })),
 

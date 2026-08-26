@@ -16,7 +16,7 @@ export function CableEdge({
   const hasIssue = data?.hasIssue ?? false
 
   const lengthLabel = edge?.length_m ? `${fmt(edge.length_m)} m` : null
-  const resultLabel = result && result.sized ? `${result.cable_label} — ${fmt(result.dp_kw, 1)} kW` : null
+  const resultLabel = result && result.sized ? result.cable_label : null
 
   return (
     <>

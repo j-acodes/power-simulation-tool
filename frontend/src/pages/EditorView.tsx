@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import type { ReactNode } from 'react'
 import '../App.css'
+import { autoArrange } from '../canvas/autoArrange'
 import { Editor } from '../canvas/Editor'
 import { SeedWizard } from '../components/SeedWizard'
 import { EXAMPLE_DIAGRAM } from '../example'
@@ -29,6 +30,8 @@ export function EditorView({ title, headerLeft, headerRight }: EditorViewProps) 
   const [showSettings, setShowSettings] = useState(false)
   const [showSeedWizard, setShowSeedWizard] = useState(false)
   const loadDiagram = useStore((s) => s.loadDiagram)
+  const diagram = useStore((s) => s.diagram)
+  const moveNodes = useStore((s) => s.moveNodes)
 
   return (
     <div className="app">
@@ -43,6 +46,9 @@ export function EditorView({ title, headerLeft, headerRight }: EditorViewProps) 
           </button>
           <button type="button" onClick={() => loadDiagram(EXAMPLE_DIAGRAM)}>
             Load example plant
+          </button>
+          <button type="button" onClick={() => moveNodes(autoArrange(diagram))}>
+            Auto-arrange
           </button>
           <button type="button" onClick={() => loadDiagram(EMPTY_DIAGRAM)}>
             Clear

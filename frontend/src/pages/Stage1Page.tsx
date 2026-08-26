@@ -24,7 +24,7 @@ function nextId(): string {
 function detailFor(e: Stage1Element, catalogue: CatalogueResponse | null): string {
   if (e.type === 'Transformer') {
     const tx = catalogue?.transformers.find((t) => t.key === e.component)
-    return `${tx?.display_name ?? e.component} (x${e.n_parallel})`
+    return `${tx?.key ?? e.component} (x${e.n_parallel})`
   }
   if (e.type === 'Cable section') return 'auto-sized (worst-case budget)'
   return `P=${e.p_kw} kW, Q=${e.q_kvar} kvar`
@@ -191,7 +191,7 @@ export function Stage1Page() {
                     <option value="">— select —</option>
                     {catalogue?.transformers.map((tx) => (
                       <option key={tx.key} value={tx.key}>
-                        {tx.display_name}
+                        {tx.key}
                       </option>
                     ))}
                   </select>

@@ -147,7 +147,7 @@ export function SeedWizard({ onClose }: SeedWizardProps) {
                 <option value="">— select —</option>
                 {catalogue?.transformers.map((tx) => (
                   <option key={tx.key} value={tx.key}>
-                    {tx.display_name}
+                    {tx.key}
                   </option>
                 ))}
               </select>
