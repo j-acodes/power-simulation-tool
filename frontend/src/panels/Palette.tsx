@@ -1,4 +1,5 @@
 import { useMemo } from 'react'
+import { CollapsiblePanel } from './CollapsiblePanel'
 import { useCatalogue } from '../hooks/useCatalogue'
 import { useStore } from '../store'
 import type { DiagramNode, NodeKind, TransformerInfo } from '../types'
@@ -58,8 +59,7 @@ export function Palette() {
   const brandGroups = useMemo(() => (catalogue ? groupByBrand(catalogue.transformers) : []), [catalogue])
 
   return (
-    <aside className="panel palette">
-      <h2>Palette</h2>
+    <CollapsiblePanel title="Palette" side="left" className="palette">
       <div className="palette-section">
         <h3>Topology</h3>
         {!hasPoc && <Item label="Point of Connection" kind="poc" props={{ p_target_mw: 10, pf: 0.95 }} />}
@@ -96,6 +96,6 @@ export function Palette() {
           props={{ mode: 'custom', name: 'Custom station', s_rated_kva: 1000, uk_percent: 6, pk_kw: 8, p0_kw: 1, i0_percent: 0.5 }}
         />
       </div>
-    </aside>
+    </CollapsiblePanel>
   )
 }

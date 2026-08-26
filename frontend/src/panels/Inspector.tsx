@@ -1,4 +1,5 @@
 import { fmt, kvGroupKey, pct, powerFactor } from '../format'
+import { CollapsiblePanel } from './CollapsiblePanel'
 import { LABEL } from '../labels'
 import { useCatalogue } from '../hooks/useCatalogue'
 import { useStore } from '../store'
@@ -306,29 +307,26 @@ export function Inspector() {
 
   if (!selection) {
     return (
-      <aside className="panel inspector">
-        <h2>Inspector</h2>
+      <CollapsiblePanel title="Inspector" side="right" className="inspector">
         <p className="panel-hint">Select a block or cable to edit its properties, or click a catalogue item to preview it.</p>
-      </aside>
+      </CollapsiblePanel>
     )
   }
 
   if (selection.type === 'palette') {
     const tx = catalogue?.transformers.find((t) => t.key === selection.key)
     return (
-      <aside className="panel inspector">
-        <h2>Inspector</h2>
+      <CollapsiblePanel title="Inspector" side="right" className="inspector">
         <SectionTitle>Catalogue preview</SectionTitle>
         {tx ? <TransformerPreview tx={tx} /> : <p className="panel-hint">Loading…</p>}
-      </aside>
+      </CollapsiblePanel>
     )
   }
 
   if (selection.type === 'node') {
     const node = diagram.nodes.find((n) => n.id === selection.id)
     return (
-      <aside className="panel inspector">
-        <h2>Inspector</h2>
+      <CollapsiblePanel title="Inspector" side="right" className="inspector">
         {node ? (
           <>
             <p className="panel-hint">{node.kind}</p>
@@ -340,7 +338,7 @@ export function Inspector() {
         ) : (
           <p className="panel-hint">Block not found.</p>
         )}
-      </aside>
+      </CollapsiblePanel>
     )
   }
 
@@ -349,8 +347,7 @@ export function Inspector() {
   const targetKind = diagram.nodes.find((n) => n.id === edge?.target)?.kind
   const isAttachment = (sourceKind === 'hv_tx' && targetKind === 'busbar') || sourceKind === 'aux' || targetKind === 'aux'
   return (
-    <aside className="panel inspector">
-      <h2>Inspector</h2>
+    <CollapsiblePanel title="Inspector" side="right" className="inspector">
       {edge ? (
         <>
           <p className="panel-hint">Cable</p>
@@ -362,6 +359,6 @@ export function Inspector() {
       ) : (
         <p className="panel-hint">Cable not found.</p>
       )}
-    </aside>
+    </CollapsiblePanel>
   )
 }

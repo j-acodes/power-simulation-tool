@@ -2,9 +2,11 @@ import { useMemo, useState } from 'react'
 import { evaluateCompliance } from '../compliance'
 import { fmt, pct } from '../format'
 import { useStore } from '../store'
+import { ResultsTables } from './ResultsTables'
 
 export function ResultsSummary() {
   const [open, setOpen] = useState(true)
+  const [showTables, setShowTables] = useState(false)
   const results = useStore((s) => s.results)
   const issues = useStore((s) => s.issues)
   const solving = useStore((s) => s.solving)
@@ -63,8 +65,14 @@ export function ResultsSummary() {
               </div>
             </div>
           )}
+          {results && (
+            <button type="button" className="results-tables-link" onClick={() => setShowTables(true)}>
+              Full results…
+            </button>
+          )}
         </>
       )}
+      {showTables && <ResultsTables onClose={() => setShowTables(false)} />}
     </div>
   )
 }

@@ -102,7 +102,7 @@ export function SeedWizard({ onClose }: SeedWizardProps) {
 
   return (
     <>
-      <ModalShell onEscape={onClose} wide>
+      <ModalShell onEscape={onClose} size="wide">
         <form className="seed-wizard" onSubmit={submit}>
           <h2>Seed from POC target</h2>
           <p className="panel-hint">

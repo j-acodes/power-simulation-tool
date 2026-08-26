@@ -1,14 +1,10 @@
 import { Handle, Position, type NodeProps } from '@xyflow/react'
 import { pct } from '../../format'
-import type { CanvasNode } from '../nodeData'
+import { nodeLabel, type CanvasNode } from '../nodeData'
 import type { StationNodeResult } from '../../types'
 
 export function StationNode({ data }: NodeProps<CanvasNode>) {
-  const props = data.diagramNode.props
-  const label =
-    props.mode === 'custom'
-      ? String(props.name ?? 'Custom station')
-      : String(props.model ?? 'no model')
+  const label = nodeLabel(data.diagramNode)
   const result = data.result?.kind === 'station' ? (data.result as StationNodeResult) : undefined
   const overloaded = result !== undefined && result.loading > 1.0
   const high = result !== undefined && result.loading > 0.9 && !overloaded

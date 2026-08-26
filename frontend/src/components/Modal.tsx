@@ -11,14 +11,15 @@ export function ModalShell({
   children,
   onEscape,
   onEnter,
-  wide,
+  size,
 }: {
   children: ReactNode
   onEscape: () => void
   onEnter?: () => void
-  /** Wider variant for content-heavy modals (e.g. SeedWizard's form) — the
-   * default 360px is sized for prompt/confirm dialogs only. */
-  wide?: boolean
+  /** Wider variants for content-heavy modals — 'wide' for a form (SeedWizard),
+   * 'xl' for the full results tables. The default is sized for prompt/confirm
+   * dialogs only. */
+  size?: 'wide' | 'xl'
 }) {
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
@@ -36,7 +37,7 @@ export function ModalShell({
 
   return (
     <div className="modal-overlay">
-      <div className={wide ? 'modal modal-wide' : 'modal'}>{children}</div>
+      <div className={size ? `modal modal-${size}` : 'modal'}>{children}</div>
     </div>
   )
 }
