@@ -7,6 +7,7 @@ persistence (SQLite by default, no auth yet).
 
 from __future__ import annotations
 
+import re
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Iterator
@@ -14,7 +15,7 @@ from typing import Iterator
 from fastapi import Body, Depends, FastAPI, HTTPException
 from fastapi.encoders import jsonable_encoder
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, Response
 from sqlalchemy import delete, func, select, update
 from sqlalchemy.orm import Session
 
@@ -47,6 +48,7 @@ from .solve import (
     EXPORT_LOSS_PCT_PER_KM,
     MAX_UTILIZATION,
     build_chain,
+    report_pdf,
     solve_diagram,
 )
 
@@ -160,6 +162,35 @@ def post_solve(diagram: dict = Body(...)) -> SolveResponse:
     which reports problems as issues instead of raising 422s at the user.
     """
     return SolveResponse(**solve_diagram(diagram, db))
+
+
+def _filename_slug(name: str) -> str:
+    """Filename-safe slug for the Content-Disposition header — the plant name
+    reaches us from the client, so it never goes into a header verbatim."""
+    cleaned = re.sub(r"[^A-Za-z0-9._-]+", "-", name).strip("-.")
+    return (cleaned or "plant")[:60]
+
+
+@app.post("/api/report")
+def post_report(diagram: dict = Body(...), name: str = "PV Plant") -> Response:
+    """Download the PDF sizing report for a drawn diagram.
+
+    Body is the diagram payload (as for /api/solve); ``name`` titles the report
+    and names the file. A diagram that cannot be solved is a 400 carrying the
+    reason, since there is no partial report worth downloading.
+    """
+    try:
+        pdf = report_pdf(diagram, db, name)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return Response(
+        content=pdf,
+        media_type="application/pdf",
+        headers={
+            "Content-Disposition":
+                f'attachment; filename="{_filename_slug(name)}-sizing-report.pdf"'
+        },
+    )
 
 
 @app.post("/api/seed")

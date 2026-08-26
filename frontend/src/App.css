@@ -53,6 +53,11 @@
   text-decoration: none;
 }
 
+.app-header-actions button:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
 .header-link {
   font: inherit;
   color: var(--text);

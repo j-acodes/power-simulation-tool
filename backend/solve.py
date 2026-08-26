@@ -17,6 +17,7 @@ from powertool import (
     TransformerGroup,
     arrange_plant_manual,
     auto_hv_transformer,
+    build_pdf_report,
     size_architecture,
     size_pv_inverters,
 )
@@ -270,3 +271,20 @@ def solve_diagram(diagram: dict, db: ComponentDatabase) -> dict:
             "results": None,
         }
     return {"issues": [], "results": map_results(inputs, stage1, arch)}
+
+
+def report_pdf(diagram: dict, db: ComponentDatabase, plant_name: str) -> bytes:
+    """PDF sizing report for a drawn diagram — methodology + full loss tables.
+
+    Same pipeline as :func:`solve_diagram`, but the architecture goes to
+    :func:`powertool.build_pdf_report` instead of the canvas mapping. A drawing
+    that cannot be solved raises ``ValueError`` with the reason: unlike the
+    editor's live solve there is nothing partial worth returning, so the caller
+    turns it into a 400.
+    """
+    issues = validate_graph(diagram, db)
+    if issues:
+        raise ValueError(issues[0].message)
+    inputs = graph_to_inputs(diagram, db)
+    stage1, _layout, arch = solve_architecture(inputs, db)
+    return build_pdf_report(stage1, arch, plant_name=plant_name)

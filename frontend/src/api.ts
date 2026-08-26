@@ -44,6 +44,22 @@ export function solveDiagram(diagram: Diagram): Promise<SolveResponse> {
   }).then(asJson<SolveResponse>)
 }
 
+/** PDF sizing report for the drawn diagram (POST /api/report). Returns the
+ * file as a Blob; a diagram that can't be solved comes back as a 400 whose
+ * detail is thrown as an Error. */
+export async function reportPdf(diagram: Diagram, name: string): Promise<Blob> {
+  const res = await fetch(`/api/report?name=${encodeURIComponent(name)}`, {
+    method: 'POST',
+    headers: JSON_HEADERS,
+    body: JSON.stringify(diagram),
+  })
+  if (!res.ok) {
+    const detail = await res.json().catch(() => null)
+    throw new Error(detail?.detail ?? `Report failed (${res.status})`)
+  }
+  return res.blob()
+}
+
 /** Seed wizard: POC-level params -> a proposed diagram (see backend.seed.seed_diagram).
  * The response is the bare diagram dict, loaded onto the canvas exactly like a
  * saved design. */

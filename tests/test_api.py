@@ -133,3 +133,48 @@ def test_stage1_element_with_null_label_returns_200():
     # Verify losses have empty string labels (not None)
     for loss in data["losses"]:
         assert isinstance(loss["label"], str)
+
+
+# --- PDF report ---------------------------------------------------------------
+
+def _example_diagram() -> dict:
+    """The seeded 45 MW plant — a diagram that solves, built by the seeder."""
+    from backend.seed import seed_diagram
+
+    return seed_diagram(
+        {"p_poc_mw": 45, "pf_target": 0.95, "interconnection": "HV", "v_hv_kv": 132,
+         "export_m": 0, "v_mv_kv": 20, "station_model": "HUAWEI_JUPITER9000",
+         "max_loading": 0.9, "trunk_m": 400, "spacing_m": 200,
+         "max_circuit_current_a": 600, "aux_p_kw": 120, "aux_q_kvar": 40},
+        db,
+    )
+
+
+def test_report_returns_a_pdf():
+    resp = client.post("/api/report", json=_example_diagram(), params={"name": "Test Plant"})
+    assert resp.status_code == 200
+    assert resp.headers["content-type"] == "application/pdf"
+    assert resp.content[:5] == b"%PDF-"
+    assert "Test-Plant-sizing-report.pdf" in resp.headers["content-disposition"]
+
+
+def test_report_filename_slug_strips_unsafe_characters():
+    """The plant name reaches the Content-Disposition header — it must not be
+    able to inject quotes or newlines."""
+    resp = client.post(
+        "/api/report",
+        json=_example_diagram(),
+        params={"name": 'ev"il\r\nX-Injected: 1'},
+    )
+    assert resp.status_code == 200
+    disposition = resp.headers["content-disposition"]
+    assert '"' not in disposition.split("filename=")[1].strip('"')
+    assert "\n" not in disposition
+    assert "X-Injected" not in resp.headers
+
+
+def test_report_on_an_unsolvable_diagram_is_400():
+    """An empty diagram has no POC — a validation issue, not a server error."""
+    resp = client.post("/api/report", json={"schema_version": 1, "nodes": [], "edges": []})
+    assert resp.status_code == 400
+    assert resp.json()["detail"]
