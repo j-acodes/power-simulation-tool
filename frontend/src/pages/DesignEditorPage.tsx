@@ -3,7 +3,7 @@ import { Link, useNavigate, useParams } from 'react-router-dom'
 import { ConflictError, createDesign, getDesign, updateDesign } from '../api'
 import { ConflictDialog } from '../components/ConflictDialog'
 import { DisplayNameControl } from '../components/DisplayName'
-import { useConfirmDialog, usePromptDialog } from '../components/Modal'
+import { ModalShell, usePromptDialog } from '../components/Modal'
 import { useStore } from '../store'
 import type { DesignFull } from '../types'
 import { EditorView } from './EditorView'
@@ -29,7 +29,7 @@ export function DesignEditorPage() {
   const [saveError, setSaveError] = useState<string | null>(null)
   const [conflict, setConflict] = useState<DesignFull | null>(null)
   const { prompt, dialog: promptDialog } = usePromptDialog()
-  const { confirm, dialog: confirmDialog } = useConfirmDialog()
+  const [leaving, setLeaving] = useState(false)
   // Needed for "save as new design" (POST target); not part of designMeta's
   // {id, name, version} shape, so it's kept as page-local state instead.
   const projectIdRef = useRef<number | null>(null)
@@ -57,23 +57,18 @@ export function DesignEditorPage() {
     return () => window.removeEventListener('beforeunload', warn)
   }, [dirty])
 
-  /** Back to the projects list: confirm first if the diagram has unsaved edits
+  /** Back to the projects list: ask first if the diagram has unsaved edits
    * (nothing else persists them — there is no autosave). */
-  const handleLeave = async (e: React.MouseEvent) => {
+  const handleLeave = (e: React.MouseEvent) => {
     if (!dirty) return
     e.preventDefault()
-    const ok = await confirm({
-      title: 'Unsaved changes',
-      message: `"${designMeta?.name ?? 'This design'}" has changes that haven't been saved. Leave without saving?`,
-      danger: true,
-      confirmLabel: 'Leave without saving',
-      cancelLabel: 'Stay',
-    })
-    if (ok) navigate('/')
+    setLeaving(true)
   }
 
-  const handleSave = async () => {
-    if (!designMeta) return
+  /** True when the design was written; false on a conflict or a save error, so
+   * callers can keep the user on the page to deal with it. */
+  const handleSave = async (): Promise<boolean> => {
+    if (!designMeta) return false
     setSaving(true)
     setSaveError(null)
     try {
@@ -83,15 +78,24 @@ export function DesignEditorPage() {
         last_edited_by: displayName ?? 'Anonymous',
       })
       markSaved(saved.version)
+      return true
     } catch (err) {
       if (err instanceof ConflictError) {
         setConflict(err.design)
       } else {
         setSaveError(String(err))
       }
+      return false
     } finally {
       setSaving(false)
     }
+  }
+
+  const handleSaveAndLeave = async () => {
+    if (await handleSave()) navigate('/')
+    // Otherwise the conflict dialog or the header's error takes over — get out
+    // of its way and let the user decide what to do next.
+    else setLeaving(false)
   }
 
   const handleReloadTheirs = () => {
@@ -166,8 +170,26 @@ export function DesignEditorPage() {
           onCancel={() => setConflict(null)}
         />
       )}
+      {leaving && (
+        <ModalShell onEscape={() => setLeaving(false)}>
+          <h2>Unsaved changes</h2>
+          <p className="panel-hint">
+            "{designMeta.name}" has changes that haven't been saved.
+          </p>
+          <div className="modal-actions">
+            <button type="button" onClick={() => setLeaving(false)}>
+              Stay
+            </button>
+            <button type="button" className="danger" onClick={() => navigate('/')}>
+              Leave without saving
+            </button>
+            <button type="button" className="btn-primary" onClick={handleSaveAndLeave} disabled={saving}>
+              {saving ? 'Saving…' : 'Save and leave'}
+            </button>
+          </div>
+        </ModalShell>
+      )}
       {promptDialog}
-      {confirmDialog}
     </>
   )
 }

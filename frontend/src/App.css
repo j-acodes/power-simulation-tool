@@ -111,7 +111,7 @@
 }
 
 .modal {
-  width: 360px;
+  width: 420px;
   max-width: calc(100vw - 2rem);
   background: var(--bg);
   border: 1px solid var(--border);
@@ -151,6 +151,7 @@
 
 .modal-actions button {
   font: inherit;
+  white-space: nowrap;
   padding: 0.4rem 0.8rem;
   border: 1px solid var(--border);
   border-radius: 6px;
@@ -918,7 +919,7 @@ button.danger {
   padding: 0.5rem 0.6rem;
 }
 
-.btn-primary {
+button.btn-primary {
   font: inherit;
   font-weight: 700;
   padding: 0.3rem 0.7rem;
@@ -931,7 +932,7 @@ button.danger {
   cursor: pointer;
 }
 
-.btn-primary:hover {
+button.btn-primary:hover {
   background: #6d28d9;
   border-color: #6d28d9;
 }
