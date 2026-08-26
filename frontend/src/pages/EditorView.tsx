@@ -1,7 +1,6 @@
 import { useState } from 'react'
 import type { ReactNode } from 'react'
 import '../App.css'
-import { reportPdf } from '../api'
 import { autoArrange } from '../canvas/autoArrange'
 import { Editor } from '../canvas/Editor'
 import { SeedWizard } from '../components/SeedWizard'
@@ -33,33 +32,6 @@ export function EditorView({ title, headerLeft, headerRight }: EditorViewProps) 
   const loadDiagram = useStore((s) => s.loadDiagram)
   const diagram = useStore((s) => s.diagram)
   const moveNodes = useStore((s) => s.moveNodes)
-  const results = useStore((s) => s.results)
-  const designMeta = useStore((s) => s.designMeta)
-  const [reporting, setReporting] = useState(false)
-  const [reportError, setReportError] = useState<string | null>(null)
-
-  /** Download the PDF sizing report. The browser can't be handed a URL — the
-   * diagram has to be POSTed — so the response Blob is saved via an object
-   * URL. */
-  const downloadReport = async () => {
-    setReporting(true)
-    setReportError(null)
-    try {
-      const name = designMeta?.name ?? 'PV Plant'
-      const blob = await reportPdf(diagram, name)
-      const url = URL.createObjectURL(blob)
-      const link = document.createElement('a')
-      link.href = url
-      link.download = `${name}-sizing-report.pdf`
-      link.click()
-      setTimeout(() => URL.revokeObjectURL(url), 1000)
-    } catch (err) {
-      setReportError(err instanceof Error ? err.message : String(err))
-    } finally {
-      setReporting(false)
-    }
-  }
-
   return (
     <div className="app">
       <header className="app-header">
@@ -83,19 +55,9 @@ export function EditorView({ title, headerLeft, headerRight }: EditorViewProps) 
           <button type="button" onClick={() => setShowSettings((v) => !v)}>
             Settings
           </button>
-          <button
-            type="button"
-            onClick={downloadReport}
-            disabled={reporting || !results}
-            aria-label="Report (PDF)"
-            title={results ? 'Download the PDF sizing report' : 'Solve the plant first'}
-          >
-            {reporting ? 'Building…' : 'Report (PDF)'}
-          </button>
           {headerRight}
         </div>
       </header>
-      {reportError && <p className="error">Report: {reportError}</p>}
       {showSeedWizard && <SeedWizard onClose={() => setShowSeedWizard(false)} />}
       <IssuesBanner />
       <div className="app-body">

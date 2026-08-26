@@ -1,3 +1,5 @@
+import { useState } from 'react'
+import { reportPdf } from '../api'
 import { nodeLabel } from '../canvas/nodeData'
 import { ModalShell } from '../components/Modal'
 import { fmt, pct, powerFactor } from '../format'
@@ -16,11 +18,44 @@ import type {
 export function ResultsTables({ onClose }: { onClose: () => void }) {
   const diagram = useStore((s) => s.diagram)
   const results = useStore((s) => s.results)
+  const designMeta = useStore((s) => s.designMeta)
+  const [reporting, setReporting] = useState(false)
+  const [reportError, setReportError] = useState<string | null>(null)
+
+  /** Download the PDF sizing report. The diagram has to be POSTed, so the
+   * browser can't just be handed a URL — the response Blob is saved through an
+   * object URL instead. */
+  const downloadReport = async () => {
+    setReporting(true)
+    setReportError(null)
+    try {
+      const name = designMeta?.name ?? 'PV Plant'
+      const blob = await reportPdf(diagram, name)
+      const url = URL.createObjectURL(blob)
+      const link = document.createElement('a')
+      link.href = url
+      link.download = `${name}-sizing-report.pdf`
+      link.click()
+      // Revoking synchronously after click can cancel the download.
+      setTimeout(() => URL.revokeObjectURL(url), 1000)
+    } catch (err) {
+      setReportError(err instanceof Error ? err.message : String(err))
+    } finally {
+      setReporting(false)
+    }
+  }
+
   if (!results) return null
 
   return (
     <ModalShell onEscape={onClose} size="xl">
-      <h2>Full results</h2>
+      <div className="results-tables-header">
+        <h2>Full results</h2>
+        <button type="button" className="btn-primary" onClick={downloadReport} disabled={reporting}>
+          {reporting ? 'Building…' : 'Report (PDF)'}
+        </button>
+      </div>
+      {reportError && <p className="error">Report: {reportError}</p>}
       <div className="results-tables">
         <PlantSummary results={results} />
         <Stations diagram={diagram} results={results} />
