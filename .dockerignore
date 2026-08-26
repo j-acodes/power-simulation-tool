@@ -1,0 +1,19 @@
+# Everything the image doesn't need — keeps the build context small and stops a
+# host node_modules/dist from shadowing what the build stage produces.
+.git/
+.claude/
+.pytest_cache/
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+env/
+frontend/node_modules/
+frontend/dist/
+*.db
+app/
+examples/
+tests/
+brainstorming.md
+.streamlit/
+.DS_Store

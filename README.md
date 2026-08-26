@@ -13,18 +13,24 @@ POC ── HV transformer ── MV cables ── MV transformer ── AC cable
 
 ## Status
 
-**Milestone 1 (done): core PV inverter-sizing engine.**
+**Core engine (done)** — component physics models (`powertool/components.py`) + YAML
+databases (`data/`), chain assembly and database loader (`powertool/chain.py`,
+`powertool/database.py`), the backward-sweep solver (`powertool/sizing.py`), plant
+architecture (`powertool/architecture.py`) and the Markdown/PDF reports
+(`powertool/report.py`, `powertool/pdf_report.py`).
 
-- [x] Component physics models (`powertool/components.py`) + YAML databases (`data/`)
-- [x] Chain assembly + database loader (`powertool/chain.py`, `powertool/database.py`)
-- [x] Backward-sweep solver (`powertool/sizing.py`)
-- [x] Example script (`examples/pv_sizing_example.py`) + tests (`tests/`)
+**Diagram builder (in progress)** — a FastAPI backend (`backend/`) and a React canvas
+(`frontend/`) where a plant is drawn block by block and solved live: projects and
+designs persisted with optimistic locking, a seed wizard that proposes a plant from a
+POC target, auto-arrange, full result tables and a PDF report download. See
+**Running the app** below.
 
-Try it from the project root:
+**Frozen** — the original Streamlit UI (`app/streamlit_app.py`) still runs unchanged
+and stays the reference the engine is tested against.
 
 ```bash
 python examples/pv_sizing_example.py     # command-line example
-streamlit run app/streamlit_app.py       # web UI in your browser
+streamlit run app/streamlit_app.py       # the frozen Streamlit UI
 ```
 
 The web UI lets you set the POC power + power factor, assemble the chain from the
@@ -50,17 +56,60 @@ to 630 mm² (the practical max for PV MV switchgear terminations). Resistance is
 **validate against your supplier datasheets and installation conditions.** Edit the
 source values in `build_cable_catalogue.py` and re-run to regenerate.
 
-Later milestones: OND parsing · BESS sizing + RTE · Streamlit web app · interactive
-block-diagram builder. See `~/.claude/plans/` for the full plan.
+Later milestones: OND parsing · BESS sizing + round-trip efficiency. See
+`~/.claude/plans/` for the full plan.
 
 ## Modelling assumptions
 
 Three-phase, balanced, positive-sequence, RMS, steady-state. Voltages are line-to-line
 in kV; P in kW, Q in kvar, S in kVA.
 
-## Setup
+## Running the app
+
+The diagram builder is one FastAPI process: it serves the `/api` routes and, when
+`frontend/dist` exists, the built React app alongside them.
+
+### Docker (nothing to install)
+
+```bash
+docker build -t powertool .
+docker run -p 8000:8000 -v powertool-data:/data powertool
+```
+
+Then open <http://localhost:8000>. The volume holds the SQLite file, so projects and
+designs survive the container; drop `-v` and they don't. The image builds the frontend
+with Node in a first stage and ships only Python — see `Dockerfile`.
+
+### Locally
 
 ```bash
 pip install -r requirements.txt
-pytest          # run tests (once added)
+cd frontend && npm install && npm run build && cd ..
+uvicorn backend.main:app --port 8000
+```
+
+For frontend work, run Vite alongside it instead of rebuilding each time — it proxies
+`/api` to port 8000:
+
+```bash
+uvicorn backend.main:app --port 8000 --reload --reload-dir backend --reload-dir powertool
+cd frontend && npm run dev          # http://localhost:5173
+```
+
+Scope `--reload-dir` as above, or the watcher restarts the server every time a frontend
+build writes into `frontend/dist`.
+
+### Configuration
+
+| Variable | Default | Notes |
+| --- | --- | --- |
+| `DATABASE_URL` | `sqlite:///powertool.db` | Any SQLAlchemy URL. The Docker image sets `sqlite:////data/powertool.db`. |
+
+## Tests
+
+```bash
+pytest                        # engine, API and seed tests
+cd frontend && npm test       # vitest on the pure frontend helpers
+cd frontend && npm run build  # tsc typecheck + production build
+cd frontend && npm run lint   # oxlint
 ```
