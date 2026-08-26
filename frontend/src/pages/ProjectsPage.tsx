@@ -140,6 +140,11 @@ export function ProjectsPage() {
       </header>
 
       {error && <p className="error">{error}</p>}
+      <p className="panel-hint stage1-link-note">
+        Need a quick no-layout estimate instead?{' '}
+        <Link to="/stage1">Stage 1 — conceptual sizing</Link> gives the required inverter capacity for a POC
+        target without drawing a plant.
+      </p>
 
       <div className="app-body projects-body">
         {!selected ? (

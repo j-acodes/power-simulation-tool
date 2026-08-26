@@ -11,6 +11,7 @@ export const LABEL = {
   p0Kw: 'No-load losses P0 (kW)',
   i0Percent: 'No-load current i0 (%)',
   hvKv: 'HV side (kV)',
+  mvKv: 'MV side (kV)',
   lvKv: 'LV side (kV)',
   lengthM: 'Length (m)',
   crossSectionMm2: 'Cross-section (mm²)',

@@ -264,3 +264,76 @@ export interface DesignFull {
   created_at: string
   updated_at: string
 }
+
+// --- Seed wizard (POST /api/seed) -------------------------------------------
+// Mirrors backend/schemas.py SeedRequest. The response is a bare Diagram dict
+// (see backend/seed.py), not a wrapped shape.
+
+export interface SeedParams {
+  p_poc_mw: number
+  pf_target: number
+  interconnection: 'HV' | 'MV'
+  v_hv_kv?: number | null
+  export_m: number
+  v_mv_kv: number
+  station_model: string
+  max_loading: number
+  trunk_m: number
+  spacing_m: number
+  max_circuit_current_a: number
+  aux_p_kw?: number
+  aux_q_kvar?: number
+}
+
+// --- Stage-1 conceptual sizing (POST /api/stage1) ---------------------------
+// Mirrors backend/schemas.py: TransformerElement/CableSectionElement/
+// AuxLoadElement, Stage1Request, LossItem, Stage1Response. Temporary page —
+// see pages/Stage1Page.tsx.
+
+export interface Stage1TransformerElement {
+  type: 'Transformer'
+  component: string
+  v_kv: number
+  n_parallel: number
+  label?: string | null
+}
+
+export interface Stage1CableSectionElement {
+  type: 'Cable section'
+  v_kv: number
+  label?: string | null
+}
+
+export interface Stage1AuxLoadElement {
+  type: 'Aux load'
+  v_kv: number
+  p_kw: number
+  q_kvar: number
+  label?: string | null
+}
+
+export type Stage1Element = Stage1TransformerElement | Stage1CableSectionElement | Stage1AuxLoadElement
+
+export interface Stage1Request {
+  p_poc_kw: number
+  pf_target: number
+  interconnection: 'HV' | 'MV'
+  v_export_kv: number
+  export_m: number
+  elements: Stage1Element[]
+}
+
+export interface Stage1LossItem {
+  label: string
+  dp_kw: number
+  dq_kvar: number
+}
+
+export interface Stage1Response {
+  p_inv_kw: number
+  q_inv_kvar: number
+  s_inv_kva: number
+  pf_inv: number
+  losses: Stage1LossItem[]
+  power_balance_ok: boolean
+}

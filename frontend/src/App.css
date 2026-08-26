@@ -163,6 +163,25 @@
   margin-top: 0;
 }
 
+/* Wider modal variant (SeedWizard) */
+
+.modal.modal-wide {
+  width: 640px;
+}
+
+.seed-wizard-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.6rem 1rem;
+  margin-bottom: 0.5rem;
+}
+
+.seed-wizard-grid .field input,
+.seed-wizard-grid .field select {
+  width: 100%;
+  box-sizing: border-box;
+}
+
 /* Projects page */
 
 .projects-body {
@@ -556,6 +575,123 @@ button.danger {
 
 .results-grid .value {
   display: block;
+  color: var(--text-h);
+}
+
+/* Stage-1 conceptual sizing page (temporary — see pages/Stage1Page.tsx) */
+
+.stage1-page {
+  height: auto;
+  min-height: 100svh;
+}
+
+.stage1-note {
+  padding: 0 1rem;
+  margin-top: 0.5rem;
+}
+
+.stage1-link-note {
+  padding: 0 1rem;
+  margin-top: -0.5rem;
+}
+
+.stage1-body {
+  overflow-y: auto;
+  padding: 1rem;
+  justify-content: center;
+}
+
+.stage1-form h2 {
+  text-align: left;
+  font-size: 16px;
+  margin: 1.25rem 0 0.5rem;
+}
+
+.stage1-form h2:first-child {
+  margin-top: 0;
+}
+
+.stage1-form h3 {
+  font-size: 13px;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+  color: var(--text);
+  margin: 0.9rem 0 0.4rem;
+}
+
+.stage1-grid,
+.stage1-add-element {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 0.6rem 1rem;
+  align-items: end;
+  margin-bottom: 0.5rem;
+}
+
+.stage1-grid .field input,
+.stage1-grid .field select,
+.stage1-add-element .field input,
+.stage1-add-element .field select {
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.stage1-element-list .entity-row {
+  gap: 0.5rem;
+}
+
+.stage1-element-order {
+  flex: 0 0 1.5rem;
+}
+
+.stage1-element-name {
+  flex: 0 0 auto;
+  min-width: 120px;
+}
+
+.stage1-element-list button {
+  font: inherit;
+  padding: 0.3rem 0.5rem;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg);
+  color: var(--text-h);
+  cursor: pointer;
+}
+
+.stage1-results {
+  margin-top: 0.75rem;
+}
+
+.stage1-results-grid {
+  flex-direction: row;
+  flex-wrap: wrap;
+  gap: 1.5rem;
+}
+
+.stage1-loss-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+  margin-top: 0.4rem;
+}
+
+.stage1-loss-table th,
+.stage1-loss-table td {
+  text-align: left;
+  padding: 0.35rem 0.5rem;
+  border-bottom: 1px solid var(--border);
+}
+
+.stage1-loss-table th {
+  color: var(--text);
+  font-weight: 500;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+}
+
+.stage1-loss-table td {
   color: var(--text-h);
 }
 

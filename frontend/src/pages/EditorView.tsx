@@ -2,6 +2,7 @@ import { useState } from 'react'
 import type { ReactNode } from 'react'
 import '../App.css'
 import { Editor } from '../canvas/Editor'
+import { SeedWizard } from '../components/SeedWizard'
 import { EXAMPLE_DIAGRAM } from '../example'
 import { useAutoSolve } from '../hooks/useAutoSolve'
 import { IssuesBanner } from '../panels/IssuesBanner'
@@ -26,6 +27,7 @@ interface EditorViewProps {
 export function EditorView({ title, headerLeft, headerRight }: EditorViewProps) {
   useAutoSolve()
   const [showSettings, setShowSettings] = useState(false)
+  const [showSeedWizard, setShowSeedWizard] = useState(false)
   const loadDiagram = useStore((s) => s.loadDiagram)
 
   return (
@@ -36,6 +38,9 @@ export function EditorView({ title, headerLeft, headerRight }: EditorViewProps) 
           <h1>{title}</h1>
         </div>
         <div className="app-header-actions">
+          <button type="button" onClick={() => setShowSeedWizard(true)}>
+            Seed from POC target…
+          </button>
           <button type="button" onClick={() => loadDiagram(EXAMPLE_DIAGRAM)}>
             Load example plant
           </button>
@@ -48,6 +53,7 @@ export function EditorView({ title, headerLeft, headerRight }: EditorViewProps) 
           {headerRight}
         </div>
       </header>
+      {showSeedWizard && <SeedWizard onClose={() => setShowSeedWizard(false)} />}
       <IssuesBanner />
       <div className="app-body">
         <Palette />

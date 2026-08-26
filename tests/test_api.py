@@ -1,5 +1,8 @@
 """API tests for the M0 FastAPI backend (catalogue + Stage-1 solve)."""
 
+from pathlib import Path
+
+import pytest
 from fastapi.testclient import TestClient
 
 from backend.main import app, db
@@ -87,3 +90,46 @@ def test_stage1_example_plant_matches_direct_engine_computation():
         assert got["label"] == exp.name
         assert got["dp_kw"] == exp.dp_kw
         assert got["dq_kvar"] == exp.dq_kvar
+
+
+_FRONTEND_DIST = Path(__file__).resolve().parent.parent / "frontend" / "dist"
+
+
+@pytest.mark.skipif(
+    not _FRONTEND_DIST.is_dir(),
+    reason="frontend/dist not present"
+)
+def test_spa_fallback_returns_index_html_for_client_routes():
+    """SPA fallback: GET /design/123 returns 200 with index.html content."""
+    resp = client.get("/design/123")
+    assert resp.status_code == 200
+    assert "text/html" in resp.headers.get("content-type", "")
+
+
+def test_api_nonexistent_returns_404():
+    """Non-existent API endpoint returns 404."""
+    resp = client.get("/api/nonexistent")
+    assert resp.status_code == 404
+
+
+def test_stage1_element_with_null_label_returns_200():
+    """Regression test: POST /api/stage1 with null label should return 200, not 500."""
+    payload = {
+        "p_poc_kw": 45000.0,
+        "pf_target": 0.95,
+        "interconnection": "HV",
+        "v_export_kv": 132.0,
+        "export_m": 0.0,
+        "elements": [
+            {"type": "Cable section", "v_kv": 20.0, "label": None},
+            {"type": "Transformer", "component": "HUAWEI_JUPITER9000", "v_kv": 20.0,
+             "n_parallel": 1, "label": None},
+        ],
+    }
+    resp = client.post("/api/stage1", json=payload)
+    assert resp.status_code == 200
+    data = resp.json()
+    assert "losses" in data
+    # Verify losses have empty string labels (not None)
+    for loss in data["losses"]:
+        assert isinstance(loss["label"], str)

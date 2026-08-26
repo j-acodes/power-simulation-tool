@@ -14,7 +14,7 @@ from typing import Iterator
 from fastapi import Body, Depends, FastAPI, HTTPException
 from fastapi.encoders import jsonable_encoder
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.staticfiles import StaticFiles
+from fastapi.responses import FileResponse
 from sqlalchemy import delete, func, select, update
 from sqlalchemy.orm import Session
 
@@ -144,7 +144,7 @@ def post_stage1(req: Stage1Request) -> Stage1Response:
         q_inv_kvar=result.q_inv_kvar,
         s_inv_kva=result.s_inv_kva,
         pf_inv=result.pf_inv,
-        losses=[LossItem(label=e.name, dp_kw=e.dp_kw, dq_kvar=e.dq_kvar) for e in result.losses],
+        losses=[LossItem(label=e.name or "", dp_kw=e.dp_kw, dq_kvar=e.dq_kvar) for e in result.losses],
         power_balance_ok=result.power_balance_ok,
     )
 
@@ -301,8 +301,34 @@ def update_design(
     return DesignFull.model_validate(existing)
 
 
-# Serve the built frontend, if present. Mounted last so /api routes above take
-# precedence; guarded so the API still works before the first `npm run build`.
+# Serve the built frontend, if present. Guarded so the API still works before
+# the first `npm run build`. Catch-all route for SPA fallback: serves actual
+# files when they exist, otherwise returns index.html for client-side routing.
 _FRONTEND_DIST = Path(__file__).resolve().parent.parent / "frontend" / "dist"
 if _FRONTEND_DIST.is_dir():
-    app.mount("/", StaticFiles(directory=_FRONTEND_DIST, html=True), name="frontend")
+
+    @app.get("/{path:path}")
+    def serve_frontend(path: str) -> FileResponse:
+        """Serve the built SPA frontend with fallback to index.html.
+
+        For any GET request not matching /api routes and not an existing static
+        asset, return the frontend's index.html to enable client-side routing.
+        Protects against path traversal via Path.resolve().is_relative_to().
+        """
+        # API routes that don't exist should 404, not fall back to index.html
+        if path.startswith("api/"):
+            raise HTTPException(status_code=404, detail="Not found")
+
+        # Construct the full file path
+        requested_path = (_FRONTEND_DIST / path).resolve()
+
+        # Security: ensure the resolved path is within dist
+        if not requested_path.is_relative_to(_FRONTEND_DIST):
+            raise HTTPException(status_code=404, detail="Not found")
+
+        # Serve the file if it exists
+        if requested_path.is_file():
+            return FileResponse(requested_path)
+
+        # Otherwise, fall back to index.html for client-side routing
+        return FileResponse(_FRONTEND_DIST / "index.html")

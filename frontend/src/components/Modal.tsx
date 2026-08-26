@@ -5,14 +5,20 @@ import type { FormEvent, ReactNode } from 'react'
  * the original DisplayNameGate / ConflictDialog overlays). Escape always
  * cancels; when `onEnter` is given, Enter anywhere in the modal triggers it
  * (used by ConfirmDialog, which has no form to submit on Enter natively). */
-function ModalShell({
+/** Exported so other in-app modals (e.g. SeedWizard) can build on the same
+ * overlay/Escape-to-cancel shell without duplicating it. */
+export function ModalShell({
   children,
   onEscape,
   onEnter,
+  wide,
 }: {
   children: ReactNode
   onEscape: () => void
   onEnter?: () => void
+  /** Wider variant for content-heavy modals (e.g. SeedWizard's form) — the
+   * default 360px is sized for prompt/confirm dialogs only. */
+  wide?: boolean
 }) {
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
@@ -30,7 +36,7 @@ function ModalShell({
 
   return (
     <div className="modal-overlay">
-      <div className="modal">{children}</div>
+      <div className={wide ? 'modal modal-wide' : 'modal'}>{children}</div>
     </div>
   )
 }

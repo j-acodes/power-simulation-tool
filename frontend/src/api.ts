@@ -4,7 +4,10 @@ import type {
   DesignFull,
   ProjectDetail,
   ProjectSummary,
+  SeedParams,
   SolveResponse,
+  Stage1Request,
+  Stage1Response,
 } from './types'
 
 const JSON_HEADERS = { 'Content-Type': 'application/json' }
@@ -39,6 +42,27 @@ export function solveDiagram(diagram: Diagram): Promise<SolveResponse> {
     headers: JSON_HEADERS,
     body: JSON.stringify(diagram),
   }).then(asJson<SolveResponse>)
+}
+
+/** Seed wizard: POC-level params -> a proposed diagram (see backend.seed.seed_diagram).
+ * The response is the bare diagram dict, loaded onto the canvas exactly like a
+ * saved design. */
+export function seedDiagram(params: SeedParams): Promise<Diagram> {
+  return fetch('/api/seed', {
+    method: 'POST',
+    headers: JSON_HEADERS,
+    body: JSON.stringify(params),
+  }).then(asJson<Diagram>)
+}
+
+/** Stage-1 conceptual sizing: lumped-chain inverter requirement over the
+ * element list (see pages/Stage1Page.tsx). */
+export function solveStage1(payload: Stage1Request): Promise<Stage1Response> {
+  return fetch('/api/stage1', {
+    method: 'POST',
+    headers: JSON_HEADERS,
+    body: JSON.stringify(payload),
+  }).then(asJson<Stage1Response>)
 }
 
 // --- Projects ----------------------------------------------------------------
