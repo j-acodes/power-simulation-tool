@@ -742,6 +742,13 @@ button.danger {
   text-align: left;
 }
 
+/* The block the Inspector is editing. An outline rather than a border colour so
+   the issue-red and poc-accent borders still show through. */
+.react-flow__node.selected .rf-node {
+  outline: 2px solid #facc15;
+  outline-offset: 1px;
+}
+
 .rf-node.issue {
   border-color: #dc2626;
   box-shadow: 0 0 0 1px #dc2626;
@@ -807,6 +814,7 @@ button.danger {
   font-size: 11px;
   color: var(--text);
   white-space: nowrap;
+  text-align: center;
 }
 
 .rf-edge-label.issue {

@@ -5,19 +5,20 @@ import type { Diagram } from '../types'
  * transformer / busbar down the centre column, one column per collection
  * circuit, stations stacked down their circuit, aux parked to the right.
  *
- * Constants mirror backend/seed.py's `_layout_to_diagram`, except the column
- * pitch — widened from 180 so the widest station labels can't touch their
- * neighbour.
+ * The grid is the seeder's (backend/seed.py `_layout_to_diagram`), opened up:
+ * every cable carries a two-line label at its midpoint, so each gap has to fit
+ * a node plus that label rather than just the node. Seeded plants still use the
+ * tighter original pitch.
  */
 const POC_Y = 0
-const HV_Y = 110
-const BUS_Y = 220
-const STATION_Y0 = 320
-const STATION_DY = 120
+const HV_Y = 160
+const BUS_Y = 320
+const STATION_Y0 = 480
+const STATION_DY = 150
 const CIRCUIT_X0 = 100
-const CIRCUIT_DX = 200
-const AUX_DX = 460
-const AUX_Y = BUS_Y + 80
+const CIRCUIT_DX = 220
+const AUX_DX = 520
+const AUX_Y = BUS_Y + 90
 
 export type Positions = Record<string, { x: number; y: number }>
 

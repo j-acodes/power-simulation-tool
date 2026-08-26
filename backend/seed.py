@@ -23,17 +23,18 @@ from powertool.sizing import SizingResult
 
 from .solve import build_chain
 
-# Grid layout constants, mirrored from frontend/src/example.ts so a seeded
-# plant reads like the example plant it is meant to resemble.
+# Grid layout constants, mirrored from frontend/src/canvas/autoArrange.ts so a
+# seeded plant lands where the editor's Auto-arrange button would put it. Every
+# gap fits a node plus the two-line cable label drawn at each edge's midpoint.
 _POC_Y = 0.0
-_HV_Y = 110.0
-_BUS_Y = 220.0
-_STATION_Y0 = 320.0
-_STATION_DY = 120.0
+_HV_Y = 160.0
+_BUS_Y = 320.0
+_STATION_Y0 = 480.0
+_STATION_DY = 150.0
 _CIRCUIT_X0 = 100.0
-_CIRCUIT_DX = 180.0
-_AUX_DX = 420.0  # offset from the POC/busbar column
-_AUX_Y = _BUS_Y + 80.0
+_CIRCUIT_DX = 220.0
+_AUX_DX = 520.0  # offset from the POC/busbar column
+_AUX_Y = _BUS_Y + 90.0
 _LV_KV = 0.8  # not a wizard param; matches powertool.graph.DEFAULT_TIERS
 
 # The loss cascade's demand correction shrinks each pass, so this converges in

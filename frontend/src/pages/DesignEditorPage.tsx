@@ -3,7 +3,7 @@ import { Link, useNavigate, useParams } from 'react-router-dom'
 import { ConflictError, createDesign, getDesign, updateDesign } from '../api'
 import { ConflictDialog } from '../components/ConflictDialog'
 import { DisplayNameControl } from '../components/DisplayName'
-import { usePromptDialog } from '../components/Modal'
+import { useConfirmDialog, usePromptDialog } from '../components/Modal'
 import { useStore } from '../store'
 import type { DesignFull } from '../types'
 import { EditorView } from './EditorView'
@@ -29,6 +29,7 @@ export function DesignEditorPage() {
   const [saveError, setSaveError] = useState<string | null>(null)
   const [conflict, setConflict] = useState<DesignFull | null>(null)
   const { prompt, dialog: promptDialog } = usePromptDialog()
+  const { confirm, dialog: confirmDialog } = useConfirmDialog()
   // Needed for "save as new design" (POST target); not part of designMeta's
   // {id, name, version} shape, so it's kept as page-local state instead.
   const projectIdRef = useRef<number | null>(null)
@@ -43,6 +44,33 @@ export function DesignEditorPage() {
       })
       .catch((err: unknown) => setLoadError(String(err)))
   }, [designId, loadDesign])
+
+  /** Tab close / reload / external link — the browser shows its own generic
+   * "leave site?" prompt; in-app navigation is guarded by handleLeave. */
+  useEffect(() => {
+    if (!dirty) return
+    const warn = (e: BeforeUnloadEvent) => {
+      e.preventDefault()
+      e.returnValue = ''
+    }
+    window.addEventListener('beforeunload', warn)
+    return () => window.removeEventListener('beforeunload', warn)
+  }, [dirty])
+
+  /** Back to the projects list: confirm first if the diagram has unsaved edits
+   * (nothing else persists them — there is no autosave). */
+  const handleLeave = async (e: React.MouseEvent) => {
+    if (!dirty) return
+    e.preventDefault()
+    const ok = await confirm({
+      title: 'Unsaved changes',
+      message: `"${designMeta?.name ?? 'This design'}" has changes that haven't been saved. Leave without saving?`,
+      danger: true,
+      confirmLabel: 'Leave without saving',
+      cancelLabel: 'Stay',
+    })
+    if (ok) navigate('/')
+  }
 
   const handleSave = async () => {
     if (!designMeta) return
@@ -116,7 +144,7 @@ export function DesignEditorPage() {
           </>
         }
         headerLeft={
-          <Link to="/" className="header-link">
+          <Link to="/" className="header-link" onClick={handleLeave}>
             ← Projects
           </Link>
         }
@@ -139,6 +167,7 @@ export function DesignEditorPage() {
         />
       )}
       {promptDialog}
+      {confirmDialog}
     </>
   )
 }
