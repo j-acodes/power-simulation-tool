@@ -1,6 +1,7 @@
 import { useStore } from '../store'
 import { useCatalogue } from '../hooks/useCatalogue'
 import { supportedDurations } from '../bess'
+import { permitsFleetKind } from '../technology'
 
 export function SettingsPanel() {
   const diagram = useStore((s) => s.diagram)
@@ -9,6 +10,7 @@ export function SettingsPanel() {
   const solvePaused = useStore((s) => s.solvePaused)
   const updateSettings = useStore((s) => s.updateSettings)
   const setSolvePaused = useStore((s) => s.setSolvePaused)
+  const technology = useStore((s) => s.designMeta?.technology)
   const { tiers, rules } = settings
   // Only offered once a BESS station is drawn, and only over the durations the
   // selected solutions actually tabulate — the container count is read from the
@@ -109,7 +111,7 @@ export function SettingsPanel() {
       {/* Per-fleet overrides are opt-in: an empty box means "use the plant-wide
           figure above", which is what every design drawn before hybrid support
           means by leaving it alone. */}
-      {(['pv', 'bess'] as const).map((kind) => {
+      {(['pv', 'bess'] as const).filter((kind) => permitsFleetKind(technology, kind)).map((kind) => {
         const key = `max_loading_${kind}` as const
         return (
           <label className="field inline" key={kind}>

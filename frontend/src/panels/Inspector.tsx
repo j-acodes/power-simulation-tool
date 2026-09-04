@@ -4,6 +4,7 @@ import { LABEL } from '../labels'
 import { useCatalogue } from '../hooks/useCatalogue'
 import { useStore } from '../store'
 import { takenBusbarSlots } from '../canvas/connect'
+import { permitsFleetKind } from '../technology'
 import type { DiagramEdge, DiagramNode, EdgeResult, NodeResult, TransformerInfo } from '../types'
 
 function NumberField({
@@ -86,6 +87,7 @@ function NodeProperties({ node }: { node: DiagramNode }) {
   const removeNode = useStore((s) => s.removeNode)
   const catalogue = useCatalogue()
   const diagram = useStore((s) => s.diagram)
+  const technology = useStore((s) => s.designMeta?.technology)
   const patch = (p: Record<string, unknown>) => updateNodeProps(node.id, p)
   const props = node.props
 
@@ -93,8 +95,12 @@ function NodeProperties({ node }: { node: DiagramNode }) {
     <div>
       {node.kind === 'poc' && (
         <>
-          <NumberField label={`PV target ${LABEL.activePowerMw}`} value={Number(props.p_target_mw ?? 0)} step={0.1} onChange={(v) => patch({ p_target_mw: v })} />
-          <NumberField label={`BESS target ${LABEL.activePowerMw}`} value={Number(props.p_target_bess_mw ?? 0)} step={0.1} onChange={(v) => patch({ p_target_bess_mw: v })} />
+          {permitsFleetKind(technology, 'pv') && (
+            <NumberField label={`PV target ${LABEL.activePowerMw}`} value={Number(props.p_target_mw ?? 0)} step={0.1} onChange={(v) => patch({ p_target_mw: v })} />
+          )}
+          {permitsFleetKind(technology, 'bess') && (
+            <NumberField label={`BESS target ${LABEL.activePowerMw}`} value={Number(props.p_target_bess_mw ?? 0)} step={0.1} onChange={(v) => patch({ p_target_bess_mw: v })} />
+          )}
           <NumberField label={LABEL.powerFactor} value={Number(props.pf ?? 0)} step={0.01} onChange={(v) => patch({ pf: v })} />
           <p className="panel-hint">
             The reactive duty at the point of connection is split pro-rata by each fleet&apos;s

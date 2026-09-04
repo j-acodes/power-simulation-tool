@@ -12,6 +12,7 @@ import { Palette } from '../panels/Palette'
 import { ResultsSummary } from '../panels/ResultsSummary'
 import { SettingsPanel } from '../panels/SettingsPanel'
 import { EMPTY_DIAGRAM, useStore } from '../store'
+import { permitsFleetKind } from '../technology'
 
 interface EditorViewProps {
   title: ReactNode
@@ -32,6 +33,13 @@ export function EditorView({ title, headerLeft, headerRight }: EditorViewProps) 
   const loadDiagram = useStore((s) => s.loadDiagram)
   const diagram = useStore((s) => s.diagram)
   const moveNodes = useStore((s) => s.moveNodes)
+  const technology = useStore((s) => s.designMeta?.technology)
+  // The wizard seeds a PV cascade from a POC target — a hole in palette-only
+  // enforcement on a battery design, where PV is not permitted. Reuses the
+  // same permission check as the palette rather than a bess-specific special
+  // case, since "permits pv" is exactly the rule: pv and hybrid keep it,
+  // bess doesn't. See docs/adr/0002-technology-declared-not-derived.md.
+  const canSeed = permitsFleetKind(technology, 'pv')
   return (
     <div className="app">
       <header className="app-header">
@@ -40,9 +48,11 @@ export function EditorView({ title, headerLeft, headerRight }: EditorViewProps) 
           <h1>{title}</h1>
         </div>
         <div className="app-header-actions">
-          <button type="button" onClick={() => setShowSeedWizard(true)}>
-            Seed from POC target…
-          </button>
+          {canSeed && (
+            <button type="button" onClick={() => setShowSeedWizard(true)}>
+              Seed from POC target…
+            </button>
+          )}
           <button type="button" onClick={() => loadDiagram(EXAMPLE_DIAGRAM)}>
             Load example plant
           </button>
