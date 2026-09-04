@@ -36,7 +36,21 @@ def _edge_label(run_id: str, cable_label: str, length_km: float) -> str:
 
 def architecture_to_dot(arch: PlantArchitecture) -> str:
     """Render the plant architecture as a Graphviz DOT single-line diagram."""
-    layout = arch.layout
+    if len(arch.branches) != 1:
+        # This diagram is single-branch only, mirroring build_report — a
+        # hybrid's single-line drawing is not produced yet. Refuse and name
+        # the fleets found rather than drawing one fleet as the whole plant.
+        kinds = ", ".join(sorted({
+            st.kind for b in arch.branches for c in b.circuits for st in c.stations
+        }))
+        raise ValueError(
+            f"This design has {len(arch.branches)} fleets ({kinds}) and the "
+            f"single-line diagram is still single-fleet — it would draw only "
+            f"the first and silently omit the rest."
+        )
+    branch = arch.branches[0]
+    refinement = arch.branch_refinements[0]
+    layout = branch.layout
     lines: list[str] = [
         "graph plant {",
         "  rankdir=TB;",
@@ -52,8 +66,8 @@ def architecture_to_dot(arch: PlantArchitecture) -> str:
     # the HV grid voltage for HV interconnection, else the MV busbar voltage.
     poc_v_kv = arch.export.v_hv_kv if arch.export is not None else layout.v_mv_kv
     poc_label = "POC"
-    if arch.p_poc_target_kw is not None:
-        poc_label += f"\\n{arch.p_poc_target_kw / 1000:g} MW"
+    if refinement.p_poc_target_kw is not None:
+        poc_label += f"\\n{refinement.p_poc_target_kw / 1000:g} MW"
     poc_label += f"\\n{poc_v_kv:g} kV"
     lines.append(
         f'  POC [shape=doublecircle, color="{_ACCENT}", label="{poc_label}"];'
@@ -92,9 +106,9 @@ def architecture_to_dot(arch: PlantArchitecture) -> str:
         lines.append("  POC -- BUS;")
 
     # Auxiliary load hanging off the busbar.
-    if arch.aux_p_kw or arch.aux_q_kvar:
+    if branch.aux_p_kw or branch.aux_q_kvar:
         lines.append(
-            f'  AUX [shape=ellipse, label="Aux\\n{arch.aux_p_kw:g} kW"];'
+            f'  AUX [shape=ellipse, label="Aux\\n{branch.aux_p_kw:g} kW"];'
         )
         lines.append("  BUS -- AUX [style=dashed];")
 
@@ -102,7 +116,7 @@ def architecture_to_dot(arch: PlantArchitecture) -> str:
     # cable span feeding the station at its far end; segment 1 is the trunk.
     # Station boxes carry their own model label (mixed fleets supported); the
     # biggest stations sit nearest the busbar by layout convention.
-    for circuit in arch.circuits:
+    for circuit in branch.circuits:
         prev = "BUS"
         for station, segment in zip(circuit.stations, circuit.segments):
             node = f"C{circuit.index}S{station.index}"

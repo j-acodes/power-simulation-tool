@@ -1,5 +1,9 @@
 """Tests for the single-line diagram DOT rendering."""
 
+from dataclasses import replace
+
+import pytest
+
 from powertool import Cable, Transformer
 from powertool.architecture import arrange_plant, size_architecture
 from powertool.diagram import architecture_to_dot
@@ -99,3 +103,13 @@ def test_dot_is_parseable_when_graphviz_available():
     dot = architecture_to_dot(_arch(hv=True))
     proc = subprocess.run(["dot", "-Tcanon"], input=dot.encode(), capture_output=True)
     assert proc.returncode == 0, proc.stderr.decode()
+
+
+def test_dot_refuses_a_hybrid_rather_than_drawing_one_fleet():
+    # Same stance as build_report: the single-line drawing is single-fleet, so
+    # a second branch must refuse rather than silently omit a fleet.
+    arch = _arch(hv=True)
+    hybrid = replace(arch, branches=arch.branches * 2,
+                     branch_refinements=arch.branch_refinements * 2)
+    with pytest.raises(ValueError, match="2 fleets"):
+        architecture_to_dot(hybrid)

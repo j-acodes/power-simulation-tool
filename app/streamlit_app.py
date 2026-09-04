@@ -566,6 +566,8 @@ with tab2:
             except Exception as exc:
                 st.error(f"Could not size the architecture: {exc}")
             else:
+                branch = arch.branches[0]
+                refinement = arch.branch_refinements[0]
                 with col_sld:
                     st.graphviz_chart(architecture_to_dot(arch), use_container_width=True)
 
@@ -604,24 +606,24 @@ with tab2:
                              "(Σ ratings). Above 100% the Stage-1 fleet is undersized: "
                              "every station would run over its rating — add stations "
                              "or bigger units in Stage 1.")
-                    worst_trunk = max(c.i_trunk_a for c in arch.circuits)
+                    worst_trunk = max(c.i_trunk_a for c in branch.circuits)
                     m[3].metric("Worst trunk current", f"{worst_trunk:,.0f} A",
                                 delta=f"cap {I_MAX_CIRCUIT_A:g} A", delta_color="off")
 
                     r = st.columns(5)
                     r[0].metric("S_inv — Stage 1 [MVA]", f"{stage1.s_inv_kva / 1000:.2f}")
-                    delta_pct = (arch.s_inv_refined_kva / stage1.s_inv_kva - 1) * 100
+                    delta_pct = (refinement.s_inv_refined_kva / stage1.s_inv_kva - 1) * 100
                     r[1].metric("S_inv — refined [MVA]",
-                                f"{arch.s_inv_refined_kva / 1000:.2f}",
+                                f"{refinement.s_inv_refined_kva / 1000:.2f}",
                                 delta=f"{delta_pct:+.2f}%")
-                    pf_inv = (arch.p_inv_refined_kw / arch.s_inv_refined_kva
-                              if arch.s_inv_refined_kva > 0 else 1.0)
+                    pf_inv = (refinement.p_inv_refined_kw / refinement.s_inv_refined_kva
+                              if refinement.s_inv_refined_kva > 0 else 1.0)
                     r[2].metric("PF at inverter", f"{pf_inv:.3f}")
                     r[3].metric("Total losses [% P_inv]",
-                                f"{arch.total_active_loss_kw / arch.p_inv_refined_kw * 100:.2f}%")
-                    if arch.p_poc_refined_delivered_kw is not None:
+                                f"{arch.total_active_loss_kw / refinement.p_inv_refined_kw * 100:.2f}%")
+                    if refinement.p_poc_refined_delivered_kw is not None:
                         r[4].metric("POC with refined S_inv [MW]",
-                                    f"{arch.p_poc_refined_delivered_kw / 1000:.2f}",
+                                    f"{refinement.p_poc_refined_delivered_kw / 1000:.2f}",
                                     delta=f"target {p_poc_target_kw / 1000:g} MW",
                                     delta_color="off")
                     st.caption("The refined inverter power is sized so the POC delivery "
@@ -629,9 +631,9 @@ with tab2:
                                "curtailable, shortfall is never accepted.")
 
                 st.markdown("**Cable segments (per circuit, segment 1 = trunk):**")
-                p_inv_ref = arch.p_inv_refined_kw
+                p_inv_ref = refinement.p_inv_refined_kw
                 seg_rows = []
-                for circuit in arch.circuits:
+                for circuit in branch.circuits:
                     for seg in circuit.segments:
                         sel = seg.selection
                         seg_rows.append({

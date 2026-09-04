@@ -256,7 +256,7 @@ def test_custom_station_transformer_accepted_and_checked():
     }
     assert validate_graph(diagram, db) == []
     inputs = graph_to_inputs(diagram, db)
-    assert inputs.circuits[0][0].s_rated_kva == 3000.0
+    assert inputs.branches[0].circuits[0][0].s_rated_kva == 3000.0
 
     # uk% below the resistive share implied by Pk: the loss model rejects it.
     diagram["nodes"][2]["props"]["uk_percent"] = 0.5
@@ -368,21 +368,22 @@ def test_graph_to_inputs_round_trip_is_positional():
 
     # Circuits follow the drawing's own edge order; stations follow the chain
     # outward from the busbar. Nothing is sorted or regrouped.
-    assert inputs.station_ids == [["a1"], ["b1", "b2"]]
-    assert [[tx.s_rated_kva for tx in c] for c in inputs.circuits] == \
+    branch = inputs.branches[0]
+    assert branch.station_ids == [["a1"], ["b1", "b2"]]
+    assert [[tx.s_rated_kva for tx in c] for c in branch.circuits] == \
            [[3300], [9000, 3300]]
-    assert inputs.segment_edge_ids == {
+    assert branch.segment_edge_ids == {
         (1, 1): "e_a1", (2, 1): "e_b1", (2, 2): "e_b2"}
-    assert inputs.segment_lengths == {(1, 1): 0.9, (2, 1): 0.7, (2, 2): 0.25}
-    assert len(inputs.segment_lengths) == inputs.n_stations  # complete map
+    assert branch.segment_lengths == {(1, 1): 0.9, (2, 1): 0.7, (2, 2): 0.25}
+    assert len(branch.segment_lengths) == branch.n_stations  # complete map
 
     assert inputs.p_poc_kw == 20_000.0 and inputs.pf_target == 0.95
     assert inputs.v_mv_kv == 20.0 and inputs.v_hv_kv == 132.0
     assert inputs.hv_mode == "auto" and inputs.hv_transformer is None
     assert inputs.export_edge_id == "e_exp" and inputs.export_length_km == 1.5
-    assert inputs.aux_ids == ["aux"]
-    assert (inputs.aux_p_kw, inputs.aux_q_kvar) == (120.0, 40.0)
-    assert inputs.fleet == [(db.transformer("HUAWEI_JUPITER3000"), 2),
+    assert branch.aux_ids == ["aux"]
+    assert (branch.aux_p_kw, branch.aux_q_kvar) == (120.0, 40.0)
+    assert branch.fleet == [(db.transformer("HUAWEI_JUPITER3000"), 2),
                             (db.transformer("HUAWEI_JUPITER9000"), 1)]
 
 
@@ -391,8 +392,9 @@ def test_forced_section_reaches_the_engine_inputs():
     diagram["edges"][3]["sizing"] = {"mode": "forced", "cable": "AL_400_20kV"}
     assert validate_graph(diagram, db) == []
     inputs = graph_to_inputs(diagram, db)
-    assert [c.name for c in inputs.segment_candidates[(2, 1)]] == ["AL_400_20kV"]
-    assert list(inputs.segment_candidates) == [(2, 1)]  # only the pinned run
+    branch = inputs.branches[0]
+    assert [c.name for c in branch.segment_candidates[(2, 1)]] == ["AL_400_20kV"]
+    assert list(branch.segment_candidates) == [(2, 1)]  # only the pinned run
 
 
 def test_map_results_keys_every_drawn_element():
@@ -597,19 +599,21 @@ def test_golden_45mw_example_drawn_equals_the_auto_path():
     # Stage 2: every plant-level figure, exactly.
     assert summary["circuit_sizes"] == layout.circuit_sizes
     assert summary["fleet_loading"] == layout.fleet_loading
+    refinement = arch.branch_refinements[0]
     assert summary["p_poc_delivered_kw"] == arch.p_poc_delivered_kw
     assert summary["q_poc_delivered_kvar"] == arch.q_poc_delivered_kvar
-    assert summary["correction_factor"] == arch.correction_factor
-    assert summary["s_inv_refined_kva"] == arch.s_inv_refined_kva
-    assert summary["p_poc_refined_delivered_kw"] == arch.p_poc_refined_delivered_kw
+    assert summary["correction_factor"] == refinement.correction_factor
+    assert summary["s_inv_refined_kva"] == refinement.s_inv_refined_kva
+    assert summary["p_poc_refined_delivered_kw"] == refinement.p_poc_refined_delivered_kw
     assert summary["total_cable_loss_kw"] == arch.total_cable_loss_kw
     assert summary["total_transformer_loss_kw"] == arch.total_transformer_loss_kw
-    assert summary["worst_trunk_current_a"] == max(c.i_trunk_a for c in arch.circuits)
+    assert summary["worst_trunk_current_a"] == max(
+        c.i_trunk_a for c in arch.branches[0].circuits)
     assert summary["power_balance_ok"] and results["warnings"] == []
     assert summary["p_poc_refined_delivered_kw"] >= P_POC_KW
 
     # Every cable run: same section, same losses, keyed to the drawn edge.
-    for circuit in arch.circuits:
+    for circuit in arch.branches[0].circuits:
         for segment in circuit.segments:
             drawn = results["edges"][edge_ids[(circuit.index, segment.index)]]
             assert drawn["cable_label"] == segment.cable_label
@@ -621,7 +625,7 @@ def test_golden_45mw_example_drawn_equals_the_auto_path():
             assert drawn["current_a"] == segment.selection.current_per_circuit_a
 
     # Every station: same share, same loading, keyed to the drawn block.
-    for circuit, ids in zip(arch.circuits, station_ids):
+    for circuit, ids in zip(arch.branches[0].circuits, station_ids):
         for station, node_id in zip(circuit.stations, ids):
             drawn = results["nodes"][node_id]
             assert drawn["model"] == station.model
@@ -635,7 +639,7 @@ def test_golden_45mw_example_drawn_equals_the_auto_path():
     assert results["nodes"]["hv"]["dp_kw"] == arch.export.dp_tx_kw
     assert results["nodes"]["poc"]["p_target_kw"] == P_POC_KW
     assert math.isclose(results["nodes"]["bus"]["p_kw"],
-                        sum(c.p_busbar_kw for c in arch.circuits), rel_tol=1e-12)
+                        sum(c.p_busbar_kw for c in arch.branches[0].circuits), rel_tol=1e-12)
 
 
 def test_golden_rearranging_the_drawing_changes_the_numbers():

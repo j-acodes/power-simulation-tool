@@ -295,12 +295,14 @@ def test_manual_arrangement_equals_the_auto_one_when_fed_its_own_output():
         hv_transformer=_hv_tx(),
         aux_p_kw=120.0, aux_q_kvar=40.0, p_poc_target_kw=43_000.0)
 
+    manual_refinement = manual_arch.branch_refinements[0]
+    auto_refinement = auto_arch.branch_refinements[0]
     assert manual_arch.p_poc_delivered_kw == auto_arch.p_poc_delivered_kw
     assert manual_arch.q_poc_delivered_kvar == auto_arch.q_poc_delivered_kvar
-    assert manual_arch.correction_factor == auto_arch.correction_factor
-    assert manual_arch.s_inv_refined_kva == auto_arch.s_inv_refined_kva
+    assert manual_refinement.correction_factor == auto_refinement.correction_factor
+    assert manual_refinement.s_inv_refined_kva == auto_refinement.s_inv_refined_kva
     assert manual_arch.total_active_loss_kw == auto_arch.total_active_loss_kw
-    for got, expected in zip(manual_arch.circuits, auto_arch.circuits):
+    for got, expected in zip(manual_arch.branches[0].circuits, auto_arch.branches[0].circuits):
         assert got.i_trunk_a == expected.i_trunk_a
         assert [s.cable_label for s in got.segments] == \
                [s.cable_label for s in expected.segments]
@@ -554,8 +556,8 @@ def test_forced_section_reaches_size_architecture():
     big = [c for c in _catalogue() if c.name == "AL_400"]
     arch = size_architecture(layout, stage1, _catalogue(),
                              segment_candidates={(1, 5): big})
-    assert arch.circuits[0].segments[-1].selection.cable.name == "AL_400"
-    assert arch.circuits[1].segments[-1].selection.cable.name == "AL_95"
+    assert arch.branches[0].circuits[0].segments[-1].selection.cable.name == "AL_400"
+    assert arch.branches[0].circuits[1].segments[-1].selection.cable.name == "AL_95"
     assert arch.power_balance_ok
 
 
@@ -604,10 +606,10 @@ def test_architecture_mv_interconnection_no_export():
     arch = size_architecture(layout, stage1, _catalogue(), aux_p_kw=120.0, aux_q_kvar=40.0)
 
     assert arch.export is None
-    expected_p = sum(c.p_busbar_kw for c in arch.circuits) - 120.0
+    expected_p = sum(c.p_busbar_kw for c in arch.branches[0].circuits) - 120.0
     assert arch.p_poc_delivered_kw == pytest.approx(expected_p)
     assert arch.power_balance_ok
-    assert arch.correction_factor == 1.0
+    assert arch.branch_refinements[0].correction_factor == 1.0
     assert arch.n_circuits == 4
 
 
@@ -680,13 +682,14 @@ def test_refined_requirement_never_falls_short():
         hv_transformer=_hv_tx(), aux_p_kw=120.0, aux_q_kvar=40.0,
         p_poc_target_kw=target_kw,
     )
-    assert arch.correction_factor > 1.0
-    assert arch.s_inv_refined_kva == pytest.approx(
-        math.hypot(arch.p_inv_refined_kw, arch.q_inv_refined_kvar)
+    refinement = arch.branch_refinements[0]
+    assert refinement.correction_factor > 1.0
+    assert refinement.s_inv_refined_kva == pytest.approx(
+        math.hypot(refinement.p_inv_refined_kw, refinement.q_inv_refined_kvar)
     )
-    assert arch.p_poc_refined_delivered_kw is not None
-    assert arch.p_poc_refined_delivered_kw >= target_kw
-    assert arch.p_poc_refined_delivered_kw <= target_kw * 1.005
+    assert refinement.p_poc_refined_delivered_kw is not None
+    assert refinement.p_poc_refined_delivered_kw >= target_kw
+    assert refinement.p_poc_refined_delivered_kw <= target_kw * 1.005
 
 
 def test_architecture_loss_totals_consistent():
@@ -699,9 +702,10 @@ def test_architecture_loss_totals_consistent():
     assert arch.total_active_loss_kw == pytest.approx(
         arch.total_cable_loss_kw + arch.total_transformer_loss_kw
     )
-    p_in = sum(st.p_lv_kw for c in arch.circuits for st in c.stations)
+    p_in = sum(st.p_lv_kw for c in arch.branches[0].circuits for st in c.stations)
     assert p_in == pytest.approx(
-        arch.p_poc_delivered_kw + arch.total_active_loss_kw + arch.aux_p_kw, rel=1e-9
+        arch.p_poc_delivered_kw + arch.total_active_loss_kw + arch.branches[0].aux_p_kw,
+        rel=1e-9
     )
     assert arch.all_current_ok
 
@@ -720,7 +724,7 @@ def test_architecture_mixed_fleet_end_to_end():
                              p_poc_target_kw=14_000.0)
     assert arch.power_balance_ok
     assert arch.export is not None and arch.export.hv_transformer is not None
-    assert arch.p_poc_refined_delivered_kw >= 14_000.0
+    assert arch.branch_refinements[0].p_poc_refined_delivered_kw >= 14_000.0
 
 
 # --- auto_hv_transformer ----------------------------------------------------------
@@ -826,8 +830,7 @@ def test_two_branch_refinement_meets_each_branchs_own_target_with_different_corr
 def test_single_branch_size_plant_matches_the_size_architecture_shim():
     # The shim (size_architecture) wraps its one branch and one Stage-1 result
     # into the list-shaped size_plant call; calling size_plant directly with
-    # that same single branch must produce IDENTICAL numbers, proving the
-    # single-fleet compatibility properties delegate correctly.
+    # that same single branch must produce IDENTICAL numbers.
     stage1, layout = _full_plant_inputs()
     branch = size_branch(layout, _catalogue(), aux_p_kw=120.0, aux_q_kvar=40.0)
 
@@ -837,16 +840,19 @@ def test_single_branch_size_plant_matches_the_size_architecture_shim():
         layout, stage1, _catalogue(), hv_transformer=_hv_tx(),
         aux_p_kw=120.0, aux_q_kvar=40.0, p_poc_target_kw=43_000.0,
     )
+    direct_refinement = direct.branch_refinements[0]
+    shim_refinement = shim.branch_refinements[0]
 
     assert direct.p_poc_delivered_kw == shim.p_poc_delivered_kw
     assert direct.q_poc_delivered_kvar == shim.q_poc_delivered_kvar
-    assert direct.correction_factor == shim.correction_factor
-    assert direct.p_inv_refined_kw == shim.p_inv_refined_kw
-    assert direct.q_inv_refined_kvar == shim.q_inv_refined_kvar
-    assert direct.s_inv_refined_kva == shim.s_inv_refined_kva
-    assert direct.p_poc_refined_delivered_kw == shim.p_poc_refined_delivered_kw
+    assert direct_refinement.correction_factor == shim_refinement.correction_factor
+    assert direct_refinement.p_inv_refined_kw == shim_refinement.p_inv_refined_kw
+    assert direct_refinement.q_inv_refined_kvar == shim_refinement.q_inv_refined_kvar
+    assert direct_refinement.s_inv_refined_kva == shim_refinement.s_inv_refined_kva
+    assert (direct_refinement.p_poc_refined_delivered_kw
+            == shim_refinement.p_poc_refined_delivered_kw)
     assert direct.power_balance_ok == shim.power_balance_ok
-    assert shim.correction_factor > 1.0
+    assert shim_refinement.correction_factor > 1.0
 
 
 def test_size_plant_raises_on_non_convergence(monkeypatch):

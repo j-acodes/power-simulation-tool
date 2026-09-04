@@ -975,14 +975,6 @@ class GraphInputs:
     auxiliary totals, maximum loading, that branch's own active/reactive
     target) lives on :class:`BranchInputs`, one per drawn busbar whose fleet
     has a positive active target — see ``branches``.
-
-    ``busbar_id``, ``aux_ids``, ``circuits``, ``station_ids``,
-    ``segment_edge_ids``, ``segment_lengths``, ``segment_candidates``,
-    ``aux_p_kw``, ``aux_q_kvar``, ``max_loading``, ``fleet`` and
-    ``n_stations`` are kept as FIRST-BRANCH properties, mirroring
-    ``PlantArchitecture._sole_branch`` (raise rather than silently prefer the
-    first once there is more than one branch) — so the result-mapping layer
-    migrates incrementally instead of needing every caller rewritten at once.
     """
 
     # canvas identity
@@ -1014,73 +1006,8 @@ class GraphInputs:
     def p_poc_kw(self) -> float:
         """Combined active target across every branch — what the shared
         export chain is sized against (step 1 of the solve order; see
-        :func:`backend.solve.solve_architecture`). For a single-fleet design
-        this is exactly that fleet's own target, unchanged from before this
-        ticket."""
+        :func:`backend.solve.solve_architecture`)."""
         return sum(b.p_poc_target_kw for b in self.branches)
-
-    @property
-    def _sole_branch(self) -> BranchInputs:
-        """The only branch, for the single-fleet compatibility properties.
-
-        Raises rather than quietly preferring the first — see
-        ``PlantArchitecture._sole_branch`` for the house rationale. A caller
-        still reading these once a second branch exists would otherwise get
-        one fleet's figures presented as the whole drawing."""
-        if len(self.branches) != 1:
-            raise ValueError(
-                f"This is a single-fleet accessor, but the drawing has "
-                f"{len(self.branches)} branches. Read `branches` instead."
-            )
-        return self.branches[0]
-
-    @property
-    def busbar_id(self) -> str:
-        return self._sole_branch.busbar_id
-
-    @property
-    def aux_ids(self) -> list[str]:
-        return self._sole_branch.aux_ids
-
-    @property
-    def circuits(self) -> list[list[Transformer]]:
-        return self._sole_branch.circuits
-
-    @property
-    def station_ids(self) -> list[list[str]]:
-        return self._sole_branch.station_ids
-
-    @property
-    def segment_edge_ids(self) -> dict[tuple[int, int], str]:
-        return self._sole_branch.segment_edge_ids
-
-    @property
-    def segment_lengths(self) -> dict[tuple[int, int], float]:
-        return self._sole_branch.segment_lengths
-
-    @property
-    def segment_candidates(self) -> dict[tuple[int, int], list[Cable]]:
-        return self._sole_branch.segment_candidates
-
-    @property
-    def aux_p_kw(self) -> float:
-        return self._sole_branch.aux_p_kw
-
-    @property
-    def aux_q_kvar(self) -> float:
-        return self._sole_branch.aux_q_kvar
-
-    @property
-    def max_loading(self) -> float:
-        return self._sole_branch.max_loading
-
-    @property
-    def fleet(self) -> list[tuple[Transformer, int]]:
-        return self._sole_branch.fleet
-
-    @property
-    def n_stations(self) -> int:
-        return self._sole_branch.n_stations
 
 
 def graph_to_inputs(diagram: dict, db) -> GraphInputs:
@@ -1473,7 +1400,7 @@ def map_results(inputs: GraphInputs, stage1s: list[SizingResult],
                 export.hv_cable, forced=inputs.export_cable is not None)
 
     if len(arch.branches) == 1:
-        p_refined_delivered_kw = arch.p_poc_refined_delivered_kw
+        p_refined_delivered_kw = arch.branch_refinements[0].p_poc_refined_delivered_kw
     else:
         refined = [r.p_poc_refined_delivered_kw for r in arch.branch_refinements]
         p_refined_delivered_kw = (
@@ -1508,22 +1435,24 @@ def map_results(inputs: GraphInputs, stage1s: list[SizingResult],
         # Exactly the pre-branch computation, unchanged — the golden-snapshot
         # gate (a physics diff against the pre-refactor engine) depends on
         # this being byte-identical for every single-fleet design.
-        layout = arch.layout
+        branch = arch.branches[0]
+        refinement = arch.branch_refinements[0]
+        layout = branch.layout
         stage1 = stage1s[0]
-        p_inv_refined = arch.p_inv_refined_kw
+        p_inv_refined = refinement.p_inv_refined_kw
         summary = {
             "p_inv_kw": stage1.p_inv_kw,
             "q_inv_kvar": stage1.q_inv_kvar,
             "s_inv_kva": stage1.s_inv_kva,
             "pf_inv": stage1.pf_inv,
             "p_inv_refined_kw": p_inv_refined,
-            "q_inv_refined_kvar": arch.q_inv_refined_kvar,
-            "s_inv_refined_kva": arch.s_inv_refined_kva,
-            "correction_factor": arch.correction_factor,
-            "p_poc_target_kw": arch.p_poc_target_kw,
+            "q_inv_refined_kvar": refinement.q_inv_refined_kvar,
+            "s_inv_refined_kva": refinement.s_inv_refined_kva,
+            "correction_factor": refinement.correction_factor,
+            "p_poc_target_kw": refinement.p_poc_target_kw,
             "p_poc_delivered_kw": arch.p_poc_delivered_kw,
             "q_poc_delivered_kvar": arch.q_poc_delivered_kvar,
-            "p_poc_refined_delivered_kw": arch.p_poc_refined_delivered_kw,
+            "p_poc_refined_delivered_kw": refinement.p_poc_refined_delivered_kw,
             "n_stations": layout.n_transformers,
             "n_circuits": arch.n_circuits,
             "circuit_sizes": layout.circuit_sizes,
@@ -1535,7 +1464,7 @@ def map_results(inputs: GraphInputs, stage1s: list[SizingResult],
             "total_active_loss_kw": arch.total_active_loss_kw,
             "loss_percent_of_p_inv": (arch.total_active_loss_kw / p_inv_refined * 100.0
                                       if p_inv_refined else None),
-            "worst_trunk_current_a": max((c.i_trunk_a for c in arch.circuits), default=0.0),
+            "worst_trunk_current_a": max((c.i_trunk_a for c in branch.circuits), default=0.0),
             "max_circuit_current_a": layout.max_circuit_current_a,
             "all_current_ok": arch.all_current_ok,
             "power_balance_ok": arch.power_balance_ok,
@@ -1549,28 +1478,11 @@ def map_results(inputs: GraphInputs, stage1s: list[SizingResult],
     else:
         fleets = branches_summary(inputs, arch, stage1s)
         n_stations = sum(b.layout.n_transformers for b in arch.branches)
-        n_circuits = sum(len(b.circuits) for b in arch.branches)
         circuit_sizes = [n for b in arch.branches for n in b.layout.circuit_sizes]
         s_fleet_kva = sum(b.layout.s_fleet_kva for b in arch.branches)
         worst_trunk_current_a = max(
             (c.i_trunk_a for b in arch.branches for c in b.circuits), default=0.0)
-        all_current_ok = all(c.current_ok for b in arch.branches for c in b.circuits)
         p_inv_refined_total = sum(r.p_inv_refined_kw for r in arch.branch_refinements)
-        # PlantArchitecture.total_cable_loss_kw / total_transformer_loss_kw are
-        # sole-branch compat properties (they read `self.circuits`) and raise
-        # here — computed directly from every branch plus the shared export
-        # step instead.
-        total_cable_loss_kw = sum(
-            seg.dp_kw for b in arch.branches for c in b.circuits for seg in c.segments
-        )
-        total_transformer_loss_kw = sum(
-            st.dp_tx_kw for b in arch.branches for c in b.circuits for st in c.stations
-        )
-        if arch.export is not None:
-            if arch.export.hv_cable is not None:
-                total_cable_loss_kw += arch.export.hv_cable.dp_kw
-            total_transformer_loss_kw += arch.export.dp_tx_kw
-        total_active_loss_kw = total_cable_loss_kw + total_transformer_loss_kw
         summary = {
             "p_inv_kw": sum(s.p_inv_kw for s in stage1s),
             "q_inv_kvar": sum(s.q_inv_kvar for s in stage1s),
@@ -1580,18 +1492,18 @@ def map_results(inputs: GraphInputs, stage1s: list[SizingResult],
             "q_poc_delivered_kvar": arch.q_poc_delivered_kvar,
             "p_poc_refined_delivered_kw": p_refined_delivered_kw,
             "n_stations": n_stations,
-            "n_circuits": n_circuits,
+            "n_circuits": arch.n_circuits,
             "circuit_sizes": circuit_sizes,
             "s_fleet_kva": s_fleet_kva,
-            "total_cable_loss_kw": total_cable_loss_kw,
-            "total_transformer_loss_kw": total_transformer_loss_kw,
-            "total_active_loss_kw": total_active_loss_kw,
-            "loss_percent_of_p_inv": (total_active_loss_kw / p_inv_refined_total * 100.0
+            "total_cable_loss_kw": arch.total_cable_loss_kw,
+            "total_transformer_loss_kw": arch.total_transformer_loss_kw,
+            "total_active_loss_kw": arch.total_active_loss_kw,
+            "loss_percent_of_p_inv": (arch.total_active_loss_kw / p_inv_refined_total * 100.0
                                       if p_inv_refined_total else None),
             "worst_trunk_current_a": worst_trunk_current_a,
             "max_circuit_current_a": max(b.layout.max_circuit_current_a
                                          for b in arch.branches),
-            "all_current_ok": all_current_ok,
+            "all_current_ok": arch.all_current_ok,
             "power_balance_ok": arch.power_balance_ok,
             "v_mv_kv": arch.branches[0].layout.v_mv_kv,
             "v_hv_kv": export.v_hv_kv if export is not None else None,

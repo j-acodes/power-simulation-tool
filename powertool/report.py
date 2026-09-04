@@ -109,9 +109,12 @@ curtailable; shortfall is not accepted."""
 
 
 def _summary_section(stage1: SizingResult, arch: PlantArchitecture) -> str:
+    branch = arch.branches[0]
+    refinement = arch.branch_refinements[0]
+    layout = branch.layout
     export = arch.export
     if export is None:
-        interconn = f"MV, at {arch.layout.v_mv_kv:g} kV busbar"
+        interconn = f"MV, at {layout.v_mv_kv:g} kV busbar"
     else:
         hv = export.hv_transformer
         interconn = (
@@ -119,15 +122,15 @@ def _summary_section(stage1: SizingResult, arch: PlantArchitecture) -> str:
             + (f" via {hv.s_rated_kva / 1000:g} MVA auto-sized MV/HV transformer"
                if hv is not None else "")
         )
-    target = arch.p_poc_target_kw
+    target = refinement.p_poc_target_kw
     rows = [
         ["POC active-power target", f"{_fmt(target / 1000)} MW" if target else "—"],
         ["Power-factor target (injected Q)", f"{stage1.pf_target:.3f}"],
         ["Interconnection", interconn],
-        ["MV collection voltage", f"{arch.layout.v_mv_kv:g} kV"],
+        ["MV collection voltage", f"{layout.v_mv_kv:g} kV"],
         ["Station fleet",
-         " + ".join(f"{n}× {tx.display_name}" for tx, n in arch.layout.fleet)],
-        ["Installed station capacity", f"{_fmt(arch.layout.s_fleet_kva / 1000)} MVA"],
+         " + ".join(f"{n}× {tx.display_name}" for tx, n in layout.fleet)],
+        ["Installed station capacity", f"{_fmt(layout.s_fleet_kva / 1000)} MVA"],
     ]
     return "## 0. Plant summary\n\n" + _table(["Item", "Value"], rows)
 
@@ -169,7 +172,7 @@ def _transformer_table(arch: PlantArchitecture) -> str:
     # Aggregate stations by model (identical units have identical losses), then
     # add the auto-sized MV/HV transformer.
     agg: dict[str, dict] = {}
-    for circuit in arch.circuits:
+    for circuit in arch.branches[0].circuits:
         for st in circuit.stations:
             a = agg.setdefault(st.model, {
                 "count": 0, "s_rated": st.s_rated_kva, "loading": st.loading,
@@ -205,7 +208,7 @@ def _cable_table(arch: PlantArchitecture) -> str:
                "Circuits", "Util.", "Loss %", "V-drop %", "ΔP [kW]",
                "ΔQ series [kvar]", "Q charging [kvar]"]
     rows = []
-    for circuit in arch.circuits:
+    for circuit in arch.branches[0].circuits:
         for seg in circuit.segments:
             sel = seg.selection
             rows.append([
@@ -233,14 +236,17 @@ def _cable_table(arch: PlantArchitecture) -> str:
 
 
 def _stage2_section(stage1: SizingResult, arch: PlantArchitecture) -> str:
-    layout = arch.layout
+    branch = arch.branches[0]
+    refinement = arch.branch_refinements[0]
+    layout = branch.layout
     out = ["## 3. Stage 2 results — plant architecture", ""]
     rows = [
         ["LV/MV transformers", str(layout.n_transformers)],
         ["MV circuits", layout.circuit_sizes_label],
         ["Fleet loading", f"{layout.fleet_loading * 100:.0f}%"
          + ("" if layout.loading_ok else "  ⚠ fleet undersized")],
-        ["Worst trunk current", f"{_fmt(max(c.i_trunk_a for c in arch.circuits), 0)} A"
+        ["Worst trunk current",
+         f"{_fmt(max(c.i_trunk_a for c in branch.circuits), 0)} A"
          f" (cap {_fmt(layout.max_circuit_current_a, 0)} A)"],
         ["Total cable losses", f"{_fmt(arch.total_cable_loss_kw)} kW"],
         ["Total transformer losses", f"{_fmt(arch.total_transformer_loss_kw)} kW"],
@@ -250,20 +256,21 @@ def _stage2_section(stage1: SizingResult, arch: PlantArchitecture) -> str:
     out.append(_table(["Quantity", "Value"], rows))
 
     out += ["", "### 3.1 Refined inverter requirement", ""]
-    delta = (arch.s_inv_refined_kva / stage1.s_inv_kva - 1) * 100
+    delta = (refinement.s_inv_refined_kva / stage1.s_inv_kva - 1) * 100
     rrows = [
         ["S at inverter — Stage 1 (lumped)", f"{_fmt(stage1.s_inv_kva / 1000)} MVA"],
-        ["S at inverter — refined", f"{_fmt(arch.s_inv_refined_kva / 1000)} MVA "
+        ["S at inverter — refined", f"{_fmt(refinement.s_inv_refined_kva / 1000)} MVA "
          f"({delta:+.2f}%)"],
         ["P / Q refined",
-         f"{_fmt(arch.p_inv_refined_kw / 1000)} MW / "
-         f"{_fmt(arch.q_inv_refined_kvar / 1000)} Mvar"],
+         f"{_fmt(refinement.p_inv_refined_kw / 1000)} MW / "
+         f"{_fmt(refinement.q_inv_refined_kvar / 1000)} Mvar"],
     ]
-    if arch.p_poc_refined_delivered_kw is not None and arch.p_poc_target_kw is not None:
+    if (refinement.p_poc_refined_delivered_kw is not None
+            and refinement.p_poc_target_kw is not None):
         rrows.append([
             "POC delivered with refined S (≥ target by rule)",
-            f"{_fmt(arch.p_poc_refined_delivered_kw / 1000)} MW "
-            f"(target {_fmt(arch.p_poc_target_kw / 1000)} MW)"])
+            f"{_fmt(refinement.p_poc_refined_delivered_kw / 1000)} MW "
+            f"(target {_fmt(refinement.p_poc_target_kw / 1000)} MW)"])
     out.append(_table(["Quantity", "Value"], rrows))
 
     out += ["", "### 3.2 Transformer losses", "", _transformer_table(arch)]
@@ -282,6 +289,22 @@ def build_report(
     generated_at: datetime | None = None,
 ) -> str:
     """Full Markdown sizing report: methodology + detailed loss tables."""
+    if len(arch.branches) != 1:
+        # build_report takes ONE Stage-1 result, so a hybrid could only be
+        # described off its first branch — a document titled with the whole
+        # plant while describing one of its fleets, with nothing on the page
+        # admitting the other exists. The report is the artefact that leaves
+        # the building, so quietly wrong is worse than absent. Refuse and name
+        # the fleets found — see commit fe004b4 for the house stance.
+        kinds = ", ".join(sorted({
+            st.kind for b in arch.branches for c in b.circuits for st in c.stations
+        }))
+        raise ValueError(
+            f"This design has {len(arch.branches)} fleets ({kinds}) and the "
+            f"Markdown report is still single-fleet — it would describe only "
+            f"the first and silently omit the rest. Export a single-fleet "
+            f"design, or use the PDF report for a hybrid."
+        )
     when = (generated_at or datetime.now()).strftime("%Y-%m-%d %H:%M")
     parts = [
         f"# {plant_name} — Sizing Report",

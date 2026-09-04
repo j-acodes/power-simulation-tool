@@ -1,6 +1,9 @@
 """Tests for the Markdown sizing-report generator."""
 
 import math
+from dataclasses import replace
+
+import pytest
 
 from powertool import (
     Cable,
@@ -83,7 +86,7 @@ def test_report_tables_list_every_run_and_transformer():
     stage1, arch = _arch()
     md = build_report(stage1, arch)
     # Every cable segment appears by its run id, plus the export run.
-    for circuit in arch.circuits:
+    for circuit in arch.branches[0].circuits:
         for seg in circuit.segments:
             assert f"C{circuit.index}·S{seg.index}" in md
     assert "Export" in md
@@ -98,3 +101,14 @@ def test_report_mv_interconnection_no_hv_transformer():
     md = build_report(stage1, arch)
     assert "MV, at 20 kV busbar" in md
     assert "(MV/HV)" not in md
+
+
+def test_report_refuses_a_hybrid_rather_than_describing_one_fleet():
+    # build_report takes ONE Stage-1 result, so it can only ever describe the
+    # first branch. Doubling the branches is enough to reach the guard — the
+    # refusal reads `len(branches)`, not the physics.
+    stage1, arch = _arch()
+    hybrid = replace(arch, branches=arch.branches * 2,
+                     branch_refinements=arch.branch_refinements * 2)
+    with pytest.raises(ValueError, match="2 fleets"):
+        build_report(stage1, hybrid)

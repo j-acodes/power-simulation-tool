@@ -786,16 +786,6 @@ class PlantArchitecture:
     branch by branch, not on the plant aggregate (see ``branch_refinements``
     and the ticket-05 decision recorded in
     :func:`_delivered_with_frozen_cables`).
-
-    ``layout``, ``circuits``, ``aux_p_kw``, ``aux_q_kvar``,
-    ``correction_factor``, ``p_inv_refined_kw``, ``q_inv_refined_kvar``,
-    ``s_inv_refined_kva``, ``p_poc_refined_delivered_kw`` and
-    ``p_poc_target_kw`` are single-branch compatibility properties,
-    delegating to the sole branch / its sole refinement — every design today
-    has exactly one branch. They exist so the reporting, PDF and
-    result-mapping layers keep compiling unchanged; a design with more than
-    one branch is not produced yet (see ``branches``). Ticket 09 deletes
-    these.
     """
 
     branches: list[BranchArchitecture]
@@ -808,87 +798,29 @@ class PlantArchitecture:
     power_balance_ok: bool
 
     @property
-    def _sole_branch(self) -> BranchArchitecture:
-        """The only branch, for the single-fleet compatibility properties.
-
-        Raises rather than quietly preferring the first: these properties mean
-        "the plant's layout", "the plant's circuits", and once a second branch
-        exists there is no such thing. A caller still reading them then would
-        otherwise get one fleet's figures presented as the whole plant — a
-        wrong answer that looks entirely reasonable. Ticket 09 deletes these.
-        """
-        if len(self.branches) != 1:
-            raise ValueError(
-                f"This is a single-fleet accessor, but the plant has "
-                f"{len(self.branches)} branches. Read `branches` instead."
-            )
-        return self.branches[0]
-
-    @property
-    def _sole_refinement(self) -> BranchRefinement:
-        """The only branch's refinement — same rationale as ``_sole_branch``."""
-        if len(self.branch_refinements) != 1:
-            raise ValueError(
-                f"This is a single-fleet accessor, but the plant has "
-                f"{len(self.branch_refinements)} branches. Read "
-                f"`branch_refinements` instead."
-            )
-        return self.branch_refinements[0]
-
-    @property
-    def layout(self) -> PlantLayout:
-        return self._sole_branch.layout
-
-    @property
-    def circuits(self) -> list[CircuitResult]:
-        return self._sole_branch.circuits
-
-    @property
-    def aux_p_kw(self) -> float:
-        return self._sole_branch.aux_p_kw
-
-    @property
-    def aux_q_kvar(self) -> float:
-        return self._sole_branch.aux_q_kvar
-
-    @property
-    def p_poc_target_kw(self) -> float | None:
-        return self._sole_refinement.p_poc_target_kw
-
-    @property
-    def correction_factor(self) -> float:
-        return self._sole_refinement.correction_factor
-
-    @property
-    def p_inv_refined_kw(self) -> float:
-        return self._sole_refinement.p_inv_refined_kw
-
-    @property
-    def q_inv_refined_kvar(self) -> float:
-        return self._sole_refinement.q_inv_refined_kvar
-
-    @property
-    def s_inv_refined_kva(self) -> float:
-        return self._sole_refinement.s_inv_refined_kva
-
-    @property
-    def p_poc_refined_delivered_kw(self) -> float | None:
-        return self._sole_refinement.p_poc_refined_delivered_kw
-
-    @property
     def n_circuits(self) -> int:
-        return len(self.circuits)
+        return sum(len(b.circuits) for b in self.branches)
 
     @property
     def total_cable_loss_kw(self) -> float:
-        total = sum(seg.dp_kw for c in self.circuits for seg in c.segments)
+        total = sum(
+            seg.dp_kw
+            for b in self.branches
+            for c in b.circuits
+            for seg in c.segments
+        )
         if self.export is not None and self.export.hv_cable is not None:
             total += self.export.hv_cable.dp_kw
         return total
 
     @property
     def total_transformer_loss_kw(self) -> float:
-        total = sum(st.dp_tx_kw for c in self.circuits for st in c.stations)
+        total = sum(
+            st.dp_tx_kw
+            for b in self.branches
+            for c in b.circuits
+            for st in c.stations
+        )
         if self.export is not None:
             total += self.export.dp_tx_kw
         return total
@@ -899,7 +831,7 @@ class PlantArchitecture:
 
     @property
     def all_current_ok(self) -> bool:
-        return all(c.current_ok for c in self.circuits)
+        return all(c.current_ok for b in self.branches for c in b.circuits)
 
 
 _MAX_REFINE_ITERATIONS = 50  # geometric convergence; a handful of passes suffice
