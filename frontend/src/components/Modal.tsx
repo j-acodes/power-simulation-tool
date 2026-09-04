@@ -1,12 +1,11 @@
 import { useCallback, useEffect, useState } from 'react'
 import type { FormEvent, ReactNode } from 'react'
+import { technologyLabel } from '../technology'
 import type { Technology } from '../types'
 
-const TECHNOLOGY_OPTIONS: { value: Technology; label: string }[] = [
-  { value: 'pv', label: 'PV' },
-  { value: 'bess', label: 'BESS' },
-  { value: 'hybrid', label: 'Hybrid' },
-]
+const TECHNOLOGY_OPTIONS: { value: Technology; label: string }[] = (
+  ['pv', 'bess', 'hybrid'] as const
+).map((value) => ({ value, label: technologyLabel(value) }))
 
 /** Shared overlay/panel shell for every in-app modal (same markup/classes as
  * the original DisplayNameGate / ConflictDialog overlays). Escape always
@@ -250,4 +249,97 @@ export function useConfirmDialog() {
   )
 
   return { confirm, dialog }
+}
+
+interface TechnologyDialogProps {
+  title: string
+  /** The legal targets to offer — never the full set (see legalCloneTargets). */
+  options: Technology[]
+  /** Words to show under the picker for the selected target, e.g. what a
+   *  narrowing conversion will not copy. Returns null/undefined for no note. */
+  note?: (value: Technology) => ReactNode
+  onSubmit: (value: Technology) => void
+  onCancel: () => void
+}
+
+/** A restricted technology picker with no name field — used by the projects
+ * page's Clone action, where the target's diagram already dictates the copy's
+ * name (see docs/adr/0002 and CONTEXT.md's Technology entry). Unlike
+ * PromptDialog, `options` is caller-supplied so only legal clone targets are
+ * ever selectable. */
+export function TechnologyDialog({ title, options, note, onSubmit, onCancel }: TechnologyDialogProps) {
+  const [value, setValue] = useState<Technology | ''>(options.length === 1 ? options[0] : '')
+
+  const submit = (e: FormEvent) => {
+    e.preventDefault()
+    if (!value) return
+    onSubmit(value)
+  }
+
+  return (
+    <ModalShell onEscape={onCancel}>
+      <form onSubmit={submit}>
+        <h2>{title}</h2>
+        <select value={value} onChange={(e) => setValue(e.target.value as Technology)}>
+          <option value="" disabled>
+            Select technology…
+          </option>
+          {options.map((opt) => (
+            <option key={opt} value={opt}>
+              {technologyLabel(opt)}
+            </option>
+          ))}
+        </select>
+        {value && note?.(value) && <p className="panel-hint">{note(value)}</p>}
+        <div className="modal-actions">
+          <button type="button" onClick={onCancel}>
+            Cancel
+          </button>
+          <button type="submit" disabled={!value}>
+            OK
+          </button>
+        </div>
+      </form>
+    </ModalShell>
+  )
+}
+
+interface TechnologyDialogOptions {
+  title: string
+  options: Technology[]
+  note?: (value: Technology) => ReactNode
+}
+
+/** Promise-based ergonomics over TechnologyDialog: `await pickTechnology({...})`
+ * resolves the chosen Technology, or `null` on cancel. Render the returned
+ * `dialog` node wherever the caller renders other modals. */
+export function useTechnologyDialog() {
+  const [pending, setPending] = useState<{
+    options: TechnologyDialogOptions
+    resolve: (value: Technology | null) => void
+  } | null>(null)
+
+  const pickTechnology = useCallback((options: TechnologyDialogOptions) => {
+    return new Promise<Technology | null>((resolve) => {
+      setPending({ options, resolve })
+    })
+  }, [])
+
+  const dialog = pending && (
+    <TechnologyDialog
+      title={pending.options.title}
+      options={pending.options.options}
+      note={pending.options.note}
+      onSubmit={(value) => {
+        pending.resolve(value)
+        setPending(null)
+      }}
+      onCancel={() => {
+        pending.resolve(null)
+        setPending(null)
+      }}
+    />
+  )
+
+  return { pickTechnology, dialog }
 }
