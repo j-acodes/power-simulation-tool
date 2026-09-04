@@ -748,20 +748,37 @@ class PlantArchitecture:
     power_balance_ok: bool
 
     @property
+    def _sole_branch(self) -> BranchArchitecture:
+        """The only branch, for the single-fleet compatibility properties.
+
+        Raises rather than quietly preferring the first: these properties mean
+        "the plant's layout", "the plant's circuits", and once a second branch
+        exists there is no such thing. A caller still reading them then would
+        otherwise get one fleet's figures presented as the whole plant — a
+        wrong answer that looks entirely reasonable. Ticket 09 deletes these.
+        """
+        if len(self.branches) != 1:
+            raise ValueError(
+                f"This is a single-fleet accessor, but the plant has "
+                f"{len(self.branches)} branches. Read `branches` instead."
+            )
+        return self.branches[0]
+
+    @property
     def layout(self) -> PlantLayout:
-        return self.branches[0].layout
+        return self._sole_branch.layout
 
     @property
     def circuits(self) -> list[CircuitResult]:
-        return self.branches[0].circuits
+        return self._sole_branch.circuits
 
     @property
     def aux_p_kw(self) -> float:
-        return self.branches[0].aux_p_kw
+        return self._sole_branch.aux_p_kw
 
     @property
     def aux_q_kvar(self) -> float:
-        return self.branches[0].aux_q_kvar
+        return self._sole_branch.aux_q_kvar
 
     @property
     def n_circuits(self) -> int:
@@ -1006,9 +1023,11 @@ def size_architecture(
 ) -> PlantArchitecture:
     """Size the full plant architecture and recompute the delivered POC power.
 
-    The single-branch entry point: sizes one branch's MV circuits
-    (:func:`size_branch`) and then the shared HV transformer and export cable
-    (:func:`size_plant`) on that one branch's result. ``segment_lengths`` and
+    The single-branch entry point, kept so every existing caller works
+    unchanged: sizes one branch's MV circuits (:func:`size_branch`) and then
+    the shared HV transformer and export cable (:func:`size_plant`) on that one
+    branch's result. Callers that need more than one branch call the two halves
+    directly; this shim goes when the last single-branch caller does. ``segment_lengths`` and
     ``segment_candidates`` are passed straight through to
     :func:`size_circuits` (per-run lengths and per-run forced sections).
     """

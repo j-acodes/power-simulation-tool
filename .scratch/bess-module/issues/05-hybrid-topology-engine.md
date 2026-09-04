@@ -49,6 +49,12 @@ branch reshape to land properly:
   construction site takes the `"pv"` default, so a BESS station's result currently reports
   `kind="pv"`. Fleet kind cannot reach them until engine inputs become branch-shaped, which
   is this ticket. **Wire them here**; until then the fields are dead.
+- **The refined inverter requirement is still plant-wide.** `size_plant` takes one
+  `stage1` and emits one `p_inv_refined = stage1.p_inv_kw * correction`. Ticket 04
+  made the *cascade* per-branch but left the refined requirement singular, so nothing
+  yet expresses two fleets' refined inverter/PCS requirements separately. This ticket
+  must make it per-branch — a hybrid result needs a refined figure per fleet, not one
+  number covering both. Surfaced by the ticket 04 spec review.
 - `size_generation_pq` reports an *effective* power factor in a field named `pf_target`.
   Harmless while nothing calls it, but this ticket is the first caller, and it will be
   passing an assigned reactive duty for which no target exists. Decide then whether the
