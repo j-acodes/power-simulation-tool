@@ -21,12 +21,15 @@ from powertool import (
     current_a,
     size_pv_inverters,
 )
+from powertool import architecture
 from powertool.architecture import (
     arrange_plant,
     arrange_plant_manual,
     assign_circuits,
     size_architecture,
+    size_branch,
     size_circuits,
+    size_plant,
     station_mv_output,
 )
 from powertool.sizing import SizingResult
@@ -759,3 +762,116 @@ def test_size_architecture_auto_hv_requires_voltage():
     stage1, layout = _full_plant_inputs()
     with pytest.raises(ValueError):
         size_architecture(layout, stage1, _catalogue(), auto_hv=True)
+
+
+# --- size_plant: per-branch refinement (ticket 05) ---------------------------------
+
+def _two_branch_plant(target_multiplier_a: float, target_multiplier_b: float):
+    """Two branches under one shared HV transformer with deliberately DIFFERENT
+    loss profiles: branch A is a short, lightly-loaded PV-style circuit;
+    branch B has a much longer MV run and a heavier aux load, so its own
+    correction has to work harder to reach its own target — exactly the
+    scenario ticket 05's per-branch closure exists for.
+    """
+    stage1_a = _stage1(p_inv_kw=14_500, q_inv_kvar=2_000)
+    layout_a = arrange_plant(
+        stage1_a, [(_tx_2500(), 3)],
+        max_circuit_current_a=10_000.0,
+        trunk_length_km=0.5, spacing_km=0.2, v_mv_kv=20.0, kind="pv",
+    )
+    branch_a = size_branch(layout_a, _catalogue(), aux_p_kw=50.0, aux_q_kvar=10.0)
+
+    stage1_b = _stage1(p_inv_kw=6_500, q_inv_kvar=1_000)
+    layout_b = arrange_plant(
+        stage1_b, [(_tx_2500(), 2)],
+        max_circuit_current_a=10_000.0,
+        trunk_length_km=3.0, spacing_km=1.5, v_mv_kv=20.0, kind="bess",
+    )
+    branch_b = size_branch(layout_b, _catalogue(), aux_p_kw=200.0, aux_q_kvar=40.0)
+
+    branches = [branch_a, branch_b]
+    stage1s = [stage1_a, stage1_b]
+
+    # Unrefined pass to learn each branch's own delivered figure, then set
+    # each branch's target a different amount above it.
+    probe = size_plant(branches, stage1s, hv_transformer=_hv_tx())
+    delivered_a = probe.branch_refinements[0].p_poc_delivered_kw
+    delivered_b = probe.branch_refinements[1].p_poc_delivered_kw
+    targets = [delivered_a * target_multiplier_a, delivered_b * target_multiplier_b]
+
+    return branches, stage1s, targets
+
+
+def test_two_branch_refinement_meets_each_branchs_own_target_with_different_corrections():
+    branches, stage1s, targets = _two_branch_plant(1.005, 1.03)
+
+    plant = size_plant(branches, stage1s, hv_transformer=_hv_tx(),
+                       p_poc_targets_kw=targets)
+
+    assert len(plant.branch_refinements) == 2
+    for refinement, target in zip(plant.branch_refinements, targets):
+        assert refinement.p_poc_target_kw == pytest.approx(target)
+        assert refinement.p_poc_refined_delivered_kw is not None
+        assert refinement.p_poc_refined_delivered_kw >= target
+
+    # The whole point of the per-branch closure: two differently-loaded
+    # branches driven to two different targets end up with two different
+    # correction scalars, not one shared plant-wide number.
+    factor_a = plant.branch_refinements[0].correction_factor
+    factor_b = plant.branch_refinements[1].correction_factor
+    assert factor_a != pytest.approx(factor_b)
+    assert plant.power_balance_ok
+
+
+def test_single_branch_size_plant_matches_the_size_architecture_shim():
+    # The shim (size_architecture) wraps its one branch and one Stage-1 result
+    # into the list-shaped size_plant call; calling size_plant directly with
+    # that same single branch must produce IDENTICAL numbers, proving the
+    # single-fleet compatibility properties delegate correctly.
+    stage1, layout = _full_plant_inputs()
+    branch = size_branch(layout, _catalogue(), aux_p_kw=120.0, aux_q_kvar=40.0)
+
+    direct = size_plant([branch], [stage1], hv_transformer=_hv_tx(),
+                        p_poc_targets_kw=[43_000.0])
+    shim = size_architecture(
+        layout, stage1, _catalogue(), hv_transformer=_hv_tx(),
+        aux_p_kw=120.0, aux_q_kvar=40.0, p_poc_target_kw=43_000.0,
+    )
+
+    assert direct.p_poc_delivered_kw == shim.p_poc_delivered_kw
+    assert direct.q_poc_delivered_kvar == shim.q_poc_delivered_kvar
+    assert direct.correction_factor == shim.correction_factor
+    assert direct.p_inv_refined_kw == shim.p_inv_refined_kw
+    assert direct.q_inv_refined_kvar == shim.q_inv_refined_kvar
+    assert direct.s_inv_refined_kva == shim.s_inv_refined_kva
+    assert direct.p_poc_refined_delivered_kw == shim.p_poc_refined_delivered_kw
+    assert direct.power_balance_ok == shim.power_balance_ok
+    assert shim.correction_factor > 1.0
+
+
+def test_size_plant_raises_on_non_convergence(monkeypatch):
+    # Force non-convergence by lowering the cap rather than inventing a
+    # pathological plant: a single pass at the seeded correction under-
+    # delivers (loss growth is super-linear), so a 1-iteration cap can never
+    # close a real overshoot.
+    stage1, layout = _full_plant_inputs()
+    branch = size_branch(layout, _catalogue(), aux_p_kw=120.0, aux_q_kvar=40.0)
+    monkeypatch.setattr(architecture, "_MAX_REFINE_ITERATIONS", 1)
+
+    with pytest.raises(ValueError, match=r"did not converge within 1 iterations"):
+        size_plant([branch], [stage1], hv_transformer=_hv_tx(),
+                   p_poc_targets_kw=[60_000.0])
+
+
+# --- arrange_plant_manual: fleet kind ------------------------------------------------
+
+def test_manual_arrangement_kind_flows_through_to_station_result():
+    stage1 = _stage1(p_inv_kw=6_500, q_inv_kvar=1_000)
+    layout = arrange_plant_manual(
+        stage1, [[_tx_2500(), _tx_2500()]],
+        max_circuit_current_a=10_000.0, v_mv_kv=20.0, kind="bess",
+    )
+    assert all(p.kind == "bess" for c in layout.circuit_plans for p in c)
+
+    branch = size_branch(layout, _catalogue(), segment_lengths=_lengths_of(layout))
+    assert all(st.kind == "bess" for c in branch.circuits for st in c.stations)

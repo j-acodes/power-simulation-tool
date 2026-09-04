@@ -172,6 +172,7 @@ def arrange_plant(
     spacing_km: float,
     v_mv_kv: float,
     max_loading: float = 1.0,
+    kind: str = "pv",
 ) -> PlantLayout:
     """Arrange the Stage-1 station fleet into MV circuits.
 
@@ -182,7 +183,9 @@ def arrange_plant(
     drives the circuit grouping. Within each circuit the biggest stations sit
     nearest the substation (see PlantLayout). ``max_loading`` is a check
     threshold only: the layout is still produced when exceeded, with
-    ``loading_ok = False`` so the caller can warn.
+    ``loading_ok = False`` so the caller can warn. ``kind`` (fleet kind, "pv"
+    or "bess") is stamped on every station plan built here — see
+    ``StationPlan.kind``.
     """
     if trunk_length_km < 0 or spacing_km < 0:
         raise ValueError("Lengths must be non-negative")
@@ -210,6 +213,7 @@ def arrange_plant(
             i_a=current_a(s_mv, v_mv_kv),
             loading=loading,
             v_lv_kv=tx.lv_kv if tx.lv_kv is not None else 0.0,
+            kind=kind,
         )
         plans.extend([plan] * count)  # identical figures for every unit of a model
 
@@ -240,6 +244,7 @@ def arrange_plant_manual(
     max_circuit_current_a: float,
     v_mv_kv: float,
     max_loading: float = 1.0,
+    kind: str = "pv",
 ) -> PlantLayout:
     """Arrange the plant from a DRAWN circuit layout — the given order is kept.
 
@@ -268,6 +273,9 @@ def arrange_plant_manual(
     therefore pass a COMPLETE ``segment_lengths`` mapping to
     :func:`size_circuits` / :func:`size_architecture` — any run left out would
     silently fall back to that placeholder.
+
+    ``kind`` (fleet kind, "pv" or "bess") is stamped on every station plan
+    built here — see ``StationPlan.kind``.
     """
     if not circuits:
         raise ValueError("Need at least one MV circuit to arrange the plant")
@@ -308,6 +316,7 @@ def arrange_plant_manual(
             i_a=current_a(s_mv, v_mv_kv),
             loading=loading,
             v_lv_kv=tx.lv_kv if tx.lv_kv is not None else 0.0,
+            kind=kind,
         )
 
     return PlantLayout(
@@ -639,21 +648,37 @@ def _delivered_with_frozen_cables(
     branches: list[BranchArchitecture],
     export: "ExportResult | None",
     k: list[float],
-) -> tuple[float, float]:
-    """Delivered POC (P [kW], Q [kvar]) when each branch's collection output
-    is scaled by its own ``k[i]``, keeping every cable selection FROZEN.
+) -> tuple[float, float, list[float]]:
+    """Delivered POC (P [kW], Q [kvar], per-branch P [kW]) when each branch's
+    collection output is scaled by its own ``k[i]``, keeping every cable
+    selection FROZEN.
 
     Re-evaluates the forward loss cascade only — no cable re-selection — so
     the discrete picks cannot flap while the correction scalars iterate.
     Each branch's own aux load is subtracted at its own busbar; the branch
     totals are then summed at the shared bus, and the export step (shared HV
     transformer, then HV cable) is applied ONCE.
+
+    The third return value attributes that ONE shared export step back to
+    each branch, pro-rata by its own contribution to the busbar — the
+    ticket-05 decision that each branch's own point-of-connection compliance
+    is judged on its own delivered figure, not the plant aggregate:
+
+        p_delivered_i = p_busbar_i * (p_total_after_export / p_total_before_export)
+
+    which is exactly a uniform scaling, since the export step (a transformer
+    plus a cable) treats every kW arriving at the shared bus identically —
+    it cannot tell which branch a kW came from. With no export step (export
+    is None or contributes nothing) ``p_delivered_i == p_busbar_i``. The
+    ratio is guarded when the pre-export total is zero or non-positive
+    (nothing to attribute a share of).
     """
     if len(k) != len(branches):
         raise ValueError(
             f"Need one correction scalar per branch, got {len(k)} for "
             f"{len(branches)} branches."
         )
+    p_branches: list[float] = []
     p_total = q_total = 0.0
     for branch, k_i in zip(branches, k):
         p_branch = q_branch = 0.0
@@ -675,8 +700,11 @@ def _delivered_with_frozen_cables(
             q_branch += q
         p_branch -= branch.aux_p_kw
         q_branch -= branch.aux_q_kvar
+        p_branches.append(p_branch)
         p_total += p_branch
         q_total += q_branch
+
+    p_total_before_export = p_total
 
     if export is not None:
         if export.hv_transformer is not None:
@@ -690,7 +718,14 @@ def _delivered_with_frozen_cables(
             dp, dq = hv.selection.cable.series_losses(s, export.v_hv_kv, hv.length_km)
             p_total -= dp / hv.selection.n_parallel
             q_total -= dq / hv.selection.n_parallel
-    return p_total, q_total
+
+    if p_total_before_export > 0:
+        export_ratio = p_total / p_total_before_export
+        p_delivered_per_branch = [p_i * export_ratio for p_i in p_branches]
+    else:
+        p_delivered_per_branch = list(p_branches)
+
+    return p_total, q_total, p_delivered_per_branch
 
 
 @dataclass
@@ -714,22 +749,53 @@ class ExportResult:
 
 
 @dataclass
+class BranchRefinement:
+    """One branch's own refined requirement — ticket-05: two fleets' refined
+    inverter/PCS requirements are two different numbers, not one plant-wide
+    figure split after the fact.
+
+    ``p_poc_delivered_kw`` is this branch's UNREFINED delivered figure (its
+    busbar contribution pro-rated through the shared export step, see
+    :func:`_delivered_with_frozen_cables`); ``p_poc_refined_delivered_kw`` is
+    the same figure once this branch's own ``correction_factor`` has been
+    applied — None when no target was given for this branch (correction
+    stays 1.0 and nothing was refined).
+    """
+
+    p_poc_target_kw: float | None
+    p_poc_delivered_kw: float
+    correction_factor: float  # 1.0 when no target was given for this branch
+    p_inv_refined_kw: float
+    q_inv_refined_kvar: float
+    s_inv_refined_kva: float
+    p_poc_refined_delivered_kw: float | None
+
+
+@dataclass
 class PlantArchitecture:
     """Full Stage-2 result: every branch, the shared export step, plant
-    totals, and the refined inverter requirement.
+    totals, and each branch's own refined requirement.
 
-    Refinement rule — NEVER fall short at the POC: losses grow with the square
-    of load, so a single proportional correction would deliver slightly UNDER
-    the target. Instead the scalar correction is iterated against the loss
-    cascade with the cable selections frozen (no re-selection, so the discrete
-    picks cannot flap) until the delivered POC power is >= the target.
-    Overshoot is curtailable; shortfall is not acceptable.
+    Refinement rule — NEVER fall short at the POC, per branch: losses grow
+    with the square of load, so a single proportional correction would
+    deliver slightly UNDER the target. Instead each branch's own scalar
+    correction is iterated together against the loss cascade with the cable
+    selections frozen (no re-selection, so the discrete picks cannot flap)
+    until EVERY branch's own delivered POC power is >= its own target.
+    Overshoot is curtailable; shortfall is not acceptable, and it is judged
+    branch by branch, not on the plant aggregate (see ``branch_refinements``
+    and the ticket-05 decision recorded in
+    :func:`_delivered_with_frozen_cables`).
 
-    ``layout``, ``circuits``, ``aux_p_kw`` and ``aux_q_kvar`` are
-    single-branch compatibility properties, delegating to the sole branch —
-    every design today has exactly one. They exist so the reporting, PDF and
+    ``layout``, ``circuits``, ``aux_p_kw``, ``aux_q_kvar``,
+    ``correction_factor``, ``p_inv_refined_kw``, ``q_inv_refined_kvar``,
+    ``s_inv_refined_kva``, ``p_poc_refined_delivered_kw`` and
+    ``p_poc_target_kw`` are single-branch compatibility properties,
+    delegating to the sole branch / its sole refinement — every design today
+    has exactly one branch. They exist so the reporting, PDF and
     result-mapping layers keep compiling unchanged; a design with more than
-    one branch is not produced yet (see ``branches``).
+    one branch is not produced yet (see ``branches``). Ticket 09 deletes
+    these.
     """
 
     branches: list[BranchArchitecture]
@@ -737,14 +803,8 @@ class PlantArchitecture:
     # Delivered at the POC when the inverters produce the Stage-1 output
     p_poc_delivered_kw: float
     q_poc_delivered_kvar: float
-    # Refined requirement to actually meet (never undershoot) the POC target
-    p_poc_target_kw: float | None
-    correction_factor: float  # 1.0 when no target was given
-    p_inv_refined_kw: float
-    q_inv_refined_kvar: float
-    s_inv_refined_kva: float
-    # POC power delivered with the refined inverter output (>= target by rule)
-    p_poc_refined_delivered_kw: float | None
+    # Each branch's own refined requirement, same order as `branches`.
+    branch_refinements: list[BranchRefinement]
     power_balance_ok: bool
 
     @property
@@ -765,6 +825,17 @@ class PlantArchitecture:
         return self.branches[0]
 
     @property
+    def _sole_refinement(self) -> BranchRefinement:
+        """The only branch's refinement — same rationale as ``_sole_branch``."""
+        if len(self.branch_refinements) != 1:
+            raise ValueError(
+                f"This is a single-fleet accessor, but the plant has "
+                f"{len(self.branch_refinements)} branches. Read "
+                f"`branch_refinements` instead."
+            )
+        return self.branch_refinements[0]
+
+    @property
     def layout(self) -> PlantLayout:
         return self._sole_branch.layout
 
@@ -779,6 +850,30 @@ class PlantArchitecture:
     @property
     def aux_q_kvar(self) -> float:
         return self._sole_branch.aux_q_kvar
+
+    @property
+    def p_poc_target_kw(self) -> float | None:
+        return self._sole_refinement.p_poc_target_kw
+
+    @property
+    def correction_factor(self) -> float:
+        return self._sole_refinement.correction_factor
+
+    @property
+    def p_inv_refined_kw(self) -> float:
+        return self._sole_refinement.p_inv_refined_kw
+
+    @property
+    def q_inv_refined_kvar(self) -> float:
+        return self._sole_refinement.q_inv_refined_kvar
+
+    @property
+    def s_inv_refined_kva(self) -> float:
+        return self._sole_refinement.s_inv_refined_kva
+
+    @property
+    def p_poc_refined_delivered_kw(self) -> float | None:
+        return self._sole_refinement.p_poc_refined_delivered_kw
 
     @property
     def n_circuits(self) -> int:
@@ -807,9 +902,12 @@ class PlantArchitecture:
         return all(c.current_ok for c in self.circuits)
 
 
+_MAX_REFINE_ITERATIONS = 50  # geometric convergence; a handful of passes suffice
+
+
 def size_plant(
     branches: list[BranchArchitecture],
-    stage1: SizingResult,
+    stage1s: list[SizingResult],
     *,
     max_utilization: float = 0.80,
     max_vdrop_percent: float | None = None,
@@ -821,7 +919,7 @@ def size_plant(
     hv_cable_length_km: float = 0.0,
     v_hv_kv: float | None = None,
     export_loss_percent_per_km: float = 0.1,
-    p_poc_target_kw: float | None = None,
+    p_poc_targets_kw: list[float] | None = None,
 ) -> PlantArchitecture:
     """Size the shared HV transformer and export cable ONCE, on the combined
     result of every already-sized branch — the plant-level half of Stage 2.
@@ -833,17 +931,41 @@ def size_plant(
     all optional — without them the plant is delivered at the shared MV bus
     (MV interconnection).
 
+    ``stage1s`` and ``p_poc_targets_kw`` (when given) carry ONE entry per
+    branch, same order as ``branches`` — mismatched lengths raise.
+
     ``auto_hv=True`` sizes ONE MV/HV transformer automatically from the plant
     power and ``v_hv_kv`` (see :func:`auto_hv_transformer`) instead of taking
     a user-selected model.
 
-    When ``p_poc_target_kw`` is given, the refined inverter requirement is the
-    Stage-1 output scaled so the delivered POC power lands AT OR ABOVE the
-    target — never below (see PlantArchitecture). Today every plant has one
-    branch, so the correction is a single scalar shared by the (one) branch;
-    :func:`_delivered_with_frozen_cables` is nonetheless expressed over a list
-    of branches and per-branch scalars, ready for more than one.
+    Refinement is genuinely per branch (the ticket-05 decision): each fleet
+    complies with the point of connection independently. The shared HV
+    transformer and HV line losses are applied on the combined flow and
+    attributed back to each branch pro-rata by its busbar contribution (see
+    :func:`_delivered_with_frozen_cables`), so each branch's own correction
+    scalar is driven by that branch's OWN target — a lossier fleet cannot
+    hide behind a lighter one meeting the combined figure. Each branch's
+    scalar is seeded from its unrefined delivered figure and then iterated,
+    together, against the frozen-cable cascade (no cable re-selection, so the
+    discrete picks cannot flap) until EVERY branch's own delivered POC power
+    is at or above its own target — overshoot is curtailable, shortfall is
+    not. A branch with no target keeps ``correction_factor == 1.0`` and never
+    blocks the others' convergence. If the cap of
+    :data:`_MAX_REFINE_ITERATIONS` passes is exhausted with any branch still
+    short, this raises ``ValueError`` naming the branch and the shortfall
+    rather than returning a plausible-looking number.
     """
+    if len(stage1s) != len(branches):
+        raise ValueError(
+            f"Need one Stage-1 result per branch, got {len(stage1s)} for "
+            f"{len(branches)} branches."
+        )
+    if p_poc_targets_kw is not None and len(p_poc_targets_kw) != len(branches):
+        raise ValueError(
+            f"Need one POC target per branch (or None for the plant call), "
+            f"got {len(p_poc_targets_kw)} for {len(branches)} branches."
+        )
+
     p = sum(b.p_busbar_kw for b in branches)
     q = sum(b.q_busbar_kvar for b in branches)
 
@@ -950,26 +1072,79 @@ def size_plant(
             v_hv_kv=v_hv,
         )
 
-    # Refined inverter requirement — never fall short at the POC (see
-    # PlantArchitecture): iterate the scalar correction against the frozen-cable
-    # cascade until the delivered power is at or above the target.
-    correction = 1.0
-    p_refined_delivered: float | None = None
-    if p_poc_target_kw is not None:
-        if p <= 0:
+    # Refined requirement, per branch — never fall short at the POC (see
+    # PlantArchitecture): each branch's own scalar correction is iterated,
+    # together, against the frozen-cable cascade until EVERY branch's own
+    # delivered POC power is at or above its own target (ticket-05: each
+    # fleet complies with the POC independently — see the module docstring
+    # of :func:`_delivered_with_frozen_cables` for the attribution rule).
+    targets: list[float | None] = (
+        list(p_poc_targets_kw) if p_poc_targets_kw is not None else [None] * len(branches)
+    )
+
+    # Unrefined per-branch delivered figures (k=1 for everyone): each
+    # branch's busbar contribution pro-rated through the ONE shared export
+    # step. Always computed — it seeds the per-branch scalars below and is
+    # reported on every branch's refinement, refined or not.
+    _, _, p_delivered_unrefined = _delivered_with_frozen_cables(
+        branches, export, [1.0] * len(branches)
+    )
+
+    k = [1.0] * len(branches)
+    for i, (target_i, delivered_i) in enumerate(zip(targets, p_delivered_unrefined)):
+        if target_i is None:
+            continue
+        if delivered_i <= 0:
             raise ValueError(
-                "Nothing delivered at the POC — losses and aux consume the whole "
-                "plant output; check the inputs."
+                f"Nothing delivered at branch {i + 1}'s point of connection — "
+                f"losses and aux consume the whole branch output; check the "
+                f"inputs."
             )
-        correction = p_poc_target_kw / p
-        for _ in range(50):  # geometric convergence; a handful suffice
-            k = [correction] * len(branches)
-            p_refined_delivered, _ = _delivered_with_frozen_cables(branches, export, k)
-            if p_refined_delivered >= p_poc_target_kw:
+        k[i] = target_i / delivered_i
+
+    p_refined_delivered_per_branch = p_delivered_unrefined
+    if any(t is not None for t in targets):
+        shortfalls: list[tuple[int, float, float]] = []
+        for _ in range(_MAX_REFINE_ITERATIONS):  # geometric convergence; a handful suffice
+            _, _, p_refined_delivered_per_branch = _delivered_with_frozen_cables(
+                branches, export, k
+            )
+            shortfalls = [
+                (i, target_i, delivered_i)
+                for i, (target_i, delivered_i) in enumerate(
+                    zip(targets, p_refined_delivered_per_branch)
+                )
+                if target_i is not None and delivered_i < target_i
+            ]
+            if not shortfalls:
                 break
-            correction *= p_poc_target_kw / p_refined_delivered
-    p_inv_refined = stage1.p_inv_kw * correction
-    q_inv_refined = stage1.q_inv_kvar * correction
+            for i, target_i, delivered_i in shortfalls:
+                k[i] *= target_i / delivered_i
+        else:
+            i, target_i, delivered_i = shortfalls[0]
+            raise ValueError(
+                f"Loss refinement did not converge within "
+                f"{_MAX_REFINE_ITERATIONS} iterations (branch {i + 1} delivers "
+                f"{delivered_i:,.1f} kW against a {target_i:,.1f} kW target). "
+                f"Check the export losses and the auxiliary load."
+            )
+
+    branch_refinements = [
+        BranchRefinement(
+            p_poc_target_kw=target_i,
+            p_poc_delivered_kw=p_delivered_unrefined[i],
+            correction_factor=k[i],
+            p_inv_refined_kw=stage1s[i].p_inv_kw * k[i],
+            q_inv_refined_kvar=stage1s[i].q_inv_kvar * k[i],
+            s_inv_refined_kva=math.hypot(
+                stage1s[i].p_inv_kw * k[i], stage1s[i].q_inv_kvar * k[i]
+            ),
+            p_poc_refined_delivered_kw=(
+                p_refined_delivered_per_branch[i] if target_i is not None else None
+            ),
+        )
+        for i, target_i in enumerate(targets)
+    ]
 
     # Conservation check, same spirit as the Stage-1 solver: everything the
     # stations take in at LV must come out at the POC or be consumed en route.
@@ -988,12 +1163,7 @@ def size_plant(
         export=export,
         p_poc_delivered_kw=p,
         q_poc_delivered_kvar=q,
-        p_poc_target_kw=p_poc_target_kw,
-        correction_factor=correction,
-        p_inv_refined_kw=p_inv_refined,
-        q_inv_refined_kvar=q_inv_refined,
-        s_inv_refined_kva=math.hypot(p_inv_refined, q_inv_refined),
-        p_poc_refined_delivered_kw=p_refined_delivered,
+        branch_refinements=branch_refinements,
         power_balance_ok=balance_ok,
     )
 
@@ -1046,7 +1216,7 @@ def size_architecture(
     )
     return size_plant(
         [branch],
-        stage1,
+        [stage1],
         max_utilization=max_utilization,
         max_vdrop_percent=max_vdrop_percent,
         max_parallel=max_parallel,
@@ -1057,5 +1227,7 @@ def size_architecture(
         hv_cable_length_km=hv_cable_length_km,
         v_hv_kv=v_hv_kv,
         export_loss_percent_per_km=export_loss_percent_per_km,
-        p_poc_target_kw=p_poc_target_kw,
+        p_poc_targets_kw=(
+            [p_poc_target_kw] if p_poc_target_kw is not None else None
+        ),
     )

@@ -76,6 +76,10 @@ class SizingResult:
     # Inputs echoed back
     p_poc_kw: float
     q_poc_kvar: float
+    # For size_generation this is the caller's target; for the reactive-in entry
+    # point size_generation_pq it is instead the EFFECTIVE power factor implied
+    # by the assigned P and Q at the head — nobody asked for it, it is just what
+    # those two figures work out to (see size_generation_pq's docstring).
     pf_target: float
     # Results at inverter level
     p_inv_kw: float

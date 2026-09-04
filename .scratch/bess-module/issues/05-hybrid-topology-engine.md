@@ -80,3 +80,73 @@ branch reshape to land properly:
       non-convergence issue rather than a result
 - [ ] Existing single-fleet designs continue to produce identical numbers
 - [ ] Python suite, frontend typecheck, tests and lint all pass
+
+## Decisions settled before implementation (2026-09-04)
+
+**Each fleet complies with the point of connection independently.** Each branch has
+its own busbar; the shared HV transformer and HV line losses are applied on top of the
+combined flow and attributed back to each branch pro-rata by its busbar contribution.
+So the refinement fixed point carries a genuine per-branch correction scalar, each
+driven by that branch's OWN point-of-connection active target:
+
+    delivered_i = p_busbar_i - shared_export_loss * (p_busbar_i / p_busbar_total)
+    k_i *= target_i / delivered_i
+
+The alternative — one shared scalar driven by the combined target — was rejected: with
+two branches of different loss profiles the total lands on target while the lossier
+fleet quietly under-delivers its own figure, which is not what the engineer drew.
+`_delivered_with_frozen_cables` therefore returns per-branch delivered figures as well
+as the combined total.
+
+**Non-convergence raises.** `size_plant` raises `ValueError` naming the iteration cap;
+`solve_diagram`'s existing `except ValueError` maps it to an `engine_error` issue with
+`results: None`. No new issue code and no new plumbing — the editor already displays
+this shape.
+
+**`size_generation_pq.pf_target`** keeps its name with a documented meaning (the
+*effective* power factor implied by the assigned P and Q at the head, not a target the
+caller asked for). It is already documented that way in the function; ticket 05 is the
+first caller and passes an assigned reactive duty, for which no target exists.
+
+## Payload conventions fixed for this ticket
+
+**Point of connection node props.** `p_target_mw` keeps its name and becomes the **PV**
+target (spec: "the existing single power target remains as the PV figure for legacy
+designs"). Added: `p_target_bess_mw` (default 0) and `q_share_pv`, the PV share of the
+point-of-connection reactive duty, validated into the closed interval [0, 1]; the BESS
+branch takes `1 - q_share_pv`. When `q_share_pv` is absent the split defaults to pro-rata
+by active power.
+
+**Busbar node props.** `fleet_kind` ("pv" | "bess", default "pv"), reusing the existing
+`_fleet_kind` helper already used for stations.
+
+**Validation codes.** `no_busbar` unchanged. `multiple_busbar` is replaced by
+`duplicate_busbar` (a second busbar of a kind that already exists; `node_id` is the extra
+one, the kind named in the message) and `busbar_kind_mismatch` (a station whose
+`fleet_kind` disagrees with its busbar's; `node_id` is the station). `bad_q_share` for a
+share outside [0, 1]. One code per rule with the kind in the message, matching how
+`bad_fleet_kind` is already done.
+
+**A drawn busbar whose fleet target is zero contributes no branch.** It is not an error:
+the design solves as single-fleet. This is what makes the zero-BESS comparison meaningful
+rather than a structural no-op, and it is gate 2 below.
+
+## The zero-BESS gate, in its two real halves
+
+The single criterion "a hybrid design with zero BESS power reproduces the PV-only result
+to within 1e-9" is vacuous if read literally — a zero-target branch cannot be sized at
+all, so the design collapses to single-fleet and the comparison passes for free. It is
+therefore split into the two independent failures it was actually written to catch:
+
+1. **Physics gate — golden snapshot diff.** The 8 designs in
+   `.scratch/bess-module/golden_snapshot.py`, run through the new branch-shaped solve
+   order, must reproduce the pre-refactor snapshot byte-for-byte. This is what catches a
+   wrong export-chain / collection-chain split, which is the real risk: composing the
+   backward cascade in two hops is only identical to one hop if the split is right, and
+   a wrong split converges to numbers that look entirely reasonable.
+2. **Topology gate — drawn BESS at zero.** A hybrid diagram carrying a real BESS busbar
+   with real BESS stations drawn, but `p_target_bess_mw = 0`, must equal `solve_diagram`
+   of the PV-only diagram exactly. This catches degenerate-branch handling in the graph
+   layer, which the snapshot cannot see.
+
+Neither subsumes the other.
