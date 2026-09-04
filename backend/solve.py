@@ -374,7 +374,18 @@ def report_pdf(diagram: dict, db: ComponentDatabase, plant_name: str) -> bytes:
         raise ValueError(issues[0].message)
     inputs = graph_to_inputs(diagram, db)
     stage1s, _layouts, arch = solve_architecture(inputs, db)
-    # ponytail: the PDF report is single-fleet only (build_pdf_report takes
-    # one stage1) until ticket 08 (reporting) teaches it about branches; a
-    # hybrid design's report is built off the first branch's Stage-1 result.
+    if len(stage1s) > 1:
+        # build_pdf_report takes ONE Stage-1 result, so a hybrid could only be
+        # reported off its first branch — a document that says "45 MW plant"
+        # while describing one of its two fleets, with nothing on the page
+        # admitting the other exists. A report that is quietly wrong is worse
+        # than no report: it is the artefact that leaves the building. Refuse
+        # until ticket 08 (reporting) teaches the PDF about branches.
+        kinds = ", ".join(b.kind for b in inputs.branches)
+        raise ValueError(
+            f"This design has {len(stage1s)} fleets ({kinds}) and the PDF report "
+            f"is still single-fleet — it would describe only the first and "
+            f"silently omit the rest. Export a single-fleet design, or wait for "
+            f"hybrid reporting."
+        )
     return build_pdf_report(stage1s[0], arch, plant_name=plant_name)

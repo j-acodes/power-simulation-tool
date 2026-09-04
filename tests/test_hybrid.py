@@ -100,3 +100,22 @@ def test_a_real_hybrid_sizes_both_fleets_independently():
     assert hybrid["results"]["nodes"]["s_b1"]["kind"] == "station"
     assert hybrid["results"]["nodes"]["s_b1"]["fleet_kind"] == "bess"
     assert hybrid["results"]["nodes"]["s1"]["fleet_kind"] == "pv"
+
+
+def test_pdf_report_refuses_a_hybrid_rather_than_reporting_one_fleet():
+    """The PDF is still single-fleet (ticket 08 owns hybrid reporting). It must
+    REFUSE rather than build a report off the first branch: a document titled
+    with the whole plant while describing half of it is the artefact that leaves
+    the building, and nothing on the page would admit the other fleet exists.
+    """
+    response = client.post("/api/report", params={"name": "Hybrid plant"},
+                           json=_hybrid_with_drawn_bess(p_target_bess_mw=2.0))
+    assert response.status_code == 400
+    detail = response.json()["detail"]
+    assert "single-fleet" in detail and "pv, bess" in detail
+
+    # The same endpoint must still produce a PDF for a single-fleet design —
+    # the refusal is scoped to the case the report cannot represent.
+    ok = client.post("/api/report", params={"name": "PV plant"}, json=_minimal())
+    assert ok.status_code == 200
+    assert ok.content[:4] == b"%PDF"
