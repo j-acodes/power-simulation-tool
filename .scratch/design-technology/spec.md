@@ -153,7 +153,9 @@ The discharge duration section already self-hides until a BESS station is drawn,
 ## Out of scope
 
 - **Seeding a BESS or hybrid design.** The seed wizard builds a PV cascade from a
-  point-of-connection target and stays that way. A BESS seed needs solution selection,
+  point-of-connection target and stays that way. It is hidden on a `bess` design, since it
+  would otherwise be the one remaining action able to draw a fleet the technology forbids; a
+  `hybrid` design keeps it, because seeding the PV half of a hybrid design is legitimate. A BESS seed needs solution selection,
   discharge duration and container arithmetic before it can place a node — a separate
   feature, deliberately not folded in here. The consequence, stated plainly so it is not
   discovered half-built: a `bess` or `hybrid` design opens to a blank canvas and is drawn by
