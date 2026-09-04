@@ -38,6 +38,16 @@ station's identity in this project is carried by its transformer.
 _Avoid_: substation (substation refers to the shared HV/MV transformer block, a different
 node on the diagram), MV/LV transformer
 
+**Technology**:
+The set of fleet kinds a design is permitted to contain — `pv`, `bess` or `hybrid` — declared
+when the design is created and changed only by cloning the design into a new one. It is a
+declaration rather than a description: it states what the design is for, and the interface is
+built to match it, so the controls and palette items belonging to an excluded fleet kind are
+never shown. A design's technology is authoritative over its diagram, but is enforced only by
+what the palette offers, not by validation.
+_Avoid_: project type (technology belongs to the design, not the project), design type,
+fleet mix, asset class
+
 **Fleet kind**:
 The discriminator that says what a station is generating or storing: `pv` or `bess`. Every
 station has exactly one fleet kind, and it determines which catalogues, labels and

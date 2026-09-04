@@ -75,3 +75,27 @@ surfaces a non-convergence issue rather than ever returning a plausible-looking 
 result, and the golden test for this feature is a hybrid design with zero BESS power, which
 must reproduce the PV-only result to within 1e-9 — the one check available that exercises the new
 multi-branch machinery while still having a known-correct answer to compare against.
+
+## Amendment: the reactive split stops being user-controlled
+
+The explicit, user-controlled share that divided the shared HV transformer's reactive duty
+between the two fleets — `q_share_pv` on the point of connection, overridable when a
+project's reactive strategy called for it — has been removed. The split is now always
+pro-rata by active power, which this record already named as the default. Each fleet carries
+its own share and no more, and there is no way to hand-tune one fleet into carrying another's
+reactive duty.
+
+The physics are unchanged: every design that never set an override produces identical
+numbers, and that equivalence is the check the removal is verified against. What is gone is
+an escape hatch, along with the `bad_q_share` validation issue and the inspector control that
+fed it. The reasoning in the body of this record — one physical grid connection, one power
+factor requirement, one shared export transformer sized against it — is untouched and still
+governs.
+
+What this amendment does *not* do is make each fleet meet the power factor target
+independently at its own branch. That is a different plant model, it contradicts the
+single-interconnection-agreement argument above, and it would rewrite the multi-branch
+loss-refinement fixed point — the part named in the Consequences as the riskiest code here,
+and the one with no observable intermediate on the canvas. It was considered and explicitly
+deferred; if it is taken up, it needs a record that supersedes this one rather than an
+amendment to it.
