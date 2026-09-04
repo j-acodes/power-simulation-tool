@@ -1,5 +1,12 @@
 import { useCallback, useEffect, useState } from 'react'
 import type { FormEvent, ReactNode } from 'react'
+import type { Technology } from '../types'
+
+const TECHNOLOGY_OPTIONS: { value: Technology; label: string }[] = [
+  { value: 'pv', label: 'PV' },
+  { value: 'bess', label: 'BESS' },
+  { value: 'hybrid', label: 'Hybrid' },
+]
 
 /** Shared overlay/panel shell for every in-app modal (same markup/classes as
  * the original DisplayNameGate / ConflictDialog overlays). Escape always
@@ -46,19 +53,37 @@ interface PromptDialogProps {
   title: string
   label?: string
   initialValue?: string
-  onSubmit: (value: string) => void
+  /** When given, the dialog also collects a required technology alongside
+   *  the name — one step, not a wizard (see ADR-0002 / ticket 02). */
+  technologyLabel?: string
+  initialTechnology?: Technology
+  onSubmit: (value: string, technology?: Technology) => void
   onCancel: () => void
 }
 
-/** In-app replacement for `window.prompt`. Enter (native form submit)
- * confirms with the trimmed input, Escape or the Cancel button cancels. */
-export function PromptDialog({ title, label, initialValue = '', onSubmit, onCancel }: PromptDialogProps) {
+/** In-app replacement for `window.prompt`, optionally extended with a
+ * required technology picker. Enter (native form submit) confirms with the
+ * trimmed input (and the chosen technology, if asked for); Escape or the
+ * Cancel button cancels. */
+export function PromptDialog({
+  title,
+  label,
+  initialValue = '',
+  technologyLabel,
+  initialTechnology,
+  onSubmit,
+  onCancel,
+}: PromptDialogProps) {
   const [value, setValue] = useState(initialValue)
+  const [technology, setTechnology] = useState<Technology | ''>(initialTechnology ?? '')
+  const needsTechnology = technologyLabel !== undefined
 
   const submit = (e: FormEvent) => {
     e.preventDefault()
     const trimmed = value.trim()
-    if (trimmed) onSubmit(trimmed)
+    if (!trimmed) return
+    if (needsTechnology && !technology) return
+    onSubmit(trimmed, needsTechnology ? (technology as Technology) : undefined)
   }
 
   return (
@@ -67,11 +92,26 @@ export function PromptDialog({ title, label, initialValue = '', onSubmit, onCanc
         <h2>{title}</h2>
         {label && <p className="panel-hint">{label}</p>}
         <input autoFocus type="text" value={value} onChange={(e) => setValue(e.target.value)} />
+        {needsTechnology && (
+          <>
+            <p className="panel-hint">{technologyLabel}</p>
+            <select value={technology} onChange={(e) => setTechnology(e.target.value as Technology)}>
+              <option value="" disabled>
+                Select technology…
+              </option>
+              {TECHNOLOGY_OPTIONS.map((opt) => (
+                <option key={opt.value} value={opt.value}>
+                  {opt.label}
+                </option>
+              ))}
+            </select>
+          </>
+        )}
         <div className="modal-actions">
           <button type="button" onClick={onCancel}>
             Cancel
           </button>
-          <button type="submit" disabled={!value.trim()}>
+          <button type="submit" disabled={!value.trim() || (needsTechnology && !technology)}>
             OK
           </button>
         </div>
@@ -121,19 +161,30 @@ interface PromptOptions {
   title: string
   label?: string
   initialValue?: string
+  /** When given, the dialog also collects a required technology; the
+   *  resolved result carries it. */
+  technologyLabel?: string
+  initialTechnology?: Technology
+}
+
+export interface PromptResult {
+  value: string
+  /** Present only when the options asked for a technology. */
+  technology?: Technology
 }
 
 /** Promise-based ergonomics over PromptDialog, mirroring `window.prompt`:
- * `const name = await prompt({ title: 'Project name' })` resolves the
- * trimmed value, or `null` on cancel. Render the returned `dialog` node
- * wherever the caller renders other modals. */
+ * `const result = await prompt({ title: 'Project name' })` resolves
+ * `{ value, technology? }`, or `null` on cancel. Render the returned
+ * `dialog` node wherever the caller renders other modals. */
 export function usePromptDialog() {
-  const [pending, setPending] = useState<{ options: PromptOptions; resolve: (value: string | null) => void } | null>(
-    null,
-  )
+  const [pending, setPending] = useState<{
+    options: PromptOptions
+    resolve: (value: PromptResult | null) => void
+  } | null>(null)
 
   const prompt = useCallback((options: PromptOptions) => {
-    return new Promise<string | null>((resolve) => {
+    return new Promise<PromptResult | null>((resolve) => {
       setPending({ options, resolve })
     })
   }, [])
@@ -143,8 +194,10 @@ export function usePromptDialog() {
       title={pending.options.title}
       label={pending.options.label}
       initialValue={pending.options.initialValue}
-      onSubmit={(value) => {
-        pending.resolve(value)
+      technologyLabel={pending.options.technologyLabel}
+      initialTechnology={pending.options.initialTechnology}
+      onSubmit={(value, technology) => {
+        pending.resolve({ value, technology })
         setPending(null)
       }}
       onCancel={() => {

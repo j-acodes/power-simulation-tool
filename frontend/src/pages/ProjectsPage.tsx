@@ -160,10 +160,10 @@ export function ProjectsPage() {
   }
 
   const handleCreateProject = async () => {
-    const name = await prompt({ title: 'New project', label: 'Project name' })
-    if (!name) return
+    const result = await prompt({ title: 'New project', label: 'Project name' })
+    if (!result) return
     try {
-      await createProject(name)
+      await createProject(result.value)
       refreshProjects()
     } catch (err) {
       setError(String(err))
@@ -188,8 +188,13 @@ export function ProjectsPage() {
   }
 
   const handleCreateDesign = async (projectId: number) => {
-    const name = await prompt({ title: 'New design', label: 'Design name' })
-    if (!name) return
+    const result = await prompt({
+      title: 'New design',
+      label: 'Design name',
+      technologyLabel: 'Technology',
+    })
+    if (!result || !result.technology) return
+    const { value: name, technology } = result
     const fromExample = await confirm({
       title: 'Start from example plant?',
       message: 'Choose "Example plant" to start pre-populated, or "Empty diagram" for a blank canvas.',
@@ -200,6 +205,7 @@ export function ProjectsPage() {
       const payload = fromExample ? EXAMPLE_DIAGRAM : await emptyDiagramFromCatalogue()
       const design = await createDesign(projectId, {
         name,
+        technology,
         payload,
         last_edited_by: displayName ?? 'Anonymous',
       })
@@ -320,6 +326,7 @@ export function ProjectsPage() {
                   <thead>
                     <tr>
                       <Th label="Design" sortKey="name" {...designSort} />
+                      <Th label="Technology" sortKey="technology" {...designSort} />
                       <Th label="POC target" sortKey="poc_target" {...designSort} />
                       <Th label="Stations" sortKey="stations" numeric {...designSort} />
                       <Th label="Circuits" sortKey="circuits" numeric {...designSort} />
@@ -338,6 +345,7 @@ export function ProjectsPage() {
                             {d.name}
                           </Link>
                         </td>
+                        <td>{d.technology}</td>
                         <td>{d.poc_target ?? '…'}</td>
                         <td className="num">{d.stations ?? '…'}</td>
                         <td className="num">{d.circuits ?? (d.stations === undefined ? '…' : '—')}</td>

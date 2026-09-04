@@ -283,6 +283,7 @@ def create_design(
     design = Design(
         project_id=project_id,
         name=body.name,
+        technology=body.technology,
         payload=body.payload,
         version=1,
         last_edited_by=body.last_edited_by,

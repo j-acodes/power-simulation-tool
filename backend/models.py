@@ -39,6 +39,10 @@ class Design(Base):
     id: Mapped[int] = mapped_column(primary_key=True)
     project_id: Mapped[int] = mapped_column(ForeignKey("projects.id"), nullable=False)
     name: Mapped[str] = mapped_column(String, nullable=False)
+    # 'pv' | 'bess' | 'hybrid' — declared at creation, never edited in place (see
+    # docs/adr/0002-technology-declared-not-derived.md). Validated at the Pydantic
+    # layer (schemas.DesignCreate); stored as a plain string here, no DB-level enum.
+    technology: Mapped[str] = mapped_column(String, nullable=False)
     payload: Mapped[dict] = mapped_column(JSON, nullable=False)
     version: Mapped[int] = mapped_column(Integer, default=1, nullable=False)
     last_edited_by: Mapped[str] = mapped_column(String, nullable=False)
