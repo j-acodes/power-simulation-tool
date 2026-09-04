@@ -96,29 +96,10 @@ function NodeProperties({ node }: { node: DiagramNode }) {
           <NumberField label={`PV target ${LABEL.activePowerMw}`} value={Number(props.p_target_mw ?? 0)} step={0.1} onChange={(v) => patch({ p_target_mw: v })} />
           <NumberField label={`BESS target ${LABEL.activePowerMw}`} value={Number(props.p_target_bess_mw ?? 0)} step={0.1} onChange={(v) => patch({ p_target_bess_mw: v })} />
           <NumberField label={LABEL.powerFactor} value={Number(props.pf ?? 0)} step={0.01} onChange={(v) => patch({ pf: v })} />
-          <label className="field inline">
-            <span>
-              <input
-                type="checkbox"
-                checked={props.q_share_pv !== undefined}
-                onChange={(e) => patch({ q_share_pv: e.target.checked ? 0.5 : undefined })}
-              />
-              {' Split reactive by hand'}
-            </span>
-          </label>
-          {props.q_share_pv === undefined ? (
-            <p className="panel-hint">
-              The reactive duty at the point of connection is split pro-rata by each fleet&apos;s
-              active target.
-            </p>
-          ) : (
-            <NumberField
-              label="PV share of reactive (0-1)"
-              value={Number(props.q_share_pv)}
-              step={0.05}
-              onChange={(v) => patch({ q_share_pv: v })}
-            />
-          )}
+          <p className="panel-hint">
+            The reactive duty at the point of connection is split pro-rata by each fleet&apos;s
+            active target.
+          </p>
         </>
       )}
       {node.kind === 'hv_tx' && (

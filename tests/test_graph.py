@@ -704,13 +704,17 @@ def test_busbar_kind_mismatch_is_rejected_and_named():
     assert any(i.node_id == "s1" for i in issues if i.code == "busbar_kind_mismatch")
 
 
-def test_bad_q_share_is_rejected():
-    for bad in (-0.1, 1.5):
-        diagram = _minimal()
-        diagram["nodes"][0]["props"]["q_share_pv"] = bad
-        issues = validate_graph(diagram, db)
-        assert "bad_q_share" in _codes(issues), f"{bad!r} was accepted"
-        assert any(i.node_id == "poc" for i in issues if i.code == "bad_q_share")
+def test_a_lingering_q_share_pv_key_is_ignored():
+    # Ticket 01: the user-controlled reactive split is gone, and with it the
+    # bad_q_share issue. A diagram payload saved before the removal may still
+    # carry the key (even a value that used to be out of range) — it is now
+    # just another unknown key, parsed permissively and with no effect.
+    diagram = _minimal()
+    diagram["nodes"][0]["props"]["q_share_pv"] = 5.0  # would have been invalid
+    assert validate_graph(diagram, db) == []
+    plain = client.post("/api/solve", json=_minimal()).json()
+    with_stale_key = client.post("/api/solve", json=diagram).json()
+    assert with_stale_key["results"] == plain["results"]
 
 
 def test_aux_load_on_a_second_busbar_validates():
