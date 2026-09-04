@@ -12,6 +12,11 @@ from typing import Annotated, Literal, Union
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
+# The set of fleet kinds a design is permitted to contain — declared at creation,
+# authoritative over the diagram, changed only by cloning. See
+# docs/adr/0002-technology-declared-not-derived.md and CONTEXT.md's Technology entry.
+Technology = Literal["pv", "bess", "hybrid"]
+
 
 class TransformerElement(BaseModel):
     type: Literal["Transformer"]
@@ -185,6 +190,7 @@ class DesignSummary(BaseModel):
 
     id: int
     name: str
+    technology: Technology
     version: int
     last_edited_by: str
     updated_at: datetime
@@ -208,6 +214,7 @@ class ProjectDetail(BaseModel):
 
 class DesignCreate(BaseModel):
     name: str
+    technology: Technology
     payload: dict
     last_edited_by: str
 
@@ -218,6 +225,7 @@ class DesignFull(BaseModel):
     id: int
     project_id: int
     name: str
+    technology: Technology
     payload: dict
     version: int
     last_edited_by: str

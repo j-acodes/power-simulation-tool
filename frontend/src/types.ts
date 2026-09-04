@@ -10,6 +10,11 @@ export type NodeKind = 'poc' | 'hv_tx' | 'busbar' | 'station' | 'aux'
 /** Which fleet a station or busbar belongs to — mirrors FLEET_KINDS in
  *  powertool/graph.py. Absent props read as 'pv', the pre-hybrid default. */
 export type FleetKind = 'pv' | 'bess'
+/** The set of fleet kinds a design is permitted to contain — declared at
+ *  creation, authoritative over the diagram, changed only by cloning. Mirrors
+ *  Technology in backend/schemas.py. See docs/adr/0002-technology-declared-not-derived.md
+ *  and CONTEXT.md's Technology entry — never "project type". */
+export type Technology = 'pv' | 'bess' | 'hybrid'
 export type Tier = 'lv' | 'mv' | 'hv'
 
 // --- diagram (canvas payload) ------------------------------------------------
@@ -310,6 +315,7 @@ export interface ProjectSummary {
 export interface DesignSummary {
   id: number
   name: string
+  technology: Technology
   version: number
   last_edited_by: string
   updated_at: string
@@ -326,6 +332,7 @@ export interface DesignFull {
   id: number
   project_id: number
   name: string
+  technology: Technology
   payload: Diagram
   version: number
   last_edited_by: string

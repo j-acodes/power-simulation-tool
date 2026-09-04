@@ -109,6 +109,21 @@ build writes into `frontend/dist`.
 | --- | --- | --- |
 | `DATABASE_URL` | `sqlite:///powertool.db` | Any SQLAlchemy URL. The Docker image sets `sqlite:////data/powertool.db`. |
 
+### Resetting the database
+
+There is no migration mechanism — `backend/models.py` builds the schema wholesale with
+`Base.metadata.create_all` at startup. Adding a non-nullable column (as the design
+`technology` field did) means an existing `powertool.db` can't be upgraded in place; it
+has to be deleted and rebuilt empty, which loses every project and design in it.
+
+```bash
+python scripts/reset_db.py
+```
+
+The script prints the file path and how many projects/designs it holds, then requires
+you to type `yes` before deleting anything — it never deletes silently. Run it, then
+start the app as usual; the schema is recreated empty on the next startup.
+
 ## Tests
 
 ```bash

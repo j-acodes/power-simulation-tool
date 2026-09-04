@@ -40,7 +40,12 @@ export function DesignEditorPage() {
     getDesign(designId)
       .then((design) => {
         projectIdRef.current = design.project_id
-        loadDesign(design.payload, { id: design.id, name: design.name, version: design.version })
+        loadDesign(design.payload, {
+          id: design.id,
+          name: design.name,
+          technology: design.technology,
+          version: design.version,
+        })
       })
       .catch((err: unknown) => setLoadError(String(err)))
   }, [designId, loadDesign])
@@ -100,17 +105,30 @@ export function DesignEditorPage() {
 
   const handleReloadTheirs = () => {
     if (!conflict) return
-    loadDesign(conflict.payload, { id: conflict.id, name: conflict.name, version: conflict.version })
+    loadDesign(conflict.payload, {
+      id: conflict.id,
+      name: conflict.name,
+      technology: conflict.technology,
+      version: conflict.version,
+    })
     setConflict(null)
   }
 
   const handleSaveAsNew = async () => {
     if (!conflict || projectIdRef.current == null) return
-    const name = await prompt({ title: 'Save as new design', label: 'Design name', initialValue: `${conflict.name} (copy)` })
-    if (!name) return
+    const result = await prompt({
+      title: 'Save as new design',
+      label: 'Design name',
+      initialValue: `${conflict.name} (copy)`,
+    })
+    if (!result) return
     try {
       const created = await createDesign(projectIdRef.current, {
-        name,
+        name: result.value,
+        // Same technology as the design in conflict — this isn't a clone
+        // into a different technology (ticket 04), just a copy of the same
+        // diagram under a new name to escape the version conflict.
+        technology: conflict.technology,
         payload: diagram,
         last_edited_by: displayName ?? 'Anonymous',
       })

@@ -8,6 +8,7 @@ import type {
   SolveResponse,
   Stage1Request,
   Stage1Response,
+  Technology,
 } from './types'
 
 const JSON_HEADERS = { 'Content-Type': 'application/json' }
@@ -107,6 +108,7 @@ export function deleteProject(projectId: number): Promise<void> {
 
 export interface DesignCreateBody {
   name: string
+  technology: Technology
   payload: Diagram
   last_edited_by: string
 }

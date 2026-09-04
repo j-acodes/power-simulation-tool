@@ -18,10 +18,10 @@ def _create_project(name: str = "Test Project") -> dict:
     return resp.json()
 
 
-def _create_design(project_id: int, name: str = "Design A") -> dict:
+def _create_design(project_id: int, name: str = "Design A", technology: str = "pv") -> dict:
     resp = client.post(
         f"/api/projects/{project_id}/designs",
-        json={"name": name, "payload": SAMPLE_PAYLOAD, "last_edited_by": "Alice"},
+        json={"name": name, "technology": technology, "payload": SAMPLE_PAYLOAD, "last_edited_by": "Alice"},
     )
     assert resp.status_code == 201
     return resp.json()
@@ -51,16 +51,39 @@ def test_design_crud_happy_path():
     assert design["version"] == 1
     assert design["project_id"] == project["id"]
     assert design["payload"] == SAMPLE_PAYLOAD
+    assert design["technology"] == "pv"
 
     got = client.get(f"/api/designs/{design['id']}")
     assert got.status_code == 200
     assert got.json()["payload"] == SAMPLE_PAYLOAD
+    assert got.json()["technology"] == "pv"
 
     # Project detail lists the design summary, without the payload.
     detail = client.get(f"/api/projects/{project['id']}").json()
     assert len(detail["designs"]) == 1
     assert "payload" not in detail["designs"][0]
     assert detail["designs"][0]["id"] == design["id"]
+    assert detail["designs"][0]["technology"] == "pv"
+
+
+def test_design_create_requires_valid_technology():
+    project = _create_project("Plant Zeta")
+
+    missing = client.post(
+        f"/api/projects/{project['id']}/designs",
+        json={"name": "x", "payload": SAMPLE_PAYLOAD, "last_edited_by": "Alice"},
+    )
+    assert missing.status_code == 422
+
+    unrecognised = client.post(
+        f"/api/projects/{project['id']}/designs",
+        json={"name": "x", "technology": "wind", "payload": SAMPLE_PAYLOAD, "last_edited_by": "Alice"},
+    )
+    assert unrecognised.status_code == 422
+
+    for technology in ("pv", "bess", "hybrid"):
+        design = _create_design(project["id"], f"Design {technology}", technology)
+        assert design["technology"] == technology
 
     resp = client.delete(f"/api/designs/{design['id']}")
     assert resp.status_code == 204
@@ -138,7 +161,7 @@ def test_404s_for_missing_ids():
     assert client.delete("/api/designs/999999").status_code == 404
     resp = client.post(
         "/api/projects/999999/designs",
-        json={"name": "x", "payload": SAMPLE_PAYLOAD, "last_edited_by": "Alice"},
+        json={"name": "x", "technology": "pv", "payload": SAMPLE_PAYLOAD, "last_edited_by": "Alice"},
     )
     assert resp.status_code == 404
     resp = client.put(

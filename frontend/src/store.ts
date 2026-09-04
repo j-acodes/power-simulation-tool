@@ -6,6 +6,7 @@ import type {
   DiagramSettings,
   Issue,
   SolveResults,
+  Technology,
 } from './types'
 
 export type Selection =
@@ -16,6 +17,7 @@ export type Selection =
 export interface DesignMeta {
   id: number
   name: string
+  technology: Technology
   version: number
 }
 

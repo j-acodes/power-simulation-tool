@@ -49,8 +49,8 @@ export function DisplayNameControl() {
   const { prompt, dialog } = usePromptDialog()
 
   const edit = async () => {
-    const next = await prompt({ title: 'Display name', initialValue: displayName ?? '' })
-    if (next && next.trim()) setDisplayName(next.trim())
+    const result = await prompt({ title: 'Display name', initialValue: displayName ?? '' })
+    if (result && result.value.trim()) setDisplayName(result.value.trim())
   }
 
   return (
