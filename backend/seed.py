@@ -1,7 +1,7 @@
 """Seed wizard: propose a starting diagram from POC-level wizard params.
 
-``seed_diagram`` fixed-points the station count the way the frozen Streamlit
-form does, then hands the resulting fleet to the existing auto-arranger
+``seed_diagram`` fixed-points the station count the way the deleted Streamlit
+form did, then hands the resulting fleet to the existing auto-arranger
 (:func:`powertool.arrange_plant`) and renders the arrangement into the
 diagram-dict schema of :mod:`powertool.graph` (see its module docstring for
 the schema) — a proposal the user can then rearrange on the canvas, never a

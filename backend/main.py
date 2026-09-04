@@ -53,8 +53,8 @@ from .solve import (
     solve_diagram,
 )
 
-# Stage-2 planning constant mirrored from app/streamlit_app.py — used only for
-# the catalogue's default-rules payload in M0 (no /solve endpoint yet).
+# Stage-2 planning constant inherited from the deleted Streamlit UI — used only
+# for the catalogue's default-rules payload in M0 (no /solve endpoint yet).
 MAX_CIRCUIT_CURRENT_A = 400.0
 
 db = ComponentDatabase.load()

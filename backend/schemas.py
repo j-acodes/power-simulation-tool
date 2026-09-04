@@ -1,7 +1,8 @@
 """Pydantic request/response models for the Stage-1 API.
 
-Element shapes mirror ``st.session_state.elements`` in the frozen Streamlit
-UI (see ``app/streamlit_app.py``): a discriminated union on ``type``.
+Element shapes are a discriminated union on ``type``, inherited from the
+``st.session_state.elements`` list of the deleted Streamlit UI (read it at
+b5fc748 if a field's origin is ever in question).
 """
 
 from __future__ import annotations

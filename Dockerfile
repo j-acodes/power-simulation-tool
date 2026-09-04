@@ -23,8 +23,7 @@ ENV PYTHONUNBUFFERED=1 \
 WORKDIR /app
 
 # The server's runtime dependencies only — the rest of requirements.txt is
-# tests and the frozen Streamlit app, which would add ~200 MB of pandas and
-# friends the API never imports.
+# the test suite, which the runtime image has no use for.
 # ponytail: versions duplicated from requirements.txt (see the marks there);
 # fold into a requirements-server.txt if this list grows.
 RUN pip install --no-cache-dir \

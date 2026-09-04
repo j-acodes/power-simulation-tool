@@ -11,9 +11,9 @@ from powertool import size_pv_inverters
 
 client = TestClient(app)
 
-# The example-plant payload, ported from app/streamlit_app.py:load_example()
+# The example-plant payload, ported from the deleted Streamlit app's load_example()
 # and its sidebar defaults (45 MW POC, pf_target 0.95 — NOT 1.0; the
-# Streamlit sidebar default is 0.95, confirmed by reading the source).
+# Streamlit sidebar default was 0.95, confirmed against b5fc748).
 EXAMPLE_ELEMENTS = [
     {"type": "Cable section", "v_kv": 20.0, "label": "MV collector"},
     {"type": "Transformer", "component": "HUAWEI_JUPITER9000", "v_kv": 20.0,

@@ -66,7 +66,7 @@ TIERS = ("lv", "mv", "hv")
 # exactly one definition.
 FLEET_KINDS = ("pv", "bess")
 
-# Rule defaults, mirroring the frozen Streamlit sidebar (max utilization 80 %,
+# Rule defaults, inherited from the deleted Streamlit sidebar (max utilization 80 %,
 # collection loss budget 1.30 %, export budget 0.10 %/km) and the Stage-2
 # planning cap of 400 A per MV collector circuit. A diagram may override any of
 # them in ``settings.rules``.

@@ -482,7 +482,7 @@ def test_solve_turns_engine_errors_into_issues_not_500s():
 
 # --- THE GOLDEN TEST --------------------------------------------------------
 #
-# The 45 MW example plant of the frozen Streamlit app (5x JUPITER9000 +
+# The 45 MW example plant of the deleted Streamlit app (5x JUPITER9000 +
 # 3x JUPITER3000, HV interconnection at 132 kV, 20 kV collection, 120 kW /
 # 40 kvar aux, POC 45 MW at pf 0.95, trunk 800 m, spacing 350 m), drawn on the
 # canvas with the arrangement today's arrange_plant produces, must solve to

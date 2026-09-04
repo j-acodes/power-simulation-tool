@@ -24,9 +24,7 @@ from .cable_sizing import AutoCable, CableSelection, select_cable
 from .chain import Chain, ChainElement
 from .components import AuxLoad, BessSolution, Cable, Transformer, TransformerGroup, current_a
 from .database import ComponentDatabase
-from .diagram import architecture_to_dot
 from .pdf_report import build_pdf_report
-from .report import build_report
 from .sizing import (
     ElementLoss,
     SizingResult,
@@ -66,7 +64,5 @@ __all__ = [
     "StationPlan",
     "StationResult",
     "ExportResult",
-    "architecture_to_dot",
-    "build_report",
     "build_pdf_report",
 ]

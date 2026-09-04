@@ -1,9 +1,7 @@
 # Marked [server] are the ones the Docker runtime image installs (see
-# Dockerfile); the rest are tests and the frozen Streamlit app.
+# Dockerfile); the rest are the test suite.
 pyyaml>=6.0            # [server]
 pytest>=7.0
-streamlit>=1.30
-pandas>=2.0
 reportlab>=4.0         # [server]
 fastapi>=0.110         # [server]
 uvicorn[standard]>=0.29  # [server]

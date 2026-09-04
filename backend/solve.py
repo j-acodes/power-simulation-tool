@@ -1,5 +1,4 @@
-"""Solve pipelines: the Stage-1 chain (ported from Streamlit) and the full
-diagram solve.
+"""Solve pipelines: the Stage-1 chain and the full diagram solve.
 
 Pure functions only: they take plain dicts and a :class:`ComponentDatabase` and
 return engine objects or plain dicts. No web-framework code here — see
@@ -31,9 +30,9 @@ from powertool.graph import (
     validate_graph,
 )
 
-# Stage-1 cable-sizing rule defaults — the same values the Streamlit sidebar
-# initializes to (max_utilization 80%, collection_loss_pct 1.30%,
-# export_loss_pct_per_km 0.10%/km). Not exposed on the Stage-1 request; the
+# Stage-1 cable-sizing rule defaults — max_utilization 80%,
+# collection_loss_pct 1.30%, export_loss_pct_per_km 0.10%/km, inherited from
+# the deleted Streamlit sidebar. Not exposed on the Stage-1 request; the
 # frontend catalogue endpoint echoes them for display.
 MAX_UTILIZATION = 0.80
 COLLECTION_LOSS_PCT = 1.30
@@ -55,12 +54,24 @@ def build_chain(
 ) -> Chain:
     """Turn Stage-1 element dicts into a Chain of ChainElements.
 
-    Faithful port of ``build_chain`` in ``app/streamlit_app.py`` — see that
-    docstring for the full rationale (export cable / auto HV transformer /
-    adjacency-merge of same-voltage transformers into a TransformerGroup /
-    worst-case collection cable sections). ``elements`` replaces
-    ``st.session_state.elements`` as an explicit parameter so this function
-    has no UI dependency.
+    The interconnection is prepended at the POC end: the export cable (real
+    length, export %/km budget — skipped when the catalogue has no cables at
+    that voltage) and, for HV interconnection, ONE auto-sized MV/HV
+    transformer. In MV interconnection with no export length given, the MV
+    busbar -> POC cable is still sized at the worst case (full collection
+    budget) so its losses are not ignored. Collection cable sections likewise
+    carry no length: the solver runs them at the worst case, consuming the
+    full admissible loss budget (conservative by design).
+
+    ADJACENT transformer elements at the SAME voltage are merged into one
+    parallel TransformerGroup sharing the load — a mixed station fleet.
+    Without this, the linear chain would push the full plant power through
+    each block in series, wildly overstating the losses.
+
+    Originally a faithful port of ``build_chain`` in the Streamlit UI, whose
+    docstring the two paragraphs above are inherited from; that UI is deleted
+    and this is the rationale's only home now. ``elements`` replaces
+    ``st.session_state.elements`` as an explicit parameter.
     """
     raw = elements
 
@@ -144,13 +155,13 @@ def build_export_chain(inputs: GraphInputs, db: ComponentDatabase) -> Chain:
     bus.
 
     Same recipe as the export half of the old ``build_diagram_chain`` (see
-    :func:`build_chain` for the frozen Streamlit original this was ported
-    from): the export cable (real drawn length, export %/km budget — or, for
-    an MV interconnection with no drawn run, the worst-case MV busbar -> POC
-    cable) and the MV/HV transformer, when present. What used to follow —
-    the MV collection section, the station fleet, the aux load — is now each
-    branch's OWN chain (:func:`build_collection_chain`): those figures differ
-    per fleet, this one is sized once on the combined flow.
+    :func:`build_chain`, which carries the rationale both inherited from the
+    deleted Streamlit UI): the export cable (real drawn length, export %/km
+    budget — or, for an MV interconnection with no drawn run, the worst-case
+    MV busbar -> POC cable) and the MV/HV transformer, when present. What used
+    to follow — the MV collection section, the station fleet, the aux load —
+    is now each branch's OWN chain (:func:`build_collection_chain`): those
+    figures differ per fleet, this one is sized once on the combined flow.
 
     Stage 1 is deliberately conceptual here too: the export run's length is
     real but the transformer sizing (when ``auto``) is conceptual, sized off

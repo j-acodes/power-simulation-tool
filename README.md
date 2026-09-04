@@ -16,8 +16,8 @@ POC ── HV transformer ── MV cables ── MV transformer ── AC cable
 **Core engine (done)** — component physics models (`powertool/components.py`) + YAML
 databases (`data/`), chain assembly and database loader (`powertool/chain.py`,
 `powertool/database.py`), the backward-sweep solver (`powertool/sizing.py`), plant
-architecture (`powertool/architecture.py`) and the Markdown/PDF reports
-(`powertool/report.py`, `powertool/pdf_report.py`).
+architecture (`powertool/architecture.py`) and the PDF report
+(`powertool/pdf_report.py`).
 
 **Diagram builder (in progress)** — a FastAPI backend (`backend/`) and a React canvas
 (`frontend/`) where a plant is drawn block by block and solved live: projects and
@@ -25,17 +25,14 @@ designs persisted with optimistic locking, a seed wizard that proposes a plant f
 POC target, auto-arrange, full result tables and a PDF report download. See
 **Running the app** below.
 
-**Frozen** — the original Streamlit UI (`app/streamlit_app.py`) still runs unchanged
-and stays the reference the engine is tested against.
+**Removed** — the original Streamlit UI (`app/streamlit_app.py`) and the Markdown
+report and Graphviz diagram it alone consumed (`powertool/report.py`,
+`powertool/diagram.py`). The diagram builder replaced it and the engine is now tested
+directly. Read it at `b5fc748` if you need the provenance of a ported constant.
 
 ```bash
 python examples/pv_sizing_example.py     # command-line example
-streamlit run app/streamlit_app.py       # the frozen Streamlit UI
 ```
-
-The web UI lets you set the POC power + power factor, assemble the chain from the
-component database, and see P/Q/S at inverter level with a loss breakdown — no code.
-Click **Load example plant** to start from the 45 MW reference plant.
 
 **Cable auto-sizing:** cable sections are not picked by hand. You give each cable
 section its voltage, length (in metres), and zone; the tool sets the number of
