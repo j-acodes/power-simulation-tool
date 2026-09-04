@@ -55,6 +55,10 @@ from .sizing import SizingResult
 
 NODE_KINDS = ("poc", "hv_tx", "busbar", "station", "aux")
 TIERS = ("lv", "mv", "hv")
+# The fleet kinds a station may declare. One tuple, read by both the lenient
+# parser below and the strict validator, so "what counts as a fleet kind" has
+# exactly one definition.
+FLEET_KINDS = ("pv", "bess")
 
 # Rule defaults, mirroring the frozen Streamlit sidebar (max utilization 80 %,
 # collection loss budget 1.30 %, export budget 0.10 %/km) and the Stage-2
@@ -163,9 +167,15 @@ def _custom_transformer(props: dict, name: str, hv_kv: float | None,
 
 def _fleet_kind(props: dict) -> str:
     """A station's fleet kind: ``pv`` or ``bess``. Absent parses as ``pv`` —
-    the backward-compatibility guarantee for every design already saved."""
+    the backward-compatibility guarantee for every design already saved.
+
+    Deliberately lenient: an unrecognised value also reads as ``pv`` so that
+    mapping a drawing never raises. :func:`validate_graph` is the authority and
+    rejects such a value outright (``bad_fleet_kind``), so this fallback is only
+    ever reached for a diagram that was never validated.
+    """
     kind = props.get("fleet_kind")
-    return kind if kind in ("pv", "bess") else "pv"
+    return kind if kind in FLEET_KINDS else "pv"
 
 
 def _station_transformer(node: dict, db, v_mv_kv: float | None,
@@ -542,11 +552,12 @@ def _check_props(nodes, tree, db, diagram, issues) -> None:
             # unknown key to shrug off: coercing "BESS" or "wind" to "pv"
             # would size the station against the wrong catalogue silently.
             raw_kind = props.get("fleet_kind")
-            if raw_kind is not None and raw_kind not in ("pv", "bess"):
+            if raw_kind is not None and raw_kind not in FLEET_KINDS:
                 issues.append(GraphIssue(
                     "bad_fleet_kind",
                     f"Station '{nid}' has fleet kind {raw_kind!r}; it must be "
-                    f"'pv' or 'bess'.", node_id=nid))
+                    f"one of {', '.join(repr(k) for k in FLEET_KINDS)}.",
+                    node_id=nid))
             mode = props.get("mode") or ("catalogue" if props.get("model") else None)
             tx = None
             if mode == "catalogue":

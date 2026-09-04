@@ -40,6 +40,20 @@ bounded by an explicit iteration cap that surfaces a non-convergence issue rathe
 returning a plausible-looking number — consistent with the existing house rule that the
 engine reports problems as issues the editor can display, never as silent garbage.
 
+## Carried over from the ticket 01/02 review
+
+Two findings were deferred to this ticket rather than fixed early, because both need the
+branch reshape to land properly:
+
+- `StationPlan.kind` and `StationResult.kind` exist but are never populated — every
+  construction site takes the `"pv"` default, so a BESS station's result currently reports
+  `kind="pv"`. Fleet kind cannot reach them until engine inputs become branch-shaped, which
+  is this ticket. **Wire them here**; until then the fields are dead.
+- `size_generation_pq` reports an *effective* power factor in a field named `pf_target`.
+  Harmless while nothing calls it, but this ticket is the first caller, and it will be
+  passing an assigned reactive duty for which no target exists. Decide then whether the
+  field is renamed or left with a documented meaning.
+
 **Blocked by:** 02 (BESS catalogues and station kind), 04 (Branch restructure)
 
 **Status:** ready-for-agent

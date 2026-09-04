@@ -12,6 +12,8 @@ Two things are pinned here:
 
 import math
 
+import pytest
+
 from fastapi.testclient import TestClient
 
 from backend.main import app, db
@@ -95,6 +97,17 @@ def test_station_without_fleet_kind_parses_as_pv_and_solves_identically():
 
     assert without["issues"] == [] and without["results"] is not None
     assert without == with_pv
+
+    # Comparing absent-kind against explicit "pv" only proves both take the
+    # same branch. These are the numbers this design produced BEFORE fleet kind
+    # existed, pinned so that any drift in the cascade shows up here and not
+    # just as a diffuse failure somewhere in the rest of the suite.
+    summary = without["results"]["summary"]
+    assert summary["p_inv_kw"] == pytest.approx(3163.6147359619677)
+    assert summary["q_inv_kvar"] == pytest.approx(1272.0934930043616)
+    assert summary["s_inv_kva"] == pytest.approx(3409.791790203582)
+    assert summary["correction_factor"] == pytest.approx(0.9784619708953294)
+    assert summary["p_poc_refined_delivered_kw"] == pytest.approx(3000.0, rel=1e-6)
 
 
 def test_unknown_keys_are_ignored():

@@ -17,9 +17,9 @@ computed at each section's nominal line-to-line voltage (see powertool.chain).
 
 from __future__ import annotations
 
+import dataclasses
 import math
 import warnings
-import dataclasses
 from dataclasses import dataclass
 
 from .cable_sizing import AutoCable, select_cable, select_cable_worst_case
@@ -360,6 +360,10 @@ def size_generation(
     """
     if not 0.0 < pf_target <= 1.0:
         raise ValueError(f"pf_target must be in (0, 1], got {pf_target}")
+    # Checked here as well as in size_generation_pq so the message names the
+    # parameter this caller actually passed, not the delegate's.
+    if p_poc_kw <= 0:
+        raise ValueError(f"p_poc_kw must be positive, got {p_poc_kw}")
 
     # Reactive target at the POC from the power factor (injected => positive).
     q_poc_kvar = p_poc_kw * math.tan(math.acos(pf_target))

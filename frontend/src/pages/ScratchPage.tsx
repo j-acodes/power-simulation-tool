@@ -7,7 +7,7 @@ import { EditorView } from './EditorView'
 export function ScratchPage() {
   return (
     <EditorView
-      title="PV Plant Sizing — Scratchpad"
+      title="Plant Sizing — Scratchpad"
       headerLeft={
         <Link to="/" className="header-link">
           ← Projects

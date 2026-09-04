@@ -32,11 +32,9 @@ _Avoid_: feeder, string (string is reserved for PV DC strings, a concept this to
 
 **Station**:
 One MV/LV conversion point on the diagram: a transformer, plus — depending on fleet kind —
-the inverters or PCS units behind it. In the model today a station is represented purely as
-its transformer; the generation or storage equipment behind it is accounted for only through
-the fleet's aggregate power, not as a modelled object in its own right. A newcomer reading
-the code should not expect to find a distinct "station" entity — what exists is a
-transformer standing in for one.
+the inverters or PCS units behind it. The generation or storage equipment behind a station is
+accounted for through the fleet's aggregate power rather than as a thing of its own, so a
+station's identity in this project is carried by its transformer.
 _Avoid_: substation (substation refers to the shared HV/MV transformer block, a different
 node on the diagram), MV/LV transformer
 

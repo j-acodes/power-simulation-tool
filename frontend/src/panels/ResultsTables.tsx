@@ -29,7 +29,7 @@ export function ResultsTables({ onClose }: { onClose: () => void }) {
     setReporting(true)
     setReportError(null)
     try {
-      const name = designMeta?.name ?? 'PV Plant'
+      const name = designMeta?.name ?? 'Plant'
       const blob = await reportPdf(diagram, name)
       const url = URL.createObjectURL(blob)
       const link = document.createElement('a')
