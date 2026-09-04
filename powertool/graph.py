@@ -722,13 +722,6 @@ def _check_props(nodes, tree, db, diagram, issues) -> None:
                     "bad_props",
                     "The Point of Connection's BESS target (p_target_bess_mw) "
                     "must be a non-negative number.", node_id=nid))
-            if "q_share_pv" in props:
-                q_share = _num(props.get("q_share_pv"))
-                if q_share is None or not 0.0 <= q_share <= 1.0:
-                    issues.append(GraphIssue(
-                        "bad_q_share",
-                        "The Point of Connection's PV reactive share "
-                        "(q_share_pv) must be between 0 and 1.", node_id=nid))
         elif kind == "station":
             fleet_kind = _fleet_kind(props)
             # An ABSENT fleet kind legitimately means "pv" (old designs). A
@@ -983,7 +976,6 @@ class GraphInputs:
     export_edge_id: str | None
     # POC target
     pf_target: float
-    q_share_pv: float | None  # None = default to pro-rata by active power
     # tier voltages
     v_lv_kv: float
     v_mv_kv: float
@@ -1055,7 +1047,6 @@ def graph_to_inputs(diagram: dict, db) -> GraphInputs:
     poc_props = _props(nodes[poc_id])
     p_target_pv_kw = (_num(poc_props.get("p_target_mw")) or 0.0) * 1000.0
     p_target_bess_kw = (_num(poc_props.get("p_target_bess_mw", 0.0)) or 0.0) * 1000.0
-    q_share_pv = _num(poc_props.get("q_share_pv"))
     # Maximum loading is per fleet kind, falling back to the plant-wide rule —
     # a BESS fleet is routinely held to a different loading limit than a PV one,
     # but a design that only ever set the one value must keep meaning what it
@@ -1192,7 +1183,6 @@ def graph_to_inputs(diagram: dict, db) -> GraphInputs:
         hv_tx_id=hv_tx_id,
         export_edge_id=export_edge["id"],
         pf_target=_num(poc_props.get("pf")) or 1.0,
-        q_share_pv=q_share_pv,
         v_lv_kv=v_lv,
         v_mv_kv=v_mv,
         v_hv_kv=v_hv if hv_tx_id is not None else None,

@@ -12,6 +12,7 @@ import { Palette } from '../panels/Palette'
 import { ResultsSummary } from '../panels/ResultsSummary'
 import { SettingsPanel } from '../panels/SettingsPanel'
 import { EMPTY_DIAGRAM, useStore } from '../store'
+import { permitsFleetKind } from '../technology'
 
 interface EditorViewProps {
   title: ReactNode
@@ -32,6 +33,15 @@ export function EditorView({ title, headerLeft, headerRight }: EditorViewProps) 
   const loadDiagram = useStore((s) => s.loadDiagram)
   const diagram = useStore((s) => s.diagram)
   const moveNodes = useStore((s) => s.moveNodes)
+  const technology = useStore((s) => s.designMeta?.technology)
+  // Two actions put a whole PV fleet on the canvas in one click without going
+  // near the palette: the wizard, which seeds a PV cascade from a POC target,
+  // and the example plant, whose stations carry no fleet kind and so parse as
+  // PV. Both are holes in palette-only enforcement on a battery design, and
+  // both close on the same rule — "does this technology permit PV" — so they
+  // share one check rather than each growing a bess-specific special case.
+  // See docs/adr/0002-technology-declared-not-derived.md.
+  const canDrawPv = permitsFleetKind(technology, 'pv')
   return (
     <div className="app">
       <header className="app-header">
@@ -40,12 +50,16 @@ export function EditorView({ title, headerLeft, headerRight }: EditorViewProps) 
           <h1>{title}</h1>
         </div>
         <div className="app-header-actions">
-          <button type="button" onClick={() => setShowSeedWizard(true)}>
-            Seed from POC target…
-          </button>
-          <button type="button" onClick={() => loadDiagram(EXAMPLE_DIAGRAM)}>
-            Load example plant
-          </button>
+          {canDrawPv && (
+            <button type="button" onClick={() => setShowSeedWizard(true)}>
+              Seed from POC target…
+            </button>
+          )}
+          {canDrawPv && (
+            <button type="button" onClick={() => loadDiagram(EXAMPLE_DIAGRAM)}>
+              Load example plant
+            </button>
+          )}
           <button type="button" onClick={() => moveNodes(autoArrange(diagram))}>
             Auto-arrange
           </button>

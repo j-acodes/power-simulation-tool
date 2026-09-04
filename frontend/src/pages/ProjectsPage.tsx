@@ -14,10 +14,11 @@ import {
 } from '../api'
 import { evaluateCompliance } from '../compliance'
 import { DisplayNameControl } from '../components/DisplayName'
-import { useConfirmDialog, usePromptDialog } from '../components/Modal'
+import { useConfirmDialog, usePromptDialog, useTechnologyDialog } from '../components/Modal'
 import { EXAMPLE_DIAGRAM } from '../example'
 import { useStore } from '../store'
 import { sortRows, type Sort, type SortDir } from '../sort'
+import { convertDiagramTechnology, legalCloneTargets, narrowingWarning, permitsFleetKind, technologyLabel } from '../technology'
 import type { Diagram, DesignSummary, ProjectDetail, ProjectSummary } from '../types'
 
 function formatDate(iso: string): string {
@@ -109,6 +110,7 @@ export function ProjectsPage() {
   const designSort = useSort('name')
   const { prompt, dialog: promptDialog } = usePromptDialog()
   const { confirm, dialog: confirmDialog } = useConfirmDialog()
+  const { pickTechnology, dialog: technologyDialog } = useTechnologyDialog()
 
   const refreshProjects = () => {
     listProjects()
@@ -160,10 +162,10 @@ export function ProjectsPage() {
   }
 
   const handleCreateProject = async () => {
-    const name = await prompt({ title: 'New project', label: 'Project name' })
-    if (!name) return
+    const result = await prompt({ title: 'New project', label: 'Project name' })
+    if (!result) return
     try {
-      await createProject(name)
+      await createProject(result.value)
       refreshProjects()
     } catch (err) {
       setError(String(err))
@@ -188,9 +190,18 @@ export function ProjectsPage() {
   }
 
   const handleCreateDesign = async (projectId: number) => {
-    const name = await prompt({ title: 'New design', label: 'Design name' })
-    if (!name) return
-    const fromExample = await confirm({
+    const result = await prompt({
+      title: 'New design',
+      label: 'Design name',
+      technologyLabel: 'Technology',
+    })
+    if (!result || !result.technology) return
+    const { value: name, technology } = result
+    // The example plant's stations carry no fleet kind, so they parse as PV —
+    // offering it on a battery design would seed a fleet that design's own
+    // technology forbids, the same hole the seed wizard has. Where PV isn't
+    // permitted there is no choice to make, so the question isn't asked.
+    const fromExample = permitsFleetKind(technology, 'pv') && await confirm({
       title: 'Start from example plant?',
       message: 'Choose "Example plant" to start pre-populated, or "Empty diagram" for a blank canvas.',
       confirmLabel: 'Example plant',
@@ -200,6 +211,7 @@ export function ProjectsPage() {
       const payload = fromExample ? EXAMPLE_DIAGRAM : await emptyDiagramFromCatalogue()
       const design = await createDesign(projectId, {
         name,
+        technology,
         payload,
         last_edited_by: displayName ?? 'Anonymous',
       })
@@ -219,6 +231,34 @@ export function ProjectsPage() {
     if (!ok) return
     try {
       await deleteDesign(designId)
+      openProject(projectId)
+      refreshProjects()
+    } catch (err) {
+      setError(String(err))
+    }
+  }
+
+  /** Copy a design into a new one with a different technology (ADR-0002 /
+   * ticket 04). No confirmation dialog — the original survives untouched —
+   * but the technology picker states in words what a narrowing conversion
+   * will not copy. */
+  const handleCloneDesign = async (projectId: number, design: DesignSummary) => {
+    const targets = legalCloneTargets(design.technology)
+    const to = await pickTechnology({
+      title: `Clone "${design.name}" as…`,
+      options: targets,
+      note: narrowingWarning,
+    })
+    if (!to) return
+    try {
+      const full = await getDesign(design.id)
+      const payload = convertDiagramTechnology(full.payload, design.technology, to)
+      await createDesign(projectId, {
+        name: `${design.name} (${technologyLabel(to)})`,
+        technology: to,
+        payload,
+        last_edited_by: displayName ?? 'Anonymous',
+      })
       openProject(projectId)
       refreshProjects()
     } catch (err) {
@@ -320,6 +360,7 @@ export function ProjectsPage() {
                   <thead>
                     <tr>
                       <Th label="Design" sortKey="name" {...designSort} />
+                      <Th label="Technology" sortKey="technology" {...designSort} />
                       <Th label="POC target" sortKey="poc_target" {...designSort} />
                       <Th label="Stations" sortKey="stations" numeric {...designSort} />
                       <Th label="Circuits" sortKey="circuits" numeric {...designSort} />
@@ -338,6 +379,7 @@ export function ProjectsPage() {
                             {d.name}
                           </Link>
                         </td>
+                        <td>{technologyLabel(d.technology)}</td>
                         <td>{d.poc_target ?? '…'}</td>
                         <td className="num">{d.stations ?? '…'}</td>
                         <td className="num">{d.circuits ?? (d.stations === undefined ? '…' : '—')}</td>
@@ -367,6 +409,9 @@ export function ProjectsPage() {
                           >
                             Open in editor
                           </button>
+                          <button type="button" onClick={() => handleCloneDesign(selected.id, d)}>
+                            Clone
+                          </button>
                           <button
                             type="button"
                             className="danger"
@@ -386,6 +431,7 @@ export function ProjectsPage() {
       </div>
       {promptDialog}
       {confirmDialog}
+      {technologyDialog}
     </div>
   )
 }

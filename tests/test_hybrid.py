@@ -102,6 +102,25 @@ def test_a_real_hybrid_sizes_both_fleets_independently():
     assert hybrid["results"]["nodes"]["s1"]["fleet_kind"] == "pv"
 
 
+def test_split_reactive_always_divides_pro_rata_by_active_power():
+    """Ticket 01: the reactive split has no share argument any more — pro-rata
+    by active power is the only behaviour, not just the default. A lone branch
+    still takes the whole combined duty regardless (see the function's own
+    docstring), which is what keeps a zero-BESS hybrid identical to PV-only.
+    """
+    from types import SimpleNamespace
+
+    from backend.solve import _split_reactive
+
+    pv = SimpleNamespace(kind="pv", p_poc_target_kw=3000.0)
+    bess = SimpleNamespace(kind="bess", p_poc_target_kw=1000.0)
+    q_pv, q_bess = _split_reactive([pv, bess], 400.0)
+    assert q_pv == pytest.approx(300.0)
+    assert q_bess == pytest.approx(100.0)
+
+    assert _split_reactive([pv], 400.0) == [400.0]
+
+
 def test_the_pdf_endpoint_reports_a_hybrid_rather_than_refusing_it():
     """Ticket 07 made this a deliberate 400: the report was single-fleet, so it
     could only have described the first fleet with the second silently missing,

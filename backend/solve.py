@@ -247,8 +247,8 @@ def build_collection_chain(inputs: GraphInputs, branch: BranchInputs,
 def _split_active(branches: list[BranchInputs], p_total: float) -> list[float]:
     """Split the combined delivered active power pro-rata by each branch's own
     POC active target — the ticket-05 default, and the ONLY rule for the
-    active split (the reactive split additionally honours ``q_share_pv``, see
-    :func:`_split_reactive`)."""
+    active split (ticket 01 made it the only rule for the reactive split too,
+    see :func:`_split_reactive`)."""
     weight_total = sum(b.p_poc_target_kw for b in branches)
     if weight_total <= 0:
         # Unreachable in practice — every branch that exists has a positive
@@ -258,24 +258,19 @@ def _split_active(branches: list[BranchInputs], p_total: float) -> list[float]:
     return [p_total * (b.p_poc_target_kw / weight_total) for b in branches]
 
 
-def _split_reactive(branches: list[BranchInputs], q_total: float,
-                    q_share_pv: float | None) -> list[float]:
+def _split_reactive(branches: list[BranchInputs], q_total: float) -> list[float]:
     """Split the combined reactive requirement at the shared MV bus.
 
     A lone branch (the other fleet's busbar was drawn at a zero target and so
     never became a branch — the topology gate) takes the WHOLE combined
-    reactive duty regardless of any configured share: there is nothing else to
-    assign it to, and this is exactly what keeps a zero-BESS hybrid identical
-    to the PV-only design. With two branches, PV takes ``q_share_pv`` of the
-    total and BESS the complement; absent a share, both are split pro-rata by
-    active power (see :func:`_split_active`) — the ticket-05 default that
-    makes the reactive split identical to the active one.
+    reactive duty: there is nothing else to assign it to, and this is exactly
+    what keeps a zero-BESS hybrid identical to the PV-only design. With two
+    branches, the duty is split pro-rata by active power (see
+    :func:`_split_active`) — ticket 01 removed the user-controlled override
+    that used to let a share be hand-tuned instead; this is now the only rule.
     """
     if len(branches) == 1:
         return [q_total]
-    if q_share_pv is not None:
-        share = {"pv": q_share_pv, "bess": 1.0 - q_share_pv}
-        return [q_total * share[b.kind] for b in branches]
     return _split_active(branches, q_total)
 
 
@@ -303,7 +298,7 @@ def solve_architecture(inputs: GraphInputs, db: ComponentDatabase):
                                p_poc_kw=inputs.p_poc_kw,
                                pf_target=inputs.pf_target)
     p_splits = _split_active(inputs.branches, combined.p_inv_kw)
-    q_splits = _split_reactive(inputs.branches, combined.q_inv_kvar, inputs.q_share_pv)
+    q_splits = _split_reactive(inputs.branches, combined.q_inv_kvar)
 
     stage1s: list = []
     layouts: list = []
