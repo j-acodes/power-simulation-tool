@@ -87,6 +87,37 @@ export function SettingsPanel() {
           onChange={(e) => updateSettings({ rules: { ...rules, max_circuit_current_a: e.target.valueAsNumber } })}
         />
       </label>
+      <label className="field inline">
+        <span>Max fleet loading</span>
+        <input
+          type="number"
+          step={0.05}
+          value={rules.max_loading ?? 1.0}
+          onChange={(e) => updateSettings({ rules: { ...rules, max_loading: e.target.valueAsNumber } })}
+        />
+      </label>
+      {/* Per-fleet overrides are opt-in: an empty box means "use the plant-wide
+          figure above", which is what every design drawn before hybrid support
+          means by leaving it alone. */}
+      {(['pv', 'bess'] as const).map((kind) => {
+        const key = `max_loading_${kind}` as const
+        return (
+          <label className="field inline" key={kind}>
+            <span>{`Max loading — ${kind === 'pv' ? 'PV' : 'BESS'}`}</span>
+            <input
+              type="number"
+              step={0.05}
+              placeholder="plant-wide"
+              value={rules[key] ?? ''}
+              onChange={(e) =>
+                updateSettings({
+                  rules: { ...rules, [key]: e.target.value === '' ? undefined : e.target.valueAsNumber },
+                })
+              }
+            />
+          </label>
+        )
+      })}
 
       <h3>Solve</h3>
       <label className="field inline">

@@ -129,9 +129,19 @@ def _tier_kv(diagram: dict, tier: str) -> float | None:
     return _num(tiers.get(key))
 
 
-def _rule(diagram: dict, key: str) -> float:
+def _rule_opt(diagram: dict, key: str) -> float | None:
+    """A rule's value as the design sets it, or None when it does not.
+
+    Split out of :func:`_rule` for the rules that have no entry in
+    ``DEFAULT_RULES`` because their fallback is another rule rather than a
+    constant — the per-fleet maximum loadings.
+    """
     rules = _dict(_dict(diagram.get("settings")).get("rules"))
-    value = _num(rules.get(key))
+    return _num(rules.get(key))
+
+
+def _rule(diagram: dict, key: str) -> float:
+    value = _rule_opt(diagram, key)
     return DEFAULT_RULES[key] if value is None else value
 
 
@@ -343,16 +353,55 @@ def _singleton(nodes: dict[str, dict], kind: str, issues: list[GraphIssue],
     return found[0]
 
 
-def _busbars(nodes: dict[str, dict], issues: list[GraphIssue]) -> dict[str, str]:
+def _stations_under(nodes: dict[str, dict], edges: list[dict],
+                    busbar_id: str) -> list[str]:
+    """The stations reachable from a busbar through station-to-station links.
+
+    Undirected on purpose: edges are drawn either way round and this runs
+    before the tree is rooted, so it cannot lean on parentage.
+    """
+    found: list[str] = []
+    seen = {busbar_id}
+    frontier = [busbar_id]
+    while frontier:
+        current = frontier.pop()
+        for edge in edges:
+            for near, far in ((edge.get("source"), edge.get("target")),
+                              (edge.get("target"), edge.get("source"))):
+                if near != current or far in seen or far not in nodes:
+                    continue
+                if nodes[far]["kind"] != "station":
+                    continue
+                seen.add(far)
+                found.append(far)
+                frontier.append(far)
+    return found
+
+
+def _busbars(nodes: dict[str, dict], edges: list[dict],
+             issues: list[GraphIssue]) -> dict[str, str]:
     """One busbar id per fleet kind ("pv" / "bess") — the relaxed single-busbar
     rule: a second busbar of a kind already seen is a ``duplicate_busbar``,
     naming the extra one and excluding it from the map, rather than the old
-    plant-wide ``multiple_busbar``."""
+    plant-wide ``multiple_busbar``.
+
+    The kind is the EFFECTIVE one (see :func:`_effective_busbar_kind`), not the
+    declared one, so the slot a busbar occupies here is the same answer as the
+    fleet it is later sized as. Reading the bare "pv" default instead would put
+    a pre-hybrid BESS plant's undeclared busbar in the PV slot while
+    :func:`graph_to_inputs` solved that same busbar as a BESS branch — and
+    adding a PV busbar to upgrade that plant to a hybrid would come back as a
+    duplicate of a busbar that is not PV at all.
+
+    Station membership is walked over the raw edges rather than the rooted
+    tree: this runs before the tree exists, because the tree needs a POC and
+    this check gates it.
+    """
     by_kind: dict[str, str] = {}
     for nid, node in nodes.items():
         if node["kind"] != "busbar":
             continue
-        kind = _fleet_kind(_props(node))
+        kind = _effective_busbar_kind(nodes, nid, _stations_under(nodes, edges, nid))
         if kind in by_kind:
             issues.append(GraphIssue(
                 "duplicate_busbar",
@@ -745,7 +794,7 @@ def validate_graph(diagram: dict, db) -> list[GraphIssue]:
 
     poc_id = _singleton(nodes, "poc", issues, "no_poc", "multiple_poc",
                         "Point of Connection")
-    busbars = _busbars(nodes, issues)
+    busbars = _busbars(nodes, edges, issues)
     if not busbars:
         issues.append(GraphIssue("no_busbar", "The diagram needs an MV busbar."))
     if poc_id is None or not busbars:
@@ -996,7 +1045,13 @@ def graph_to_inputs(diagram: dict, db) -> GraphInputs:
     p_target_pv_kw = (_num(poc_props.get("p_target_mw")) or 0.0) * 1000.0
     p_target_bess_kw = (_num(poc_props.get("p_target_bess_mw", 0.0)) or 0.0) * 1000.0
     q_share_pv = _num(poc_props.get("q_share_pv"))
-    max_loading = _rule(diagram, "max_loading")
+    # Maximum loading is per fleet kind, falling back to the plant-wide rule —
+    # a BESS fleet is routinely held to a different loading limit than a PV one,
+    # but a design that only ever set the one value must keep meaning what it
+    # meant. `_rule` supplies the DEFAULT_RULES value when neither is present.
+    def _max_loading(kind: str) -> float:
+        per_kind = _rule_opt(diagram, f"max_loading_{kind}")
+        return _rule(diagram, "max_loading") if per_kind is None else per_kind
 
     busbar_parent = hv_tx_id if hv_tx_id is not None else poc_id
     busbar_children = [child for child, _edge in tree.children[busbar_parent]
@@ -1077,7 +1132,7 @@ def graph_to_inputs(diagram: dict, db) -> GraphInputs:
             segment_candidates=segment_candidates,
             aux_p_kw=aux_p_kw,
             aux_q_kvar=aux_q_kvar,
-            max_loading=max_loading,
+            max_loading=_max_loading(kind),
             p_poc_target_kw=p_target_kw,
         ))
 

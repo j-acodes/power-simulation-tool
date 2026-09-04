@@ -119,3 +119,70 @@ def test_pdf_report_refuses_a_hybrid_rather_than_reporting_one_fleet():
     ok = client.post("/api/report", params={"name": "PV plant"}, json=_minimal())
     assert ok.status_code == 200
     assert ok.content[:4] == b"%PDF"
+
+
+def test_max_loading_is_per_fleet_kind_and_falls_back_to_the_plant_rule():
+    """A BESS fleet is routinely held to a different loading limit than a PV
+    one, but a design that only ever set the single plant-wide value must keep
+    meaning what it meant.
+    """
+    from powertool.graph import graph_to_inputs
+
+    # Fallback: only the plant-wide rule is set, so both fleets read it.
+    shared = _hybrid_with_drawn_bess(p_target_bess_mw=2.0)
+    shared["settings"]["rules"]["max_loading"] = 0.85
+    by_kind = {b.kind: b.max_loading for b in graph_to_inputs(shared, db).branches}
+    assert by_kind == {"pv": 0.85, "bess": 0.85}
+
+    # Per-kind overrides win, each only over its own fleet.
+    split = _hybrid_with_drawn_bess(p_target_bess_mw=2.0)
+    split["settings"]["rules"]["max_loading"] = 0.85
+    split["settings"]["rules"]["max_loading_bess"] = 0.70
+    by_kind = {b.kind: b.max_loading for b in graph_to_inputs(split, db).branches}
+    assert by_kind == {"pv": 0.85, "bess": 0.70}
+
+
+def test_a_legacy_bess_plant_can_gain_a_pv_busbar():
+    """Upgrading a single-fleet BESS plant to a hybrid must be legal.
+
+    The busbar in every pre-hybrid design declares no `fleet_kind`. Reading the
+    bare "pv" default when deciding which fleet SLOT a busbar occupies would put
+    a BESS plant's busbar in the PV slot, so adding a PV busbar to it would come
+    back as a duplicate — while the very same busbar is simultaneously solved as
+    a BESS branch. The slot a busbar occupies and the fleet it is sized as have
+    to be the same answer.
+    """
+    diagram = _minimal()
+    diagram["settings"]["tiers"]["lv_kv"] = 0.69
+    diagram["nodes"][2]["props"] = {
+        "mode": "catalogue", "model": "GENERIC_BESS_TX_2750_LV069",
+        "fleet_kind": "bess", "bess_solution": "GENERIC_BESS_5MWH_LV069",
+    }
+    # The busbar deliberately keeps no fleet_kind — that is what a saved design
+    # looks like. Add a declared PV busbar with a station of its own.
+    diagram["nodes"] += [
+        _node("bus_pv", "busbar", fleet_kind="pv"),
+        _node("s_pv", "station", mode="catalogue", model="HUAWEI_JUPITER3000"),
+    ]
+    diagram["edges"] += [
+        _edge("e_poc_pv", "poc", "bus_pv", length_m=0.0),
+        _edge("e_tpv", "bus_pv", "s_pv", length_m=700.0),
+    ]
+    assert [i.code for i in validate_graph(diagram, db)] == []
+
+
+def test_two_undeclared_busbars_are_still_a_duplicate():
+    """The relaxation must not become "anything goes": two busbars that both
+    read as the same fleet are still a duplicate, whether declared or derived.
+    """
+    diagram = _minimal()
+    diagram["nodes"] += [
+        _node("bus2", "busbar"),
+        _node("s2", "station", mode="catalogue", model="HUAWEI_JUPITER3000"),
+    ]
+    diagram["edges"] += [
+        _edge("e_poc2", "poc", "bus2", length_m=0.0),
+        _edge("e_t2", "bus2", "s2", length_m=700.0),
+    ]
+    issues = validate_graph(diagram, db)
+    assert "duplicate_busbar" in {i.code for i in issues}

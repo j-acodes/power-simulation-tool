@@ -12,7 +12,7 @@ import {
 import '@xyflow/react/dist/style.css'
 import { useStore } from '../store'
 import type { DiagramNode, NodeKind } from '../types'
-import { defaultLengthM, inferTier } from './connect'
+import { canConnect, defaultLengthM, inferTier, takenBusbarSlots } from './connect'
 import { AuxNode } from './nodes/AuxNode'
 import { BusbarNode } from './nodes/BusbarNode'
 import { HvTxNode } from './nodes/HvTxNode'
@@ -99,11 +99,21 @@ function FlowCanvas() {
     [removeEdge],
   )
 
+  // React Flow calls this while the user drags, so an illegal join simply
+  // cannot be dropped — the invalid state is never drawn rather than drawn and
+  // then reported by the server.
+  const isValidConnection = useCallback(
+    (c: Connection | { source: string; target: string }) =>
+      Boolean(c.source && c.target && canConnect(diagram, c.source, c.target)),
+    [diagram],
+  )
+
   const onConnect = useCallback(
     (connection: Connection) => {
       const source = diagram.nodes.find((n) => n.id === connection.source)
       const target = diagram.nodes.find((n) => n.id === connection.target)
       if (!source || !target || !connection.source || !connection.target) return
+      if (!canConnect(diagram, connection.source, connection.target)) return
       const tier = inferTier(source.kind, target.kind)
       const length_m = defaultLengthM(source.kind, target.kind)
       addEdge({
@@ -115,7 +125,7 @@ function FlowCanvas() {
         sizing: { mode: 'auto' },
       })
     },
-    [diagram.nodes, addEdge],
+    [diagram, addEdge],
   )
 
   const onDrop = useCallback(
@@ -124,13 +134,18 @@ function FlowCanvas() {
       const raw = event.dataTransfer.getData('application/reactflow')
       if (!raw) return
       const payload = JSON.parse(raw) as PaletteDropPayload
-      if ((payload.kind === 'poc' || payload.kind === 'busbar') && diagram.nodes.some((n) => n.kind === payload.kind)) {
-        return
+      if (payload.kind === 'poc' && diagram.nodes.some((n) => n.kind === 'poc')) return
+      // One busbar PER FLEET KIND, not one per plant: a hybrid needs two. A
+      // dropped busbar always declares its kind (the palette says which), so
+      // the check reads the declaration rather than the derived kind.
+      if (payload.kind === 'busbar') {
+        const dropped = payload.props.fleet_kind === 'bess' ? 'bess' : 'pv'
+        if (takenBusbarSlots(diagram).has(dropped)) return
       }
       const position = screenToFlowPosition({ x: event.clientX, y: event.clientY })
       addNode({ id: crypto.randomUUID(), kind: payload.kind, x: position.x, y: position.y, props: payload.props })
     },
-    [diagram.nodes, addNode, screenToFlowPosition],
+    [diagram, addNode, screenToFlowPosition],
   )
 
   const onDragOver = useCallback((event: React.DragEvent) => {
@@ -148,6 +163,7 @@ function FlowCanvas() {
         onNodesChange={onNodesChange}
         onEdgesChange={onEdgesChange}
         onConnect={onConnect}
+        isValidConnection={isValidConnection}
         onNodeClick={(_, node) => setSelection({ type: 'node', id: node.id })}
         onEdgeClick={(_, edge) => setSelection({ type: 'edge', id: edge.id })}
         onPaneClick={() => setSelection(null)}

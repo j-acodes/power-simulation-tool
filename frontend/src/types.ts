@@ -7,6 +7,9 @@
  */
 
 export type NodeKind = 'poc' | 'hv_tx' | 'busbar' | 'station' | 'aux'
+/** Which fleet a station or busbar belongs to — mirrors FLEET_KINDS in
+ *  powertool/graph.py. Absent props read as 'pv', the pre-hybrid default. */
+export type FleetKind = 'pv' | 'bess'
 export type Tier = 'lv' | 'mv' | 'hv'
 
 // --- diagram (canvas payload) ------------------------------------------------
@@ -47,6 +50,11 @@ export interface RuleSettings {
   collection_loss_pct: number
   export_loss_pct_per_km: number
   max_circuit_current_a: number
+  /** Plant-wide fleet loading limit. */
+  max_loading?: number
+  /** Per-fleet overrides; each falls back to `max_loading` when unset. */
+  max_loading_pv?: number
+  max_loading_bess?: number
 }
 
 export interface DiagramSettings {

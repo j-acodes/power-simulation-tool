@@ -3,6 +3,7 @@ import { CollapsiblePanel } from './CollapsiblePanel'
 import { useCatalogue } from '../hooks/useCatalogue'
 import { useStore } from '../store'
 import type { DiagramNode, NodeKind, TransformerInfo } from '../types'
+import { takenBusbarSlots } from '../canvas/connect'
 import type { PaletteDropPayload } from '../canvas/Editor'
 
 const BESS_CUSTOM_PROPS = {
@@ -61,11 +62,16 @@ function groupByBrand(transformers: TransformerInfo[]): Array<[string, Transform
 
 export function Palette() {
   const catalogue = useCatalogue()
-  const nodes = useStore((s) => s.diagram.nodes)
+  const diagram = useStore((s) => s.diagram)
   const selection = useStore((s) => s.selection)
   const setSelection = useStore((s) => s.setSelection)
+  const nodes = diagram.nodes
   const hasPoc = nodes.some((n) => n.kind === 'poc')
-  const hasBusbar = nodes.some((n) => n.kind === 'busbar')
+  // One busbar per fleet kind, read the way the server reads it: an existing
+  // busbar counts against the fleet its stations put it in, and an undecided
+  // one counts as PV — see busbarSlot. Offering a kind the server would reject
+  // is the bug this ticket exists to close.
+  const taken = takenBusbarSlots(diagram)
 
   const brandGroups = useMemo(() => (catalogue ? groupByBrand(catalogue.transformers) : []), [catalogue])
   const bessBrandGroups = useMemo(
@@ -78,7 +84,8 @@ export function Palette() {
       <div className="palette-section">
         <h3>Topology</h3>
         {!hasPoc && <Item label="Point of Connection" kind="poc" props={{ p_target_mw: 10, pf: 0.95 }} />}
-        {!hasBusbar && <Item label="MV busbar" kind="busbar" props={{}} />}
+        {!taken.has('pv') && <Item label="MV busbar — PV" kind="busbar" props={{ fleet_kind: 'pv' }} />}
+        {!taken.has('bess') && <Item label="MV busbar — BESS" kind="busbar" props={{ fleet_kind: 'bess' }} />}
         <Item label="MV/HV transformer" kind="hv_tx" props={{ mode: 'auto', n_parallel: 1 }} />
         <Item label="Aux load" kind="aux" props={{ p_kw: 50, q_kvar: 10 }} />
       </div>

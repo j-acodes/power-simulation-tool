@@ -3,6 +3,7 @@ import { CollapsiblePanel } from './CollapsiblePanel'
 import { LABEL } from '../labels'
 import { useCatalogue } from '../hooks/useCatalogue'
 import { useStore } from '../store'
+import { takenBusbarSlots } from '../canvas/connect'
 import type { DiagramEdge, DiagramNode, EdgeResult, NodeResult, TransformerInfo } from '../types'
 
 function NumberField({
@@ -84,6 +85,7 @@ function NodeProperties({ node }: { node: DiagramNode }) {
   const updateNodeProps = useStore((s) => s.updateNodeProps)
   const removeNode = useStore((s) => s.removeNode)
   const catalogue = useCatalogue()
+  const diagram = useStore((s) => s.diagram)
   const patch = (p: Record<string, unknown>) => updateNodeProps(node.id, p)
   const props = node.props
 
@@ -91,8 +93,32 @@ function NodeProperties({ node }: { node: DiagramNode }) {
     <div>
       {node.kind === 'poc' && (
         <>
-          <NumberField label={`Target ${LABEL.activePowerMw}`} value={Number(props.p_target_mw ?? 0)} step={0.1} onChange={(v) => patch({ p_target_mw: v })} />
+          <NumberField label={`PV target ${LABEL.activePowerMw}`} value={Number(props.p_target_mw ?? 0)} step={0.1} onChange={(v) => patch({ p_target_mw: v })} />
+          <NumberField label={`BESS target ${LABEL.activePowerMw}`} value={Number(props.p_target_bess_mw ?? 0)} step={0.1} onChange={(v) => patch({ p_target_bess_mw: v })} />
           <NumberField label={LABEL.powerFactor} value={Number(props.pf ?? 0)} step={0.01} onChange={(v) => patch({ pf: v })} />
+          <label className="field inline">
+            <span>
+              <input
+                type="checkbox"
+                checked={props.q_share_pv !== undefined}
+                onChange={(e) => patch({ q_share_pv: e.target.checked ? 0.5 : undefined })}
+              />
+              {' Split reactive by hand'}
+            </span>
+          </label>
+          {props.q_share_pv === undefined ? (
+            <p className="panel-hint">
+              The reactive duty at the point of connection is split pro-rata by each fleet&apos;s
+              active target.
+            </p>
+          ) : (
+            <NumberField
+              label="PV share of reactive (0-1)"
+              value={Number(props.q_share_pv)}
+              step={0.05}
+              onChange={(v) => patch({ q_share_pv: v })}
+            />
+          )}
         </>
       )}
       {node.kind === 'hv_tx' && (
@@ -173,7 +199,23 @@ function NodeProperties({ node }: { node: DiagramNode }) {
           <NumberField label={LABEL.reactivePowerKvar} value={Number(props.q_kvar ?? 0)} onChange={(v) => patch({ q_kvar: v })} />
         </>
       )}
-      {node.kind === 'busbar' && <p className="panel-hint">No editable properties.</p>}
+      {node.kind === 'busbar' && (
+        <label className="field">
+          <span>Fleet kind</span>
+          {/* A kind another busbar already occupies is disabled rather than
+              hidden: the engineer can see the option exists and why it is not
+              available, and cannot use this control to create the duplicate the
+              palette and the canvas both refuse. */}
+          <select value={String(props.fleet_kind ?? 'pv')} onChange={(e) => patch({ fleet_kind: e.target.value })}>
+            {(['pv', 'bess'] as const).map((kind) => (
+              <option key={kind} value={kind} disabled={takenBusbarSlots(diagram, node.id).has(kind)}>
+                {kind === 'pv' ? 'PV' : 'BESS'}
+                {takenBusbarSlots(diagram, node.id).has(kind) ? ' — already used' : ''}
+              </option>
+            ))}
+          </select>
+        </label>
+      )}
       <button type="button" className="danger" onClick={() => removeNode(node.id)}>
         Delete block
       </button>
