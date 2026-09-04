@@ -193,6 +193,27 @@ class AuxLoad:
     q_kvar: float = 0.0
 
 
+def fleet_label(fleet_kind: str) -> str:
+    """The fleet itself, in the capitals a reader expects: "PV" or "BESS"."""
+    return "BESS" if fleet_kind == "bess" else "PV"
+
+
+def conversion_label(fleet_kind: str) -> str:
+    """What to CALL the conversion device of a fleet: "PCS" or "inverter".
+
+    Presentation only. The result fields are neither renamed nor duplicated per
+    fleet kind — a BESS station's converted power lives in exactly the same
+    ``p_inv_kw`` a PV station's does, because it is the same quantity computed
+    the same way. Only the word in front of the engineer changes, because a
+    battery project's reviewer expects to read "PCS".
+
+    An unrecognised kind reads as the neutral default rather than raising: a
+    report is the last place to discover an unknown fleet kind, and "inverter"
+    is the pre-BESS reading the rest of the code already falls back to.
+    """
+    return "PCS" if fleet_kind == "bess" else "inverter"
+
+
 @dataclass(frozen=True)
 class BessSolution:
     """A named BESS supplier product, selected from a catalogue.

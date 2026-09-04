@@ -29,6 +29,7 @@ from reportlab.platypus import (
 )
 
 from .architecture import PlantArchitecture
+from .components import conversion_label, fleet_label
 from .sizing import SizingResult
 
 # RP Global "Colour Codes" brand sheet.
@@ -98,25 +99,56 @@ def _table(headers: list[str], rows: list[list[str]],
 # ---------------------------------------------------------------------------
 # Sections (mirrors powertool.report)
 # ---------------------------------------------------------------------------
-def _summary(stage1: SizingResult, arch: PlantArchitecture) -> list:
+def _fleet_name(fleet: dict | None, n_fleets: int) -> str | None:
+    """"PV fleet" / "BESS fleet" when a report covers more than one, else None.
+
+    A single-fleet report keeps the headings it always had: naming the fleet is
+    only informative when there is another one to tell it apart from, and a
+    PV-only report must read exactly as it did before hybrids existed.
+
+    The bare name is returned rather than a ready-made prefix, because the two
+    call sites want it differently — one as a section heading of its own, one
+    joined onto a row label — and a string shaped for one of them had to be
+    reverse-parsed by the other.
+    """
+    if fleet is None or n_fleets < 2:
+        return None
+    return f"{fleet_label(fleet['kind'])} fleet"
+
+
+def _fleet_kind(fleet: dict | None) -> str:
+    return fleet["kind"] if fleet else "pv"
+
+
+def _summary(stage1s: list[SizingResult], arch: PlantArchitecture,
+             fleets: list[dict] | None) -> list:
     export = arch.export
+    v_mv = arch.branches[0].layout.v_mv_kv
     if export is None:
-        interconn = f"MV, at {arch.layout.v_mv_kv:g} kV busbar"
+        interconn = f"MV, at {v_mv:g} kV busbar"
     else:
         hv = export.hv_transformer
         interconn = (f"HV, at {export.v_hv_kv:g} kV"
                      + (f" via {hv.s_rated_kva / 1000:g} MVA auto-sized MV/HV transformer"
                         if hv is not None else ""))
-    target = arch.p_poc_target_kw
+    target = sum(r.p_poc_target_kw or 0.0 for r in arch.branch_refinements)
     rows = [
         ["POC active-power target", f"{_fmt(target / 1000)} MW" if target else "—"],
-        ["Power-factor target (injected Q)", f"{stage1.pf_target:.3f}"],
+        ["Power-factor target (injected Q)", f"{stage1s[0].pf_target:.3f}"],
         ["Interconnection", interconn],
-        ["MV collection voltage", f"{arch.layout.v_mv_kv:g} kV"],
-        ["Station fleet",
-         " + ".join(f"{n}× {tx.display_name}" for tx, n in arch.layout.fleet)],
-        ["Installed station capacity", f"{_fmt(arch.layout.s_fleet_kva / 1000)} MVA"],
+        ["MV collection voltage", f"{v_mv:g} kV"],
     ]
+    # One fleet: the plant IS the fleet, so its figures belong in this table
+    # exactly as they always did. More than one: they move into the per-fleet
+    # sections, and merging them here would produce a station list belonging to
+    # no fleet in particular.
+    for i, branch in enumerate(arch.branches):
+        name = _fleet_name(fleets[i] if fleets else None, len(arch.branches))
+        prefix = f"{name} — " if name else ""
+        rows.append([f"{prefix}Station fleet",
+                     " + ".join(f"{n}× {tx.display_name}" for tx, n in branch.layout.fleet)])
+        rows.append([f"{prefix}Installed station capacity",
+                     f"{_fmt(branch.layout.s_fleet_kva / 1000)} MVA"])
     return [Paragraph("Plant summary", _H2), _table(["Item", "Value"], rows, [0.45, 0.55])]
 
 
@@ -209,19 +241,26 @@ def _methodology() -> list:
     return f
 
 
-def _stage1(stage1: SizingResult) -> list:
-    f = [Paragraph("Stage 1 results — required inverter rating", _H2)]
+def _stage1(stage1: SizingResult, fleet: dict | None, n_fleets: int) -> list:
+    # "PCS" on a battery fleet, "inverter" on PV. The FIELDS are untouched —
+    # p_inv_kw holds a PCS's converted power just as it holds an inverter's,
+    # because it is the same quantity computed the same way. Only the word
+    # changes, because a battery project's reviewer expects to read "PCS".
+    device = conversion_label(_fleet_kind(fleet))
+    name = _fleet_name(fleet, n_fleets)
+    prefix = f"{name} — " if name else ""
+    f = [Paragraph(f"{prefix}Stage 1 results — required {device} rating", _H2)]
     rows = [
-        ["P at inverter", f"{_fmt(stage1.p_inv_kw / 1000)} MW"],
-        ["Q at inverter", f"{_fmt(stage1.q_inv_kvar / 1000)} Mvar"],
-        ["S at inverter", f"{_fmt(stage1.s_inv_kva / 1000)} MVA"],
-        ["Power factor at inverter", f"{stage1.pf_inv:.3f}"],
-        ["Total active losses (POC→inverter)",
+        [f"P at {device}", f"{_fmt(stage1.p_inv_kw / 1000)} MW"],
+        [f"Q at {device}", f"{_fmt(stage1.q_inv_kvar / 1000)} Mvar"],
+        [f"S at {device}", f"{_fmt(stage1.s_inv_kva / 1000)} MVA"],
+        [f"Power factor at {device}", f"{stage1.pf_inv:.3f}"],
+        [f"Total active losses (POC→{device})",
          f"{stage1.total_active_loss_kw / stage1.p_inv_kw * 100:.2f}% of P_inv"],
         ["Power-balance check", "OK" if stage1.power_balance_ok else "FAILED"],
     ]
     f.append(_table(["Quantity", "Value"], rows, [0.45, 0.55]))
-    f.append(Paragraph("Conceptual loss breakdown (POC → inverter)", _H3))
+    f.append(Paragraph(f"Conceptual loss breakdown (POC → {device})", _H3))
     headers = ["Element", "Type", "Selected cable", "Length [m]", "Util.",
                "Loss %", "V-drop %", "S [kVA]", "ΔP [% P_inv]", "ΔQ [kvar]"]
     trows = []
@@ -242,9 +281,10 @@ def _stage1(stage1: SizingResult) -> list:
     return f
 
 
-def _transformer_rows(arch: PlantArchitecture, p_inv: float):
+def _transformer_rows(branch, export, p_inv: float, include_export: bool,
+                      shared: bool):
     agg: dict[str, dict] = {}
-    for circuit in arch.circuits:
+    for circuit in branch.circuits:
         for st in circuit.stations:
             a = agg.setdefault(st.model, {
                 "count": 0, "s_rated": st.s_rated_kva, "loading": st.loading,
@@ -260,12 +300,18 @@ def _transformer_rows(arch: PlantArchitecture, p_inv: float):
             _fmt(a["s_lv"], 1), f"{(a['dp'] / a['count']) / p_inv * 100:.3f}%",
             f"{a['dp'] / p_inv * 100:.3f}%", _fmt(a["dq"]),
         ])
-    export = arch.export
-    if export is not None and export.hv_transformer is not None:
+    # The MV/HV transformer is shared by every fleet, so it is listed once — with
+    # the last fleet in a hybrid, and with the only one otherwise. Repeating it
+    # per fleet would double-count it to anyone adding the column up. The
+    # annotation is only written where it is TRUE: on a single-fleet plant there
+    # is nothing to share it with, and saying so would be both wrong and wider
+    # than the column.
+    if include_export and export is not None and export.hv_transformer is not None:
         hv = export.hv_transformer
         loading = export.s_tx_through_kva / (hv.s_rated_kva * export.hv_n_parallel)
         rows.append([
-            f"{hv.name} (MV/HV)", str(export.hv_n_parallel), _fmt(hv.s_rated_kva, 0),
+            f"{hv.name} (MV/HV{', shared' if shared else ''})",
+            str(export.hv_n_parallel), _fmt(hv.s_rated_kva, 0),
             f"{loading * 100:.0f}%", _fmt(export.s_tx_through_kva, 1),
             f"{(export.dp_tx_kw / export.hv_n_parallel) / p_inv * 100:.3f}%",
             f"{export.dp_tx_kw / p_inv * 100:.3f}%", _fmt(export.dq_tx_kvar),
@@ -273,9 +319,10 @@ def _transformer_rows(arch: PlantArchitecture, p_inv: float):
     return rows
 
 
-def _cable_rows(arch: PlantArchitecture, p_inv: float):
+def _cable_rows(branch, export, p_inv: float, include_export: bool,
+                shared: bool):
     rows = []
-    for circuit in arch.circuits:
+    for circuit in branch.circuits:
         for seg in circuit.segments:
             sel = seg.selection
             rows.append([
@@ -287,12 +334,14 @@ def _cable_rows(arch: PlantArchitecture, p_inv: float):
                 f"{sel.vdrop_percent:.2f}", f"{seg.dp_kw / p_inv * 100:.3f}%",
                 _fmt(seg.dq_series_kvar), _fmt(seg.q_charging_kvar),
             ])
-    export = arch.export
-    if export is not None and export.hv_cable is not None:
+    # Shared, like the MV/HV transformer above: listed once, not once per fleet,
+    # and annotated only where there is in fact another fleet sharing it.
+    if include_export and export is not None and export.hv_cable is not None:
         seg = export.hv_cable
         sel = seg.selection
         rows.append([
-            "Export", "POC", _fmt(seg.length_km * 1000, 0), _fmt(seg.s_kva, 1),
+            "Export (shared)" if shared else "Export",
+            "POC", _fmt(seg.length_km * 1000, 0), _fmt(seg.s_kva, 1),
             seg.cable_label, str(sel.n_parallel) if sel else "—",
             f"{sel.utilization * 100:.0f}%" if sel else "—",
             f"{sel.loss_percent:.2f}" if sel else "—",
@@ -303,53 +352,114 @@ def _cable_rows(arch: PlantArchitecture, p_inv: float):
     return rows
 
 
-def _stage2(stage1: SizingResult, arch: PlantArchitecture) -> list:
-    layout = arch.layout
-    p_inv = arch.p_inv_refined_kw  # base for loss percentages (refined inverter power)
+def _energy_rows(fleet: dict) -> list[list[str]]:
+    """Containers and the delivered-energy verdict, for a BESS fleet.
+
+    Container counts are the supplier's own figures, read from the solution's
+    duration table — which is exactly why they belong in a document that has to
+    stand on its own in a design review. The verdict is stated rather than left
+    to be re-derived from the two energy figures beside it.
+    """
+    rows: list[list[str]] = []
+    if fleet.get("containers") is not None:
+        rows.append(["Containers", str(fleet["containers"])])
+    delivered, required = fleet.get("e_delivered_kwh"), fleet.get("e_required_kwh")
+    if delivered is not None and required is not None:
+        verdict = "OK" if fleet.get("energy_ok") else f"SHORT by {_fmt((required - delivered) / 1000, 1)} MWh"
+        rows.append(["Delivered energy",
+                     f"{_fmt(delivered / 1000, 1)} MWh (needs {_fmt(required / 1000, 1)} MWh) — {verdict}"])
+    aux_p = fleet.get("bess_aux_p_kw") or 0.0
+    if aux_p:
+        rows.append(["Container auxiliaries",
+                     f"{_fmt(aux_p, 0)} kW / {_fmt(fleet.get('bess_aux_q_kvar') or 0.0, 0)} kvar"
+                     " — separately supplied, not carried by the PCS"])
+    return rows
+
+
+def _stage2(stage1s: list[SizingResult], arch: PlantArchitecture,
+            fleets: list[dict] | None) -> list:
+    # Loss percentages are quoted against the whole plant's refined conversion
+    # power, so the columns of a hybrid's two fleet tables share one base and
+    # can be read against each other.
+    p_inv = sum(r.p_inv_refined_kw for r in arch.branch_refinements)
+    n = len(arch.branches)
     f = [Paragraph("Stage 2 results — plant architecture", _H2)]
-    rows = [
-        ["LV/MV transformers", str(layout.n_transformers)],
-        ["MV circuits", layout.circuit_sizes_label],
-        ["Fleet loading", f"{layout.fleet_loading * 100:.0f}%"
-         + ("" if layout.loading_ok else "  ⚠ fleet undersized")],
-        ["Worst trunk current", f"{_fmt(max(c.i_trunk_a for c in arch.circuits), 0)} A"
-         f" (cap {_fmt(layout.max_circuit_current_a, 0)} A)"],
-        ["Total cable losses", f"{arch.total_cable_loss_kw / p_inv * 100:.2f}% of P_inv"],
+    plant_rows = [
+        ["Total cable losses", f"{arch_total(arch, 'cable') / p_inv * 100:.2f}% of P_inv"],
         ["Total transformer losses",
-         f"{arch.total_transformer_loss_kw / p_inv * 100:.2f}% of P_inv"],
-        ["Total active losses", f"{arch.total_active_loss_kw / p_inv * 100:.2f}% of P_inv"],
+         f"{arch_total(arch, 'transformer') / p_inv * 100:.2f}% of P_inv"],
+        ["Total active losses",
+         f"{(arch_total(arch, 'cable') + arch_total(arch, 'transformer')) / p_inv * 100:.2f}% of P_inv"],
         ["Power-balance check", "OK" if arch.power_balance_ok else "FAILED"],
     ]
-    f.append(_table(["Quantity", "Value"], rows, [0.45, 0.55]))
+    # With one fleet the plant IS the fleet, so its figures and the plant totals
+    # belong in ONE table, in the order they have always been in — a single-fleet
+    # report must read exactly as it did before hybrids existed. Splitting them
+    # only earns its keep when there are two fleets to keep apart.
+    if n > 1:
+        f.append(_table(["Quantity", "Value"], plant_rows, [0.45, 0.55]))
 
-    f.append(Paragraph("Refined inverter requirement", _H3))
-    delta = (arch.s_inv_refined_kva / stage1.s_inv_kva - 1) * 100
-    rrows = [
-        ["S at inverter — Stage 1 (lumped)", f"{_fmt(stage1.s_inv_kva / 1000)} MVA"],
-        ["S at inverter — refined",
-         f"{_fmt(arch.s_inv_refined_kva / 1000)} MVA ({delta:+.2f}%)"],
-        ["P / Q refined", f"{_fmt(arch.p_inv_refined_kw / 1000)} MW / "
-         f"{_fmt(arch.q_inv_refined_kvar / 1000)} Mvar"],
-    ]
-    if arch.p_poc_refined_delivered_kw is not None and arch.p_poc_target_kw is not None:
-        rrows.append([
-            "POC delivered with refined S (≥ target by rule)",
-            f"{_fmt(arch.p_poc_refined_delivered_kw / 1000)} MW "
-            f"(target {_fmt(arch.p_poc_target_kw / 1000)} MW)"])
-    f.append(_table(["Quantity", "Value"], rrows, [0.45, 0.55]))
+    for i, branch in enumerate(arch.branches):
+        fleet = fleets[i] if fleets else None
+        refinement = arch.branch_refinements[i]
+        layout = branch.layout
+        name = _fleet_name(fleet, n)
+        device = conversion_label(_fleet_kind(fleet))
+        if name:
+            f.append(Paragraph(name, _H2))
 
-    f.append(Paragraph("Transformer losses", _H3))
-    f.append(_table(
-        ["Transformer", "Units", "Rating [kVA]", "Loading", "S/unit [kVA]",
-         "ΔP/unit [% P_inv]", "ΔP total [% P_inv]", "ΔQ total [kvar]"],
-        _transformer_rows(arch, p_inv), [1.8, 0.7, 1.0, 0.8, 1.0, 1.0, 1.0, 1.0]))
+        # The fleet's own maximum is worth stating only where there is a second
+        # fleet held to a different one; on a single-fleet report it is noise
+        # that was not there before.
+        against_max = (f" (max {fleet['max_loading'] * 100:.0f}%)"
+                       if n > 1 and fleet and fleet.get("max_loading") is not None else "")
+        brows = [
+            ["LV/MV transformers", str(layout.n_transformers)],
+            ["MV circuits", layout.circuit_sizes_label],
+            ["Fleet loading", f"{layout.fleet_loading * 100:.0f}%" + against_max
+             + ("" if layout.loading_ok else "  ⚠ fleet undersized")],
+            ["Worst trunk current",
+             f"{_fmt(max(c.i_trunk_a for c in branch.circuits), 0)} A"
+             f" (cap {_fmt(layout.max_circuit_current_a, 0)} A)"],
+        ]
+        if fleet:
+            brows += _energy_rows(fleet)
+        if n == 1:
+            brows += plant_rows
+        f.append(_table(["Quantity", "Value"], brows, [0.45, 0.55]))
 
-    f.append(Paragraph("Cable-run losses", _H3))
-    f.append(_table(
-        ["Run", "Feeds", "Length [m]", "S [kVA]", "Selected cable", "Circuits",
-         "Util.", "Loss %", "V-drop %", "ΔP [% P_inv]", "ΔQ ser [kvar]", "Q chg [kvar]"],
-        _cable_rows(arch, p_inv),
-        [0.8, 1.3, 0.85, 1.05, 1.5, 0.85, 0.7, 0.7, 0.8, 0.75, 0.9, 0.9]))
+        f.append(Paragraph(f"Refined {device} requirement", _H3))
+        delta = (refinement.s_inv_refined_kva / stage1s[i].s_inv_kva - 1) * 100
+        rrows = [
+            [f"S at {device} — Stage 1 (lumped)", f"{_fmt(stage1s[i].s_inv_kva / 1000)} MVA"],
+            [f"S at {device} — refined",
+             f"{_fmt(refinement.s_inv_refined_kva / 1000)} MVA ({delta:+.2f}%)"],
+            ["P / Q refined", f"{_fmt(refinement.p_inv_refined_kw / 1000)} MW / "
+             f"{_fmt(refinement.q_inv_refined_kvar / 1000)} Mvar"],
+        ]
+        if (refinement.p_poc_refined_delivered_kw is not None
+                and refinement.p_poc_target_kw is not None):
+            rrows.append([
+                "POC delivered with refined S (≥ target by rule)",
+                f"{_fmt(refinement.p_poc_refined_delivered_kw / 1000)} MW "
+                f"(target {_fmt(refinement.p_poc_target_kw / 1000)} MW)"])
+        f.append(_table(["Quantity", "Value"], rrows, [0.45, 0.55]))
+
+        last = i == n - 1
+        f.append(Paragraph("Transformer losses", _H3))
+        f.append(_table(
+            ["Transformer", "Units", "Rating [kVA]", "Loading", "S/unit [kVA]",
+             "ΔP/unit [% P_inv]", "ΔP total [% P_inv]", "ΔQ total [kvar]"],
+            _transformer_rows(branch, arch.export, p_inv, last, n > 1),
+            [1.8, 0.7, 1.0, 0.8, 1.0, 1.0, 1.0, 1.0]))
+
+        f.append(Paragraph("Cable-run losses", _H3))
+        f.append(_table(
+            ["Run", "Feeds", "Length [m]", "S [kVA]", "Selected cable", "Circuits",
+             "Util.", "Loss %", "V-drop %", "ΔP [% P_inv]", "ΔQ ser [kvar]", "Q chg [kvar]"],
+            _cable_rows(branch, arch.export, p_inv, last, n > 1),
+            [0.8, 1.3, 0.85, 1.05, 1.5, 0.85, 0.7, 0.7, 0.8, 0.75, 0.9, 0.9]))
+
     f.append(Paragraph(
         "Segment 1 of each circuit is the trunk (substation side). Charging is "
         "reported for information and is never netted into the reactive (worst-case "
@@ -357,10 +467,76 @@ def _stage2(stage1: SizingResult, arch: PlantArchitecture) -> list:
     return f
 
 
-def build_pdf_report(
-    stage1: SizingResult,
+def arch_total(arch: PlantArchitecture, what: str) -> float:
+    """Plant-wide cable or transformer active losses, over every branch.
+
+    PlantArchitecture's own total_* properties read the sole-branch accessors and
+    so raise on a hybrid; these sum across branches and add the shared export
+    step once.
+    """
+    export = arch.export
+    if what == "cable":
+        total = sum(seg.dp_kw for b in arch.branches for c in b.circuits for seg in c.segments)
+        if export is not None and export.hv_cable is not None:
+            total += export.hv_cable.dp_kw
+        return total
+    total = sum(st.dp_tx_kw for b in arch.branches for c in b.circuits for st in c.stations)
+    if export is not None:
+        total += export.dp_tx_kw
+    return total
+
+
+def report_story(
+    stage1s: list[SizingResult],
     arch: PlantArchitecture,
     *,
+    fleets: list[dict] | None = None,
+    plant_name: str = "Plant",
+    when: str = "",
+) -> list:
+    """The report as a list of ReportLab flowables, before it becomes a PDF.
+
+    Split out so the report's CONTENT can be read and asserted on directly. A
+    PDF is opaque to a test: checking it would mean parsing the output or
+    shelling out to an extractor, and neither tells you which section a missing
+    figure went missing from.
+
+    ``fleets`` carries the per-fleet reporting figures — kind, loading maximum,
+    containers, delivered and required energy — as the same dicts the editor
+    receives from :func:`powertool.graph.branches_summary`. Reusing that record
+    rather than inventing a report-side type keeps the PDF and the screen from
+    drifting apart, and keeps this module independent of the diagram layer.
+    Omit it and the per-fleet sections are simply absent, which is what the
+    engine-level callers want.
+    """
+    story: list = [
+        Paragraph(f"{plant_name} — Sizing Report", _H1),
+        Paragraph(f"Generated {when} · plant sizing tool", _SUB),
+        HRFlowable(width="100%", thickness=2, color=_GREEN, spaceBefore=4,
+                   spaceAfter=10),
+    ]
+    story += _summary(stage1s, arch, fleets)
+    story += _methodology()
+    for i, stage1 in enumerate(stage1s):
+        story += _stage1(stage1, fleets[i] if fleets else None, len(stage1s))
+    story += _stage2(stage1s, arch, fleets)
+    story += [
+        Spacer(1, 8),
+        HRFlowable(width="100%", thickness=0.5, color=_LINE, spaceAfter=6),
+        Paragraph(
+            "Component parameters come from data/*.yaml. Transformer load/no-load "
+            "losses for the PV stations are design assumptions (the datasheets publish "
+            "only impedance and an EN 50588-1 efficiency tier); see the catalogue "
+            "comments for provenance.", _NOTE),
+    ]
+    return story
+
+
+def build_pdf_report(
+    stage1s: list[SizingResult],
+    arch: PlantArchitecture,
+    *,
+    fleets: list[dict] | None = None,
     plant_name: str = "Plant",
     generated_at: datetime | None = None,
 ) -> bytes:
@@ -371,25 +547,5 @@ def build_pdf_report(
         buf, pagesize=A4, title=f"{plant_name} — Sizing Report",
         leftMargin=_MARGIN, rightMargin=_MARGIN,
         topMargin=14 * mm, bottomMargin=14 * mm)
-
-    story: list = [
-        Paragraph(f"{plant_name} — Sizing Report", _H1),
-        Paragraph(f"Generated {when} · plant sizing tool", _SUB),
-        HRFlowable(width="100%", thickness=2, color=_GREEN, spaceBefore=4,
-                   spaceAfter=10),
-    ]
-    story += _summary(stage1, arch)
-    story += _methodology()
-    story += _stage1(stage1)
-    story += _stage2(stage1, arch)
-    story += [
-        Spacer(1, 8),
-        HRFlowable(width="100%", thickness=0.5, color=_LINE, spaceAfter=6),
-        Paragraph(
-            "Component parameters come from data/*.yaml. Transformer load/no-load "
-            "losses for the PV stations are design assumptions (the datasheets publish "
-            "only impedance and an EN 50588-1 efficiency tier); see the catalogue "
-            "comments for provenance.", _NOTE),
-    ]
-    doc.build(story)
+    doc.build(report_story(stage1s, arch, fleets=fleets, plant_name=plant_name, when=when))
     return buf.getvalue()

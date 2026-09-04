@@ -1306,7 +1306,7 @@ def _segment_payload(segment, forced: bool) -> dict:
     }
 
 
-def _branches_summary(inputs, arch, stage1s) -> list[dict]:
+def branches_summary(inputs, arch, stage1s) -> list[dict]:
     """One entry per fleet, emitted for EVERY design including single-fleet ones.
 
     Compliance is judged per fleet — its own loading against its own maximum,
@@ -1544,11 +1544,10 @@ def map_results(inputs: GraphInputs, stage1s: list[SizingResult],
             # Emitted for a single fleet too: compliance is judged per fleet, so
             # it must not need one code path per plant shape. The flat keys above
             # stay exactly as they were for every other reader.
-            "branches": _branches_summary(inputs, arch, stage1s),
+            "branches": branches_summary(inputs, arch, stage1s),
         }
     else:
-        branches_summary = []
-        branches_summary = _branches_summary(inputs, arch, stage1s)
+        fleets = branches_summary(inputs, arch, stage1s)
         n_stations = sum(b.layout.n_transformers for b in arch.branches)
         n_circuits = sum(len(b.circuits) for b in arch.branches)
         circuit_sizes = [n for b in arch.branches for n in b.layout.circuit_sizes]
@@ -1596,7 +1595,7 @@ def map_results(inputs: GraphInputs, stage1s: list[SizingResult],
             "power_balance_ok": arch.power_balance_ok,
             "v_mv_kv": arch.branches[0].layout.v_mv_kv,
             "v_hv_kv": export.v_hv_kv if export is not None else None,
-            "branches": branches_summary,
+            "branches": fleets,
         }
 
     return {

@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react'
 import { evaluateCompliance } from '../compliance'
 import { fmt, pct } from '../format'
+import { conversionLabelPlural } from '../fleet'
 import { useStore } from '../store'
 import { ResultsTables } from './ResultsTables'
 
@@ -12,6 +13,12 @@ export function ResultsSummary() {
   const solving = useStore((s) => s.solving)
 
   const verdict = useMemo(() => (results ? evaluateCompliance(results, issues) : null), [results, issues])
+  // Named after the fleet when there is only one, so a battery project reads
+  // "PCS units" here and in the tables modal alike. A hybrid's row covers both
+  // fleets, so it stays neutral rather than borrowing one fleet's word for the
+  // other's equipment — the per-fleet blocks in the modal name them properly.
+  const branches = results?.summary.branches ?? []
+  const devices = branches.length === 1 ? conversionLabelPlural(branches[0].kind) : 'conversion devices'
 
   return (
     <div className="results-summary">
@@ -38,7 +45,7 @@ export function ResultsSummary() {
           {results && (
             <div className="results-grid">
               <div>
-                <span className="label">Inverters</span>
+                <span className="label">{devices[0].toUpperCase() + devices.slice(1)}</span>
                 <span className="value">
                   {fmt(results.summary.p_inv_refined_kw / 1000, 2)} MW / {fmt(results.summary.q_inv_refined_kvar / 1000, 2)} Mvar /{' '}
                   {fmt(results.summary.s_inv_refined_kva / 1000, 2)} MVA

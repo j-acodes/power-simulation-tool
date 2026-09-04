@@ -22,7 +22,14 @@ from powertool import (
     size_generation_pq,
 )
 from powertool.architecture import size_branch, size_plant
-from powertool.graph import BranchInputs, GraphInputs, graph_to_inputs, map_results, validate_graph
+from powertool.graph import (
+    BranchInputs,
+    GraphInputs,
+    branches_summary,
+    graph_to_inputs,
+    map_results,
+    validate_graph,
+)
 
 # Stage-1 cable-sizing rule defaults — the same values the Streamlit sidebar
 # initializes to (max_utilization 80%, collection_loss_pct 1.30%,
@@ -388,18 +395,9 @@ def report_pdf(diagram: dict, db: ComponentDatabase, plant_name: str) -> bytes:
         raise ValueError(issues[0].message)
     inputs = graph_to_inputs(diagram, db)
     stage1s, _layouts, arch = solve_architecture(inputs, db)
-    if len(stage1s) > 1:
-        # build_pdf_report takes ONE Stage-1 result, so a hybrid could only be
-        # reported off its first branch — a document that says "45 MW plant"
-        # while describing one of its two fleets, with nothing on the page
-        # admitting the other exists. A report that is quietly wrong is worse
-        # than no report: it is the artefact that leaves the building. Refuse
-        # until ticket 08 (reporting) teaches the PDF about branches.
-        kinds = ", ".join(b.kind for b in inputs.branches)
-        raise ValueError(
-            f"This design has {len(stage1s)} fleets ({kinds}) and the PDF report "
-            f"is still single-fleet — it would describe only the first and "
-            f"silently omit the rest. Export a single-fleet design, or wait for "
-            f"hybrid reporting."
-        )
-    return build_pdf_report(stage1s[0], arch, plant_name=plant_name)
+    # The per-fleet reporting figures the editor gets, handed to the PDF
+    # unchanged so the document and the screen cannot drift apart. This is also
+    # what lifts ticket 07's refusal: the report can now describe every fleet
+    # rather than the first one with the others silently missing.
+    fleets = branches_summary(inputs, arch, stage1s)
+    return build_pdf_report(stage1s, arch, fleets=fleets, plant_name=plant_name)

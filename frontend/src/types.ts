@@ -49,6 +49,21 @@ export interface TierSettings {
  *  included, so compliance has one shape to read rather than one per plant. */
 export interface BranchSummary {
   kind: FleetKind
+  p_inv_kw: number
+  q_inv_kvar: number
+  s_inv_kva: number
+  pf_inv: number
+  p_inv_refined_kw: number
+  q_inv_refined_kvar: number
+  s_inv_refined_kva: number
+  correction_factor: number
+  p_poc_target_kw: number | null
+  p_poc_delivered_kw: number
+  p_poc_refined_delivered_kw: number | null
+  n_stations: number
+  n_circuits: number
+  circuit_sizes: number[]
+  s_fleet_kva: number
   fleet_loading: number
   loading_ok: boolean
   max_loading: number

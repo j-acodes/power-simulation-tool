@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { conversionLabel, conversionLabelPlural, fleetLabel } from '../fleet'
 import { reportPdf } from '../api'
 import { nodeLabel } from '../canvas/nodeData'
 import { ModalShell } from '../components/Modal'
@@ -58,6 +59,7 @@ export function ResultsTables({ onClose }: { onClose: () => void }) {
       {reportError && <p className="error">Report: {reportError}</p>}
       <div className="results-tables">
         <PlantSummary results={results} />
+        <FleetSummaries results={results} />
         <Stations diagram={diagram} results={results} />
         <Cables diagram={diagram} results={results} />
       </div>
@@ -79,18 +81,72 @@ function Row({ label, value }: { label: string; value: string }) {
   )
 }
 
+/** One block per fleet, shown only when there is more than one.
+ *
+ * A hybrid's two fleets are two independent cascades that happen to share an
+ * export step, so merging their figures into the plant table would produce
+ * numbers belonging to no fleet in particular — which is exactly what a design
+ * reviewer cannot act on. */
+function FleetSummaries({ results }: { results: SolveResults }) {
+  const branches = results.summary.branches
+  if (branches.length < 2) return null
+  return (
+    <>
+      {branches.map((branch) => (
+        <section key={branch.kind}>
+          <h3>{`${fleetLabel(branch.kind)} fleet`}</h3>
+          <div className="results-figures">
+            <Row
+              label={`Required ${conversionLabelPlural(branch.kind)}`}
+              value={`${fmt(branch.p_inv_refined_kw / 1000, 2)} MW / ${fmt(branch.q_inv_refined_kvar / 1000, 2)} Mvar / ${fmt(branch.s_inv_refined_kva / 1000, 2)} MVA`}
+            />
+            <Row
+              label="Fleet loading"
+              value={`${pct(branch.fleet_loading)} of ${pct(branch.max_loading)} max${branch.loading_ok ? '' : ' — OVERLOADED'}`}
+            />
+            <Row
+              label="POC delivered"
+              value={`${fmt((branch.p_poc_refined_delivered_kw ?? branch.p_poc_delivered_kw) / 1000, 2)} MW / target ${fmt((branch.p_poc_target_kw ?? 0) / 1000, 2)} MW`}
+            />
+            {branch.containers != null && <Row label="Containers" value={String(branch.containers)} />}
+            {branch.e_delivered_kwh != null && branch.e_required_kwh != null && (
+              <Row
+                label="Delivered energy"
+                value={`${fmt(branch.e_delivered_kwh / 1000, 1)} MWh / needs ${fmt(branch.e_required_kwh / 1000, 1)} MWh${branch.energy_ok ? '' : ' — SHORT'}`}
+              />
+            )}
+            {branch.bess_aux_p_kw > 0 && (
+              <Row
+                label="Container auxiliaries"
+                value={`${fmt(branch.bess_aux_p_kw, 0)} kW / ${fmt(branch.bess_aux_q_kvar, 0)} kvar — separately supplied`}
+              />
+            )}
+          </div>
+        </section>
+      ))}
+    </>
+  )
+}
+
 function PlantSummary({ results }: { results: SolveResults }) {
   const s = results.summary
   const delivered = s.p_poc_refined_delivered_kw ?? s.p_poc_delivered_kw
+  // A single-fleet plant's conversion device is named after that fleet; a
+  // hybrid's plant-level row covers both, so it stays neutral rather than
+  // picking one fleet's word for the other's equipment. Per-fleet figures are
+  // named individually in FleetSummaries below.
+  const single = s.branches.length === 1 ? s.branches[0].kind : undefined
+  const device = s.branches.length === 1 ? conversionLabel(single) : 'conversion'
+  const devices = s.branches.length === 1 ? conversionLabelPlural(single) : 'conversion devices'
   return (
     <section>
       <h3>Plant summary</h3>
       <div className="results-figures">
         <Row
-          label="Required inverters"
+          label={`Required ${devices}`}
           value={`${fmt(s.p_inv_refined_kw / 1000, 2)} MW / ${fmt(s.q_inv_refined_kvar / 1000, 2)} Mvar / ${fmt(s.s_inv_refined_kva / 1000, 2)} MVA`}
         />
-        <Row label="Power factor at inverter" value={fmt(s.pf_inv, 3)} />
+        <Row label={`Power factor at ${device}`} value={fmt(s.pf_inv, 3)} />
         <Row label="Loss-cascade correction" value={fmt(s.correction_factor, 4)} />
         <Row
           label="POC delivered"
@@ -114,7 +170,7 @@ function PlantSummary({ results }: { results: SolveResults }) {
         <Row label="Transformer losses" value={`${fmt(s.total_transformer_loss_kw, 1)} kW`} />
         <Row
           label="Total active losses"
-          value={`${fmt(s.total_active_loss_kw, 1)} kW (${fmt(s.loss_percent_of_p_inv, 2)}% of P inverter)`}
+          value={`${fmt(s.total_active_loss_kw, 1)} kW (${fmt(s.loss_percent_of_p_inv, 2)}% of P ${device})`}
         />
         <Row
           label="Voltages"

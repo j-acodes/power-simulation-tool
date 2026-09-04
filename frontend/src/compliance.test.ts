@@ -6,6 +6,12 @@ import type { BranchSummary, Issue, ResultsSummary, SolveResults } from './types
 function fleet(overrides: Partial<BranchSummary> = {}): BranchSummary {
   return {
     kind: 'pv',
+    p_inv_refined_kw: 45000,
+    q_inv_refined_kvar: 14800,
+    s_inv_refined_kva: 47370,
+    p_poc_target_kw: 45000,
+    p_poc_delivered_kw: 45000,
+    p_poc_refined_delivered_kw: 45000,
     fleet_loading: 0.83,
     loading_ok: true,
     max_loading: 1.0,
