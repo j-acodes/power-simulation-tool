@@ -310,17 +310,27 @@ def test_bess_single_fleet_design_validates_and_solves_like_pv():
     bess_result = client.post("/api/solve", json=bess).json()
     assert bess_result["issues"] == []
 
-    # Every sized number matches; the fleet kind is the one field that must
-    # NOT — it was dead when this test was written (ticket 02 added the field,
-    # ticket 05 wires it), so a BESS station now reports itself as BESS while
-    # sizing exactly as the PV one does. That is the whole claim: the fleet
-    # kind is a label on identical physics, not an input to it.
+    # The fleet kind is a label on identical CONVERSION physics: the PCS sizes
+    # exactly as the inverter does. Two things legitimately differ, and both are
+    # deliberate rather than drift:
+    #   - fleet_kind itself, dead when this test was written (ticket 02 added
+    #     the field, ticket 05 wired it);
+    #   - everything downstream of the busbar, because ticket 07 attaches the
+    #     BESS solution's worst-case auxiliary draw there.
     bess_station = dict(bess_result["results"]["nodes"]["s1"])
     pv_station = dict(pv_result["results"]["nodes"]["s1"])
     assert bess_station.pop("fleet_kind") == "bess"
     assert pv_station.pop("fleet_kind") == "pv"
     assert bess_station == pv_station
-    assert bess_result["results"]["summary"] == pv_result["results"]["summary"]
+
+    # Every sized number still matches, including after ticket 07 gave BESS
+    # solutions an auxiliary draw: that draw is fed from a separate supply, so
+    # it never enters the sizing cascade. The branch summary reports it (see
+    # tests/test_hybrid.py) without sizing anything against it.
+    bess_summary = dict(bess_result["results"]["summary"])
+    pv_summary = dict(pv_result["results"]["summary"])
+    assert bess_summary.pop("branches") != pv_summary.pop("branches")  # fleet kind, aux
+    assert bess_summary == pv_summary
 
 
 # --- graph_to_inputs: the positional bijection ------------------------------

@@ -186,3 +186,143 @@ def test_two_undeclared_busbars_are_still_a_duplicate():
     ]
     issues = validate_graph(diagram, db)
     assert "duplicate_busbar" in {i.code for i in issues}
+
+
+# --- BESS sizing and compliance (ticket 07) ---------------------------------
+
+def _bess_only(duration=None, model="GENERIC_BESS_TX_2750_LV069",
+               solution="GENERIC_BESS_5MWH_LV069", p_target_mw=3.0):
+    """A single-fleet BESS plant, optionally with a discharge duration set."""
+    d = _minimal()
+    d["settings"]["tiers"]["lv_kv"] = 0.69
+    d["nodes"][0]["props"]["p_target_mw"] = p_target_mw
+    d["nodes"][1]["props"]["fleet_kind"] = "bess"
+    d["nodes"][2]["props"] = {"mode": "catalogue", "model": model,
+                              "fleet_kind": "bess", "bess_solution": solution}
+    if duration is not None:
+        d["settings"]["rules"]["discharge_hours"] = duration
+    return d
+
+
+def test_container_count_and_delivered_energy_come_from_the_table():
+    from powertool.graph import graph_to_inputs
+    # GENERIC_BESS_5MWH_LV069: 4 containers at 2 h, 8 at 4 h, 5000 kWh each.
+    for hours, per_station in ((2.0, 4), (4.0, 8)):
+        branch = graph_to_inputs(_bess_only(duration=hours), db).branches[0]
+        assert branch.containers == per_station          # one station drawn
+        assert branch.e_delivered_kwh == per_station * 5000.0
+
+
+def test_an_unsupported_duration_is_rejected_server_side():
+    # The UI offers a select, so this is only reachable by hand-editing the
+    # payload — which is exactly why it is checked here rather than trusted.
+    issues = validate_graph(_bess_only(duration=3.0), db)
+    assert "unsupported_duration" in {i.code for i in issues}
+
+
+def test_a_supported_duration_validates():
+    assert validate_graph(_bess_only(duration=4.0), db) == []
+
+
+def test_a_bess_design_without_a_duration_still_solves():
+    # Every design saved before this ticket has no discharge_hours. It must keep
+    # working; the energy gate simply has nothing to judge it against.
+    from powertool.graph import graph_to_inputs
+    assert validate_graph(_bess_only(), db) == []
+    branch = graph_to_inputs(_bess_only(), db).branches[0]
+    assert branch.containers is None and branch.e_delivered_kwh is None
+
+
+def test_the_energy_gate_is_independent_of_the_loading_gate():
+    """Both gates are hard, and an engineer has to see WHICH one failed.
+
+    One drawn station of GENERIC_BESS_5MWH_LV069 gives 8 containers at 4 h
+    (read from the table, not derived), so 40 MWh delivered whatever the target.
+    Raising the target raises the energy owed without touching what is
+    installed, which is how the two gates are pulled apart here.
+    """
+    ok = client.post("/api/solve", json=_bess_only(duration=4.0, p_target_mw=3.0)).json()
+    assert ok["issues"] == []
+    fleet = ok["results"]["summary"]["branches"][0]
+    assert fleet["containers"] == 8
+    assert fleet["e_delivered_kwh"] == 40_000.0
+    assert fleet["e_required_kwh"] == 12_000.0   # 3 MW for 4 h
+    assert fleet["energy_ok"] is True
+
+    # 12 MW for 4 h owes 48 MWh; the same single station still delivers 40 MWh.
+    short = client.post("/api/solve", json=_bess_only(duration=4.0, p_target_mw=12.0)).json()
+    fleet = short["results"]["summary"]["branches"][0]
+    assert fleet["e_delivered_kwh"] == 40_000.0
+    assert fleet["e_required_kwh"] == 48_000.0
+    assert fleet["energy_ok"] is False
+    # ...and the loading gate is reported separately, against this fleet's own
+    # maximum, so the engineer can tell the two failures apart.
+    assert fleet["loading_ok"] is False
+    assert fleet["max_loading"] == 1.0
+
+
+def test_bess_aux_is_reported_but_never_sizes_the_pcs():
+    """A battery station's PCS is sized for export duty alone.
+
+    Keeping the solution's auxiliary draw out of the Stage-1 chain is NOT enough
+    on its own, and that is the trap this test exists for. The refinement drives
+    each branch's delivered power up to its target, so an auxiliary load
+    subtracted at the busbar gets compensated straight back into the refined
+    conversion figure — the PCS is upsized to carry it by the back door, while
+    the nameplate figure stays innocently clean. Asserting only `s_inv_kva`
+    proves nothing: it CANNOT move, because the aux is never passed to
+    size_generation_pq. The refined figure is the one that sizes real equipment,
+    so it is the one asserted here.
+    """
+    import dataclasses
+    from powertool.database import ComponentDatabase
+    from backend.solve import solve_diagram
+
+    design = _bess_only(duration=4.0)
+    design["nodes"] = [n for n in design["nodes"] if n["kind"] != "aux"]
+    design["edges"] = [e for e in design["edges"] if e["id"] != "e_aux"]
+
+    # The same design against a catalogue whose solution draws no auxiliary
+    # power at all. Every sizing figure must be identical.
+    zero_aux = dataclasses.replace(db.bess_solutions["GENERIC_BESS_5MWH_LV069"],
+                                   aux_p_kw=0.0, aux_q_kvar=0.0)
+    db_zero = ComponentDatabase(db.cables, db.transformers,
+                                {**db.bess_solutions,
+                                 "GENERIC_BESS_5MWH_LV069": zero_aux},
+                                db.bess_transformers)
+
+    with_aux = solve_diagram(design, db)
+    without = solve_diagram(design, db_zero)
+    assert with_aux["issues"] == [] and without["issues"] == []
+    a = with_aux["results"]["summary"]["branches"][0]
+    b = without["results"]["summary"]["branches"][0]
+
+    for key in ("s_inv_kva", "s_inv_refined_kva", "p_inv_refined_kw",
+                "correction_factor", "p_poc_delivered_kw",
+                "p_poc_refined_delivered_kw"):
+        assert a[key] == pytest.approx(b[key]), key
+
+    # Reported all the same — the site still has to supply it.
+    assert a["bess_aux_p_kw"] == 40.0     # one station, worst case from the sheet
+    assert a["bess_aux_q_kvar"] == 10.0
+    assert b["bess_aux_p_kw"] == 0.0
+
+
+def test_bess_aux_is_summed_across_the_fleet():
+    from powertool.graph import graph_to_inputs
+    design = _bess_only(duration=4.0)
+    branch = graph_to_inputs(design, db).branches[0]
+    assert branch.bess_aux_p_kw == 40.0
+    assert branch.bess_aux_q_kvar == 10.0
+    # The drawn aux node is a separate figure and stays separate.
+    assert branch.aux_p_kw == 50.0
+
+
+def test_container_count_is_reported_on_each_station():
+    solved = client.post("/api/solve", json=_bess_only(duration=2.0)).json()
+    assert solved["issues"] == []
+    assert solved["results"]["nodes"]["s1"]["containers"] == 4
+    # A PV station has no container count at all, rather than a zero that would
+    # read as "none needed".
+    pv = client.post("/api/solve", json=_minimal()).json()
+    assert "containers" not in pv["results"]["nodes"]["s1"]

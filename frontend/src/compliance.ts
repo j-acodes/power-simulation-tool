@@ -1,4 +1,4 @@
-import type { Issue, SolveResults } from './types'
+import type { BranchSummary, Issue, SolveResults } from './types'
 
 export interface ComplianceVerdict {
   compliant: boolean
@@ -8,13 +8,44 @@ export interface ComplianceVerdict {
 /** Delivered active power must land within this fraction of the POC target. */
 const POWER_TOLERANCE = 0.005
 
+const FLEET_LABEL: Record<BranchSummary['kind'], string> = { pv: 'PV', bess: 'BESS' }
+
+/** The hard gates one fleet can fail, phrased so the engineer can see which
+ *  gate went and by how much. */
+function fleetReasons(branch: BranchSummary): string[] {
+  const label = FLEET_LABEL[branch.kind] ?? branch.kind
+  const reasons: string[] = []
+
+  if (!branch.loading_ok) {
+    reasons.push(
+      `The ${label} fleet is overloaded — ${(branch.fleet_loading * 100).toFixed(0)}% of its ` +
+        `combined rating, against a ${(branch.max_loading * 100).toFixed(0)}% maximum.`,
+    )
+  }
+
+  // energy_ok is null when no discharge duration was chosen (every design saved
+  // before this gate existed). Judging it against an invented duration would be
+  // worse than not judging it.
+  if (branch.energy_ok === false && branch.e_delivered_kwh != null && branch.e_required_kwh != null) {
+    const short = branch.e_required_kwh - branch.e_delivered_kwh
+    reasons.push(
+      `The ${label} fleet delivers ${(branch.e_delivered_kwh / 1000).toFixed(1)} MWh, ` +
+        `short of the ${(branch.e_required_kwh / 1000).toFixed(1)} MWh its point-of-connection ` +
+        `power owes over the discharge duration — ${(short / 1000).toFixed(1)} MWh under.`,
+    )
+  }
+
+  return reasons
+}
+
 /**
  * POC grid-compliance verdict, derived entirely from the last solve's summary
  * flags (already computed by the engine) plus any outstanding validation
  * issues. All criteria must hold for a COMPLIANT verdict:
  *   - delivered active power within 0.5% of the target
  *   - power_balance_ok
- *   - the station fleet not overloaded (loading_ok)
+ *   - every fleet within its own maximum loading (per-fleet, hard gate)
+ *   - every BESS fleet delivering its required energy (per-fleet, hard gate)
  *   - every circuit within its current cap (all_current_ok)
  *   - zero validation issues
  */
@@ -45,11 +76,12 @@ export function evaluateCompliance(results: SolveResults, issues: Issue[]): Comp
     reasons.push('The internal power-balance check failed.')
   }
 
-  if (!summary.loading_ok) {
-    reasons.push(
-      `The station fleet is overloaded — ${(summary.fleet_loading * 100).toFixed(0)}% of its ` +
-        `combined rating.`,
-    )
+  // Loading and energy are BOTH hard gates, judged per fleet against that
+  // fleet's own limits. A hybrid can have a compliant PV fleet beside an
+  // overloaded BESS one, and a plant-wide "the fleet is overloaded" would say
+  // neither which fleet nor against what maximum.
+  for (const branch of summary.branches ?? []) {
+    reasons.push(...fleetReasons(branch))
   }
 
   if (!summary.all_current_ok) {

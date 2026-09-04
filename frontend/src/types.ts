@@ -45,6 +45,25 @@ export interface TierSettings {
   hv_kv: number | null // null -> MV interconnection, no MV/HV transformer
 }
 
+/** One fleet's compliance figures. Emitted for every design, single-fleet
+ *  included, so compliance has one shape to read rather than one per plant. */
+export interface BranchSummary {
+  kind: FleetKind
+  fleet_loading: number
+  loading_ok: boolean
+  max_loading: number
+  /** Container auxiliaries this fleet needs supplied. Reported, never sized
+   *  against: they are fed separately, never by the PCS. */
+  bess_aux_p_kw: number
+  bess_aux_q_kvar: number
+  /** BESS only; null for a PV fleet, and null when no discharge duration is
+   *  set — the energy gate then has nothing to judge against. */
+  containers: number | null
+  e_delivered_kwh: number | null
+  e_required_kwh: number | null
+  energy_ok: boolean | null
+}
+
 export interface RuleSettings {
   max_utilization: number
   collection_loss_pct: number
@@ -55,6 +74,9 @@ export interface RuleSettings {
   /** Per-fleet overrides; each falls back to `max_loading` when unset. */
   max_loading_pv?: number
   max_loading_bess?: number
+  /** Discharge duration [h]. Restricted to the durations every selected BESS
+   *  solution tabulates; unset means the energy gate does not apply. */
+  discharge_hours?: number
 }
 
 export interface DiagramSettings {
@@ -105,7 +127,11 @@ export interface StationNodeResult {
   /** Which fleet the station belongs to. A separate axis from `kind`: the
    *  sizing physics is identical either way, so this is a label, not an
    *  input. Absent on results produced before the fleet kind was wired. */
-  fleet_kind?: 'pv' | 'bess'
+  fleet_kind?: FleetKind
+  /** Containers at the design's discharge duration, read from this station's
+   *  own solution table. Absent for a PV station, and absent when no discharge
+   *  duration is set. */
+  containers?: number
   circuit: number
   position: number
   model: string
@@ -168,6 +194,8 @@ export type NodeResult =
   | PocNodeResult
 
 export interface ResultsSummary {
+  /** Per-fleet figures, always present — see BranchSummary. */
+  branches: BranchSummary[]
   p_inv_kw: number
   q_inv_kvar: number
   s_inv_kva: number

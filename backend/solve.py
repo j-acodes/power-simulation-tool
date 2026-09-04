@@ -306,6 +306,20 @@ def solve_architecture(inputs: GraphInputs, db: ComponentDatabase):
             max_loss_percent_base=inputs.collection_loss_pct,
             segment_lengths=branch.segment_lengths,
             segment_candidates=branch.segment_candidates,
+            # DRAWN aux only. The BESS solutions' own auxiliary draw is
+            # deliberately absent from the sizing cascade: a battery station's
+            # PCS is sized for export duty alone, and the container auxiliaries
+            # are fed from a separate supply rather than from the batteries.
+            #
+            # Keeping it out of the Stage-1 chain alone was not enough. The
+            # refinement drives each branch's DELIVERED power up to its target,
+            # so an auxiliary load subtracted at the busbar is compensated back
+            # into the refined conversion figure — the PCS gets upsized to carry
+            # it, by the back door. The nameplate figure stayed clean while the
+            # figure that actually sizes the equipment did not.
+            #
+            # The draw is reported per branch instead (see the branch summary),
+            # because the site still has to supply it.
             aux_p_kw=branch.aux_p_kw,
             aux_q_kvar=branch.aux_q_kvar,
         )

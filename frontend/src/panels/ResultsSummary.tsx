@@ -65,6 +65,35 @@ export function ResultsSummary() {
               </div>
             </div>
           )}
+          {/* A BESS design has to answer two more questions than a PV one: how
+              many containers it needs, and how much energy it delivers against
+              what it owes. Both are read off the supplier's own table, so they
+              belong in front of the engineer rather than only inside a
+              compliance failure message. */}
+          {results?.summary.branches
+            .filter((branch) => branch.kind === 'bess' && branch.containers != null)
+            .map((branch) => (
+              <div className="results-grid" key={branch.kind}>
+                <div>
+                  <span className="label">BESS containers</span>
+                  <span className="value">{branch.containers}</span>
+                </div>
+                <div>
+                  <span className="label">Energy delivered</span>
+                  <span className={`value${branch.energy_ok === false ? ' bad' : ''}`}>
+                    {fmt((branch.e_delivered_kwh ?? 0) / 1000, 1)} MWh
+                    {branch.e_required_kwh != null &&
+                      ` / needs ${fmt(branch.e_required_kwh / 1000, 1)} MWh`}
+                  </span>
+                </div>
+                <div>
+                  <span className="label">Container auxiliaries</span>
+                  <span className="value">
+                    {fmt(branch.bess_aux_p_kw, 0)} kW / {fmt(branch.bess_aux_q_kvar, 0)} kvar
+                  </span>
+                </div>
+              </div>
+            ))}
           {results && (
             <button type="button" className="results-tables-link" onClick={() => setShowTables(true)}>
               Full results…

@@ -1,11 +1,21 @@
 import { useStore } from '../store'
+import { useCatalogue } from '../hooks/useCatalogue'
+import { supportedDurations } from '../bess'
 
 export function SettingsPanel() {
+  const diagram = useStore((s) => s.diagram)
+  const catalogue = useCatalogue()
   const settings = useStore((s) => s.diagram.settings)
   const solvePaused = useStore((s) => s.solvePaused)
   const updateSettings = useStore((s) => s.updateSettings)
   const setSolvePaused = useStore((s) => s.setSolvePaused)
   const { tiers, rules } = settings
+  // Only offered once a BESS station is drawn, and only over the durations the
+  // selected solutions actually tabulate — the container count is read from the
+  // supplier's table, never interpolated, so a duration nobody sells has no
+  // answer. Rendering it as a select is what makes that invalid state
+  // unreachable rather than merely rejected.
+  const durations = supportedDurations(diagram, catalogue?.bess_solutions ?? [])
 
   return (
     <div className="settings-panel">
@@ -118,6 +128,36 @@ export function SettingsPanel() {
           </label>
         )
       })}
+
+      {durations.length > 0 && (
+        <>
+          <h3>BESS</h3>
+          <label className="field inline">
+            <span>Discharge duration (h)</span>
+            <select
+              value={rules.discharge_hours ?? ''}
+              onChange={(e) =>
+                updateSettings({
+                  rules: {
+                    ...rules,
+                    discharge_hours: e.target.value === '' ? undefined : Number(e.target.value),
+                  },
+                })
+              }
+            >
+              <option value="">— not set —</option>
+              {durations.map((hours) => (
+                <option key={hours} value={hours}>{`${hours} h`}</option>
+              ))}
+            </select>
+          </label>
+          {rules.discharge_hours === undefined && (
+            <p className="panel-hint">
+              Without a duration the delivered-energy check has nothing to judge against.
+            </p>
+          )}
+        </>
+      )}
 
       <h3>Solve</h3>
       <label className="field inline">

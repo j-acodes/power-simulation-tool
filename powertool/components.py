@@ -212,3 +212,32 @@ class BessSolution:
     aux_p_kw: float                          # worst case, from the spec sheet
     aux_q_kvar: float
     containers_by_duration: dict[float, int]  # discharge hours -> containers per station
+
+    @property
+    def supported_durations(self) -> list[float]:
+        """The discharge durations this solution sells, ascending."""
+        return sorted(self.containers_by_duration)
+
+    def containers_at(self, hours: float) -> int:
+        """Containers per station at ``hours`` of discharge, read verbatim.
+
+        Raises ``KeyError`` for a duration the solution does not tabulate. That
+        refusal is the point: 3 h sits between the 2 h and 4 h entries, and any
+        interpolating or rounding rule would cheerfully invent a container count
+        that no supplier has quoted and that would not survive a design review.
+        There is no figure, so there is no answer to give — callers are expected
+        to have restricted the choice to :attr:`supported_durations` first.
+
+        Matching is tolerant of float representation only: the same duration
+        reaches us from YAML and from a JSON payload as 2, 2.0 or 2.0000000001,
+        which an exact dict lookup would miss. That is not interpolation — it
+        still resolves to a duration the table actually contains.
+        """
+        for tabulated, count in self.containers_by_duration.items():
+            if math.isclose(tabulated, hours, rel_tol=1e-9, abs_tol=1e-9):
+                return count
+        raise KeyError(
+            f"{self.name} does not sell a {hours:g} h discharge — it tabulates "
+            f"{', '.join(f'{h:g} h' for h in self.supported_durations)}. Container "
+            f"counts are read from the supplier's table, never interpolated."
+        )

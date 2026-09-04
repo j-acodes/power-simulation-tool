@@ -353,6 +353,42 @@ def _singleton(nodes: dict[str, dict], kind: str, issues: list[GraphIssue],
     return found[0]
 
 
+def _bess_solutions_in(nodes: dict[str, dict], db) -> list:
+    """Every BESS solution the drawn stations select, first appearance first.
+
+    The discharge duration is one design-level choice, so it has to be one that
+    EVERY selected solution tabulates — a design mixing two products can only be
+    run at a duration they both sell.
+    """
+    found = []
+    for node in nodes.values():
+        if node["kind"] != "station":
+            continue
+        props = _props(node)
+        if _fleet_kind(props) != "bess":
+            continue
+        solution = db.bess_solutions.get(props.get("bess_solution"))
+        if solution is not None and solution not in found:
+            found.append(solution)
+    return found
+
+
+def supported_durations(nodes: dict[str, dict], db) -> list[float]:
+    """Durations every selected BESS solution sells, ascending.
+
+    Empty when the design has no BESS station, and empty when two solutions
+    tabulate nothing in common — in which case no duration is valid and the
+    design has to change product, not duration.
+    """
+    solutions = _bess_solutions_in(nodes, db)
+    if not solutions:
+        return []
+    common = set(solutions[0].supported_durations)
+    for solution in solutions[1:]:
+        common &= set(solution.supported_durations)
+    return sorted(common)
+
+
 def _stations_under(nodes: dict[str, dict], edges: list[dict],
                     busbar_id: str) -> list[str]:
     """The stations reachable from a busbar through station-to-station links.
@@ -777,6 +813,33 @@ def _check_props(nodes, tree, db, diagram, issues) -> None:
                         f"Aux load '{nid}' has a non-numeric {key}.", node_id=nid))
 
 
+def _check_discharge_duration(nodes: dict[str, dict], db, diagram: dict,
+                              issues: list[GraphIssue]) -> None:
+    """The chosen discharge duration must be one the design's BESS solutions sell.
+
+    The editor renders this as a select over :func:`supported_durations`, so an
+    invalid value is unreachable through the interface. It is checked here all
+    the same: a payload can be hand-edited or restored from an older design, and
+    a duration nobody sells has no container count to read. Rejecting it is what
+    lets :meth:`BessSolution.containers_at` stay a plain table lookup with no
+    rounding or interpolation rule anywhere.
+
+    An unset duration is not an error — every design saved before this ticket
+    has none, and the energy gate simply does not apply to them.
+    """
+    hours = _rule_opt(diagram, "discharge_hours")
+    if hours is None:
+        return
+    allowed = supported_durations(nodes, db)
+    if not allowed:
+        return  # no BESS station, or an unknown solution already reported
+    if not any(math.isclose(h, hours, rel_tol=1e-9, abs_tol=1e-9) for h in allowed):
+        issues.append(GraphIssue(
+            "unsupported_duration",
+            f"No BESS solution in this design sells a {hours:g} h discharge — "
+            f"choose one of {', '.join(f'{h:g} h' for h in allowed)}."))
+
+
 def validate_graph(diagram: dict, db) -> list[GraphIssue]:
     """Check a drawn diagram against the topology contract of this module.
 
@@ -819,6 +882,7 @@ def validate_graph(diagram: dict, db) -> list[GraphIssue]:
     _check_roles(nodes, tree, poc_id, busbar_ids, issues)
     _check_edges(diagram, nodes, tree, edges, db, issues)
     _check_props(nodes, tree, db, diagram, issues)
+    _check_discharge_duration(nodes, db, diagram, issues)
     return issues
 
 
@@ -861,6 +925,18 @@ class BranchInputs:
     max_loading: float
     p_poc_target_kw: float
     q_poc_target_kvar: float = 0.0
+    # BESS-only, all None for a PV fleet. The solution's worst-case auxiliary
+    # draw is summed over the fleet's stations and lands at the BUSBAR (Stage 2)
+    # — deliberately not in the collection chain, which would inflate the PCS
+    # apparent power. A battery station's PCS is sized for export duty alone.
+    bess_aux_p_kw: float = 0.0
+    bess_aux_q_kvar: float = 0.0
+    # Containers and energy are None when no discharge duration is set — every
+    # design saved before this ticket. The energy gate then has nothing to judge.
+    containers: int | None = None
+    containers_by_station: dict[str, int] = field(default_factory=dict)
+    e_delivered_kwh: float | None = None
+    e_required_kwh: float | None = None
 
     @property
     def fleet(self) -> list[tuple[Transformer, int]]:
@@ -878,6 +954,14 @@ class BranchInputs:
     @property
     def n_stations(self) -> int:
         return sum(len(c) for c in self.circuits)
+
+    @property
+    def energy_ok(self) -> bool | None:
+        """Whether the fleet delivers its required energy, or None when no
+        discharge duration was chosen and the gate does not apply."""
+        if self.e_delivered_kwh is None or self.e_required_kwh is None:
+            return None
+        return self.e_delivered_kwh >= self.e_required_kwh - 1e-9
 
 
 @dataclass
@@ -1089,6 +1173,9 @@ def graph_to_inputs(diagram: dict, db) -> GraphInputs:
         segment_candidates: dict[tuple[int, int], list[Cable]] = {}
         aux_ids: list[str] = []
         aux_p_kw = aux_q_kvar = 0.0
+        bess_aux_p_kw = bess_aux_q_kvar = 0.0
+        containers: int | None = None
+        containers_by_station: dict[str, int] = {}
 
         for child, edge in tree.children[busbar_id]:
             if nodes[child]["kind"] == "aux":
@@ -1121,6 +1208,32 @@ def graph_to_inputs(diagram: dict, db) -> GraphInputs:
             circuits.append(transformers)
             station_ids.append(ids)
 
+        # BESS fleet figures, read per station from its own solution: the
+        # worst-case auxiliary draw (summed, lands at the busbar) and the
+        # container count at the design's discharge duration (read verbatim from
+        # the supplier's table — see BessSolution.containers_at).
+        e_delivered_kwh: float | None = None
+        if kind == "bess":
+            hours = _rule_opt(diagram, "discharge_hours")
+            per_station = [
+                (sid, db.bess_solutions.get(_props(nodes[sid]).get("bess_solution")))
+                for ids in station_ids for sid in ids
+            ]
+            for _sid, solution in per_station:
+                if solution is None:
+                    continue  # unknown solution: already a validation issue
+                bess_aux_p_kw += solution.aux_p_kw
+                bess_aux_q_kvar += solution.aux_q_kvar
+            if hours is not None and per_station and all(s is not None for _, s in per_station):
+                containers_by_station = {
+                    sid: solution.containers_at(hours) for sid, solution in per_station
+                }
+                containers = sum(containers_by_station.values())
+                e_delivered_kwh = sum(
+                    containers_by_station[sid] * solution.e_container_kwh
+                    for sid, solution in per_station
+                )
+
         branches.append(BranchInputs(
             kind=kind,
             busbar_id=busbar_id,
@@ -1134,6 +1247,17 @@ def graph_to_inputs(diagram: dict, db) -> GraphInputs:
             aux_q_kvar=aux_q_kvar,
             max_loading=_max_loading(kind),
             p_poc_target_kw=p_target_kw,
+            bess_aux_p_kw=bess_aux_p_kw,
+            bess_aux_q_kvar=bess_aux_q_kvar,
+            containers=containers,
+            containers_by_station=containers_by_station,
+            e_delivered_kwh=e_delivered_kwh,
+            # The energy this fleet owes: its own point-of-connection power for
+            # the whole discharge duration.
+            e_required_kwh=(
+                None if e_delivered_kwh is None
+                else p_target_kw * (_rule_opt(diagram, "discharge_hours") or 0.0)
+            ),
         ))
 
     return GraphInputs(
@@ -1182,6 +1306,51 @@ def _segment_payload(segment, forced: bool) -> dict:
     }
 
 
+def _branches_summary(inputs, arch, stage1s) -> list[dict]:
+    """One entry per fleet, emitted for EVERY design including single-fleet ones.
+
+    Compliance is judged per fleet — its own loading against its own maximum,
+    its own delivered energy against its own duty — so the shape it reads from
+    must not change with the number of fleets. A single-fleet design used to
+    carry these figures only as flat summary keys, which meant two code paths
+    for one question.
+    """
+    out: list[dict] = []
+    for branch_inputs, branch_arch, refinement, stage1 in zip(
+        inputs.branches, arch.branches, arch.branch_refinements, stage1s
+    ):
+        out.append({
+            "kind": branch_inputs.kind,
+            "p_inv_kw": stage1.p_inv_kw,
+            "q_inv_kvar": stage1.q_inv_kvar,
+            "s_inv_kva": stage1.s_inv_kva,
+            "pf_inv": stage1.pf_inv,
+            "p_inv_refined_kw": refinement.p_inv_refined_kw,
+            "q_inv_refined_kvar": refinement.q_inv_refined_kvar,
+            "s_inv_refined_kva": refinement.s_inv_refined_kva,
+            "correction_factor": refinement.correction_factor,
+            "p_poc_target_kw": refinement.p_poc_target_kw,
+            "p_poc_delivered_kw": refinement.p_poc_delivered_kw,
+            "p_poc_refined_delivered_kw": refinement.p_poc_refined_delivered_kw,
+            "n_stations": branch_arch.layout.n_transformers,
+            "n_circuits": len(branch_arch.circuits),
+            "circuit_sizes": branch_arch.layout.circuit_sizes,
+            "s_fleet_kva": branch_arch.layout.s_fleet_kva,
+            "fleet_loading": branch_arch.layout.fleet_loading,
+            "loading_ok": branch_arch.layout.loading_ok,
+            "max_loading": branch_inputs.max_loading,
+            # The container auxiliaries this fleet needs supplied. Reported, not
+            # sized against: it is fed separately, never by the PCS.
+            "bess_aux_p_kw": branch_inputs.bess_aux_p_kw,
+            "bess_aux_q_kvar": branch_inputs.bess_aux_q_kvar,
+            "containers": branch_inputs.containers,
+            "e_delivered_kwh": branch_inputs.e_delivered_kwh,
+            "e_required_kwh": branch_inputs.e_required_kwh,
+            "energy_ok": branch_inputs.energy_ok,
+        })
+    return out
+
+
 def map_results(inputs: GraphInputs, stage1s: list[SizingResult],
                 arch: PlantArchitecture) -> dict:
     """Key the engine results back to the canvas: ``{edges, nodes, summary,
@@ -1228,6 +1397,11 @@ def map_results(inputs: GraphInputs, stage1s: list[SizingResult],
                     # frontend unable to tell a station from a busbar.
                     "kind": "station",
                     "fleet_kind": station.kind,
+                    # Containers at the design's discharge duration, read from
+                    # this station's own solution table. Absent for a PV station
+                    # and when no duration is set.
+                    **({"containers": branch_inputs.containers_by_station[node_id]}
+                       if node_id in branch_inputs.containers_by_station else {}),
                     "circuit": circuit.index,
                     "position": station.index,
                     "model": station.model,
@@ -1367,32 +1541,14 @@ def map_results(inputs: GraphInputs, stage1s: list[SizingResult],
             "power_balance_ok": arch.power_balance_ok,
             "v_mv_kv": layout.v_mv_kv,
             "v_hv_kv": export.v_hv_kv if export is not None else None,
+            # Emitted for a single fleet too: compliance is judged per fleet, so
+            # it must not need one code path per plant shape. The flat keys above
+            # stay exactly as they were for every other reader.
+            "branches": _branches_summary(inputs, arch, stage1s),
         }
     else:
         branches_summary = []
-        for branch_inputs, branch_arch, refinement, stage1 in zip(
-            inputs.branches, arch.branches, arch.branch_refinements, stage1s
-        ):
-            branches_summary.append({
-                "kind": branch_inputs.kind,
-                "p_inv_kw": stage1.p_inv_kw,
-                "q_inv_kvar": stage1.q_inv_kvar,
-                "s_inv_kva": stage1.s_inv_kva,
-                "pf_inv": stage1.pf_inv,
-                "p_inv_refined_kw": refinement.p_inv_refined_kw,
-                "q_inv_refined_kvar": refinement.q_inv_refined_kvar,
-                "s_inv_refined_kva": refinement.s_inv_refined_kva,
-                "correction_factor": refinement.correction_factor,
-                "p_poc_target_kw": refinement.p_poc_target_kw,
-                "p_poc_delivered_kw": refinement.p_poc_delivered_kw,
-                "p_poc_refined_delivered_kw": refinement.p_poc_refined_delivered_kw,
-                "n_stations": branch_arch.layout.n_transformers,
-                "n_circuits": len(branch_arch.circuits),
-                "circuit_sizes": branch_arch.layout.circuit_sizes,
-                "s_fleet_kva": branch_arch.layout.s_fleet_kva,
-                "fleet_loading": branch_arch.layout.fleet_loading,
-                "loading_ok": branch_arch.layout.loading_ok,
-            })
+        branches_summary = _branches_summary(inputs, arch, stage1s)
         n_stations = sum(b.layout.n_transformers for b in arch.branches)
         n_circuits = sum(len(b.circuits) for b in arch.branches)
         circuit_sizes = [n for b in arch.branches for n in b.layout.circuit_sizes]
