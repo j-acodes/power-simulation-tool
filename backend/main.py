@@ -21,7 +21,7 @@ from sqlalchemy.orm import Session
 
 from powertool import ComponentDatabase, size_generation
 
-from .models import Base, Design, Project, make_engine, make_session_factory
+from .models import Base, Design, Project, check_schema, make_engine, make_session_factory
 from .schemas import (
     BessSolutionInfo,
     CableInfo,
@@ -62,6 +62,7 @@ db = ComponentDatabase.load()
 engine = make_engine()
 SessionLocal = make_session_factory(engine)
 Base.metadata.create_all(engine)
+check_schema(engine)
 
 app = FastAPI(title="Plant Sizing API")
 
