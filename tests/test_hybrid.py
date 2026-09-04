@@ -1,0 +1,102 @@
+"""Hybrid-topology gates for ticket 05.
+
+The ticket's headline criterion — "a hybrid design with zero BESS power
+reproduces the PV-only result to within 1e-9" — is vacuous read literally: a
+branch with a zero active target cannot be sized at all, so the design collapses
+to single-fleet and the comparison passes without exercising anything. It is
+split here into the two independent failures it was written to catch. This file
+holds the TOPOLOGY half; the PHYSICS half is the golden-snapshot diff driven by
+``.scratch/bess-module/golden_snapshot.py``, which the test suite cannot express
+because it must compare against numbers captured before the refactor.
+
+What the topology gate protects: a BESS busbar and its stations are *drawn* —
+they validate, they parse, they reach the branch builder — and the design still
+solves to exactly the PV-only numbers because the fleet's target is zero. A
+degenerate branch that leaked so much as one aux kilowatt into the shared bus
+would show up here, and nowhere else.
+"""
+
+import pytest
+
+from fastapi.testclient import TestClient
+
+from backend.main import app, db
+from powertool.graph import validate_graph
+
+from test_graph import _edge, _minimal, _node
+
+client = TestClient(app)
+
+
+def _hybrid_with_drawn_bess(p_target_bess_mw: float = 0.0) -> dict:
+    """The minimal PV drawing plus a fully drawn, separately-busbarred BESS
+    fleet whose point-of-connection target defaults to zero.
+
+    Deliberately a *complete* BESS branch — its own busbar declaring its kind,
+    its own station with a real BESS solution behind it, its own aux load — so
+    that at a zero target the engine has every opportunity to let it contribute
+    something and must still contribute nothing.
+    """
+    diagram = _minimal()
+    diagram["nodes"][0]["props"]["p_target_bess_mw"] = p_target_bess_mw
+    diagram["nodes"][1]["props"]["fleet_kind"] = "pv"
+    diagram["nodes"] += [
+        _node("bus_b", "busbar", fleet_kind="bess"),
+        _node("s_b1", "station", mode="catalogue",
+              model="GENERIC_BESS_TX_2750_LV069", fleet_kind="bess",
+              bess_solution="GENERIC_BESS_5MWH_LV069"),
+        _node("aux_b", "aux", p_kw=40.0, q_kvar=8.0),
+    ]
+    diagram["edges"] += [
+        _edge("e_poc_b", "poc", "bus_b", length_m=0.0),
+        _edge("e_tb1", "bus_b", "s_b1", length_m=600.0),
+        _edge("e_aux_b", "bus_b", "aux_b"),
+    ]
+    return diagram
+
+
+def test_drawn_bess_branch_at_zero_target_validates():
+    # One busbar per fleet kind is legal; the old multiple_busbar rule must not
+    # fire on a hybrid, and neither must any BESS-specific rule.
+    assert validate_graph(_hybrid_with_drawn_bess(), db) == []
+
+
+def test_drawn_bess_branch_at_zero_target_solves_exactly_like_pv_only():
+    """The topology gate. Not `approx` on the summary alone — the WHOLE result
+    payload must match, because a degenerate branch's most likely failure mode
+    is contributing a small amount somewhere specific (an aux load at the shared
+    bus, an extra station in the fleet total) rather than moving every number.
+    """
+    pv_only = client.post("/api/solve", json=_minimal()).json()
+    hybrid = client.post("/api/solve", json=_hybrid_with_drawn_bess()).json()
+
+    assert pv_only["issues"] == [] and pv_only["results"] is not None
+    assert hybrid["issues"] == [] and hybrid["results"] is not None
+
+    # The BESS nodes exist in the drawing, so the hybrid payload carries result
+    # entries the PV-only one does not. Every node they SHARE must be identical,
+    # and so must the plant summary.
+    assert hybrid["results"]["summary"] == pv_only["results"]["summary"]
+    for node_id, expected in pv_only["results"]["nodes"].items():
+        assert hybrid["results"]["nodes"][node_id] == expected, node_id
+
+
+def test_a_real_hybrid_sizes_both_fleets_independently():
+    """The other side of the gate: with a positive BESS target the branch must
+    actually appear, and the PV fleet's own figures must move — a hybrid that
+    silently ignored the second fleet would pass the zero-target test above.
+    """
+    hybrid = client.post("/api/solve",
+                         json=_hybrid_with_drawn_bess(p_target_bess_mw=2.0)).json()
+    assert hybrid["issues"] == [], hybrid["issues"]
+    summary = hybrid["results"]["summary"]
+
+    # The shared HV/export step now carries both fleets, so the PV branch's own
+    # refined requirement cannot equal what it was alone.
+    pv_only = client.post("/api/solve", json=_minimal()).json()
+    assert summary != pv_only["results"]["summary"]
+    # "kind" is the canvas node type and stays "station" for every station;
+    # the fleet is a separate axis with its own key.
+    assert hybrid["results"]["nodes"]["s_b1"]["kind"] == "station"
+    assert hybrid["results"]["nodes"]["s_b1"]["fleet_kind"] == "bess"
+    assert hybrid["results"]["nodes"]["s1"]["fleet_kind"] == "pv"

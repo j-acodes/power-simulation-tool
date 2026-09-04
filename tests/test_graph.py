@@ -310,7 +310,16 @@ def test_bess_single_fleet_design_validates_and_solves_like_pv():
     bess_result = client.post("/api/solve", json=bess).json()
     assert bess_result["issues"] == []
 
-    assert bess_result["results"]["nodes"]["s1"] == pv_result["results"]["nodes"]["s1"]
+    # Every sized number matches; the fleet kind is the one field that must
+    # NOT — it was dead when this test was written (ticket 02 added the field,
+    # ticket 05 wires it), so a BESS station now reports itself as BESS while
+    # sizing exactly as the PV one does. That is the whole claim: the fleet
+    # kind is a label on identical physics, not an input to it.
+    bess_station = dict(bess_result["results"]["nodes"]["s1"])
+    pv_station = dict(pv_result["results"]["nodes"]["s1"])
+    assert bess_station.pop("fleet_kind") == "bess"
+    assert pv_station.pop("fleet_kind") == "pv"
+    assert bess_station == pv_station
     assert bess_result["results"]["summary"] == pv_result["results"]["summary"]
 
 
@@ -653,3 +662,59 @@ def test_unrecognised_fleet_kind_is_rejected_not_coerced():
         issues = validate_graph(diagram, db)
         assert "bad_fleet_kind" in _codes(issues), f"{bad!r} was accepted"
         assert any(i.node_id == "s1" for i in issues if i.code == "bad_fleet_kind")
+
+
+# --- hybrid topology: one busbar per fleet kind (ticket 05) -----------------
+
+def test_duplicate_busbar_is_rejected_and_named():
+    # A second busbar of a kind that already exists is the relaxed rule's
+    # narrower replacement for the old plant-wide multiple_busbar.
+    diagram = _minimal()
+    diagram["nodes"].append(_node("bus2", "busbar"))  # defaults to "pv", same as "bus"
+    diagram["edges"].append(_edge("e_bus2", "poc", "bus2", length_m=0.0))
+    issues = validate_graph(diagram, db)
+    assert "duplicate_busbar" in _codes(issues)
+    assert any(i.node_id == "bus2" for i in issues if i.code == "duplicate_busbar")
+    # The old plant-wide code must not fire any more.
+    assert "multiple_busbar" not in _codes(issues)
+
+
+def test_busbar_kind_mismatch_is_rejected_and_named():
+    # The busbar opts into a kind explicitly; s1 never heard of fleet_kind and
+    # so reads as "pv" by the backward-compatibility fallback — disagreeing
+    # with the busbar it hangs from.
+    diagram = _minimal()
+    diagram["nodes"][1]["props"]["fleet_kind"] = "bess"
+    issues = validate_graph(diagram, db)
+    assert "busbar_kind_mismatch" in _codes(issues)
+    assert any(i.node_id == "s1" for i in issues if i.code == "busbar_kind_mismatch")
+
+
+def test_bad_q_share_is_rejected():
+    for bad in (-0.1, 1.5):
+        diagram = _minimal()
+        diagram["nodes"][0]["props"]["q_share_pv"] = bad
+        issues = validate_graph(diagram, db)
+        assert "bad_q_share" in _codes(issues), f"{bad!r} was accepted"
+        assert any(i.node_id == "poc" for i in issues if i.code == "bad_q_share")
+
+
+def test_aux_load_on_a_second_busbar_validates():
+    # A fully hybrid drawing — second busbar, own kind, own station, own aux
+    # load — must validate cleanly: an aux load may hang from ANY busbar now,
+    # not only "the" one.
+    diagram = _minimal()
+    diagram["nodes"][1]["props"]["fleet_kind"] = "pv"
+    diagram["nodes"] += [
+        _node("bus2", "busbar", fleet_kind="bess"),
+        _node("s2", "station", mode="catalogue",
+              model="GENERIC_BESS_TX_2750_LV069", fleet_kind="bess",
+              bess_solution="GENERIC_BESS_5MWH_LV069"),
+        _node("aux2", "aux", p_kw=20.0, q_kvar=5.0),
+    ]
+    diagram["edges"] += [
+        _edge("e_poc2", "poc", "bus2", length_m=0.0),
+        _edge("e_t2", "bus2", "s2", length_m=300.0),
+        _edge("e_aux2", "bus2", "aux2"),
+    ]
+    assert validate_graph(diagram, db) == []

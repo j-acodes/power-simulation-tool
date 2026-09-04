@@ -33,6 +33,12 @@ Topology contract (checked by :func:`validate_graph`)::
     poc --(hv edge = export cable)-- hv_tx --(mv)-- busbar --(mv trunk)-- station -- station ...
     poc --(mv edge = MV interconnection)--------- busbar --(mv)-- aux
 
+One busbar per fleet kind ("pv" / "bess") is allowed, each parented by the
+shared MV/HV transformer (or directly by the POC for an MV interconnection) —
+a hybrid plant is two independent MV cascades sharing one export step. A
+station's own fleet kind must agree with the busbar its circuit hangs from
+(``busbar_kind_mismatch``); an aux load may hang from any busbar.
+
 Edges are drawn undirected; the direction is derived by rooting the graph at the
 POC, so an edge drawn "backwards" still reads correctly. Power flows the other
 way (inverter -> POC), as everywhere else in the engine.
@@ -337,9 +343,64 @@ def _singleton(nodes: dict[str, dict], kind: str, issues: list[GraphIssue],
     return found[0]
 
 
+def _busbars(nodes: dict[str, dict], issues: list[GraphIssue]) -> dict[str, str]:
+    """One busbar id per fleet kind ("pv" / "bess") — the relaxed single-busbar
+    rule: a second busbar of a kind already seen is a ``duplicate_busbar``,
+    naming the extra one and excluding it from the map, rather than the old
+    plant-wide ``multiple_busbar``."""
+    by_kind: dict[str, str] = {}
+    for nid, node in nodes.items():
+        if node["kind"] != "busbar":
+            continue
+        kind = _fleet_kind(_props(node))
+        if kind in by_kind:
+            issues.append(GraphIssue(
+                "duplicate_busbar",
+                f"A {kind!r} MV busbar already exists — remove '{nid}'.",
+                node_id=nid))
+            continue
+        by_kind[kind] = nid
+    return by_kind
+
+
 # --- validation --------------------------------------------------------------
 
-def _check_roles(nodes, tree, poc_id, busbar_id, issues) -> None:
+def _effective_busbar_kind(nodes, busbar_id: str, station_ids) -> str:
+    """The fleet kind a busbar actually stands for.
+
+    An explicit ``fleet_kind`` on the busbar wins. Otherwise the busbar adopts
+    the kind of the stations hanging from it — which is what makes every design
+    saved before this ticket keep working: none of them declares a busbar kind,
+    and a single-fleet BESS plant drawn under ticket 02 must still report its
+    stations as BESS rather than silently reading as PV. Falling back to the
+    bare ``"pv"`` default here instead would leave the fleet kind dead for
+    exactly the designs it was introduced for.
+
+    A busbar whose stations disagree among themselves has no single kind; "pv"
+    is returned and the disagreement is reported per station by the caller.
+    """
+    props = _props(nodes[busbar_id])
+    if "fleet_kind" in props:
+        return _fleet_kind(props)
+    kinds = {_fleet_kind(_props(nodes[sid])) for sid in station_ids}
+    return kinds.pop() if len(kinds) == 1 else "pv"
+
+
+def _busbar_of(nid: str, tree, kind_of) -> str | None:
+    """Walk up from a station to the busbar its circuit hangs from, or None if
+    the walk never reaches one (already reported elsewhere as bad_topology)."""
+    current = nid
+    while True:
+        entry = tree.parent.get(current)
+        if entry is None:
+            return None
+        parent_id = entry[0]
+        if kind_of.get(parent_id) == "busbar":
+            return parent_id
+        current = parent_id
+
+
+def _check_roles(nodes, tree, poc_id, busbar_ids, issues) -> None:
     """Every block must sit where its kind belongs on the POC-rooted tree."""
     kind_of = {nid: node["kind"] for nid, node in nodes.items()}
 
@@ -351,11 +412,16 @@ def _check_roles(nodes, tree, poc_id, busbar_id, issues) -> None:
         return entry[0] if entry else None
 
     poc_children = children(poc_id)
-    if len(poc_children) != 1 or kind_of[poc_children[0]] not in ("hv_tx", "busbar"):
+    hv_children = [c for c in poc_children if kind_of.get(c) == "hv_tx"]
+    busbar_children = [c for c in poc_children if kind_of.get(c) == "busbar"]
+    other_children = [c for c in poc_children
+                      if kind_of.get(c) not in ("hv_tx", "busbar")]
+    if (not poc_children or other_children or len(hv_children) > 1
+            or (hv_children and busbar_children)):
         issues.append(GraphIssue(
             "bad_topology",
-            "The Point of Connection must connect to exactly one block: the "
-            "MV/HV transformer, or the MV busbar for an MV interconnection.",
+            "The Point of Connection must connect to the MV/HV transformer, or "
+            "directly to one or more MV busbars for an MV interconnection.",
             node_id=poc_id))
 
     for nid, kind in kind_of.items():
@@ -364,11 +430,11 @@ def _check_roles(nodes, tree, poc_id, busbar_id, issues) -> None:
         kids = children(nid)
         up = parent(nid)
         if kind == "hv_tx":
-            if up != poc_id or [kind_of[k] for k in kids] != ["busbar"]:
+            if up != poc_id or not kids or any(kind_of[k] != "busbar" for k in kids):
                 issues.append(GraphIssue(
                     "bad_topology",
                     "The MV/HV transformer must sit between the Point of "
-                    "Connection and the MV busbar.", node_id=nid))
+                    "Connection and the MV busbar(s).", node_id=nid))
         elif kind == "busbar":
             if kind_of.get(up) not in ("poc", "hv_tx"):
                 issues.append(GraphIssue(
@@ -405,11 +471,31 @@ def _check_roles(nodes, tree, poc_id, busbar_id, issues) -> None:
                     f"Station '{nid}' feeds {len(downstream)} stations — MV "
                     f"circuits are radial daisy chains: one cable in, at most "
                     f"one cable out.", node_id=nid))
+            busbar_of = _busbar_of(nid, tree, kind_of)
+            if busbar_of is not None:
+                # The busbar's EFFECTIVE kind, not its declared one: an
+                # undeclared busbar adopts its stations' kind, so a legacy
+                # single-fleet BESS plant validates and reports as BESS. The
+                # rule still bites where it should — a busbar carrying both
+                # kinds has no single kind, and every station that disagrees
+                # with the majority reading is named.
+                stations_here = [
+                    k for k, kk in kind_of.items()
+                    if kk == "station" and _busbar_of(k, tree, kind_of) == busbar_of
+                ]
+                busbar_kind = _effective_busbar_kind(nodes, busbar_of, stations_here)
+                station_kind = _fleet_kind(_props(nodes[nid]))
+                if station_kind != busbar_kind:
+                    issues.append(GraphIssue(
+                        "busbar_kind_mismatch",
+                        f"Station '{nid}' is fleet kind {station_kind!r} but "
+                        f"hangs from the {busbar_kind!r} busbar "
+                        f"'{busbar_of}'.", node_id=nid))
         elif kind == "aux":
-            if up != busbar_id or kids:
+            if up not in busbar_ids or kids:
                 issues.append(GraphIssue(
                     "bad_topology",
-                    "An aux load attaches to the MV busbar and feeds nothing.",
+                    "An aux load attaches to an MV busbar and feeds nothing.",
                     node_id=nid))
 
 
@@ -545,6 +631,19 @@ def _check_props(nodes, tree, db, diagram, issues) -> None:
                     "bad_props",
                     "The Point of Connection needs a power factor in (0, 1].",
                     node_id=nid))
+            p_bess_mw = _num(props.get("p_target_bess_mw", 0.0))
+            if p_bess_mw is None or p_bess_mw < 0:
+                issues.append(GraphIssue(
+                    "bad_props",
+                    "The Point of Connection's BESS target (p_target_bess_mw) "
+                    "must be a non-negative number.", node_id=nid))
+            if "q_share_pv" in props:
+                q_share = _num(props.get("q_share_pv"))
+                if q_share is None or not 0.0 <= q_share <= 1.0:
+                    issues.append(GraphIssue(
+                        "bad_q_share",
+                        "The Point of Connection's PV reactive share "
+                        "(q_share_pv) must be between 0 and 1.", node_id=nid))
         elif kind == "station":
             fleet_kind = _fleet_kind(props)
             # An ABSENT fleet kind legitimately means "pv" (old designs). A
@@ -646,9 +745,10 @@ def validate_graph(diagram: dict, db) -> list[GraphIssue]:
 
     poc_id = _singleton(nodes, "poc", issues, "no_poc", "multiple_poc",
                         "Point of Connection")
-    busbar_id = _singleton(nodes, "busbar", issues, "no_busbar", "multiple_busbar",
-                           "MV busbar")
-    if poc_id is None or busbar_id is None:
+    busbars = _busbars(nodes, issues)
+    if not busbars:
+        issues.append(GraphIssue("no_busbar", "The diagram needs an MV busbar."))
+    if poc_id is None or not busbars:
         return issues
 
     tree = _root_tree(nodes, edges, poc_id)
@@ -663,10 +763,11 @@ def validate_graph(diagram: dict, db) -> list[GraphIssue]:
                 "disconnected",
                 f"Block '{nid}' is not connected to the Point of Connection.",
                 node_id=nid))
-    if busbar_id not in tree.reached:
+    busbar_ids = set(busbars.values())
+    if not (busbar_ids & tree.reached):
         return issues  # nothing downstream can be judged
 
-    _check_roles(nodes, tree, poc_id, busbar_id, issues)
+    _check_roles(nodes, tree, poc_id, busbar_ids, issues)
     _check_edges(diagram, nodes, tree, edges, db, issues)
     _check_props(nodes, tree, db, diagram, issues)
     return issues
@@ -675,50 +776,42 @@ def validate_graph(diagram: dict, db) -> list[GraphIssue]:
 # --- diagram -> engine inputs ------------------------------------------------
 
 @dataclass
-class GraphInputs:
-    """Everything the engine needs to solve a drawing, plus the canvas ids that
-    every result maps back to.
+class BranchInputs:
+    """One fleet's branch of a drawing: its own busbar, circuits and totals —
+    everything :func:`powertool.architecture.size_branch` and
+    :func:`~powertool.architecture.arrange_plant_manual` need for that fleet's
+    independent MV cascade.
 
-    The parallel lists/dicts are the bijection: ``circuits[c][k]`` is the
-    transformer of ``station_ids[c][k]``, and the cable feeding it is
-    ``segment_edge_ids[(c + 1, k + 1)]`` (1-based keys, the engine's segment
-    convention: segment 1 = the trunk from the busbar).
+    The parallel lists/dicts are the same positional bijection as before, now
+    scoped to this branch: ``circuits[c][k]`` is the transformer of
+    ``station_ids[c][k]``, and the cable feeding it is
+    ``segment_edge_ids[(c + 1, k + 1)]``.
+
+    ``p_poc_target_kw`` is this branch's OWN point-of-connection active target
+    (the PV or BESS figure off the POC props), read at parse time — it drives
+    both the active pro-rata split and this branch's own refinement compliance
+    target (ticket-05 decision: each fleet complies with the POC
+    independently). ``q_poc_target_kvar`` is a PLACEHOLDER at parse time
+    (0.0): the reactive duty a branch is actually assigned can only be known
+    once the shared export chain has been sized (it depends on the combined
+    flow's own losses), so :func:`backend.solve.solve_architecture` fills in
+    the real value after running step 1 of the solve order — see the reactive
+    split there.
     """
 
-    # canvas identity
-    poc_id: str
+    kind: str
     busbar_id: str
-    hv_tx_id: str | None
     aux_ids: list[str]
-    export_edge_id: str | None
+    circuits: list[list[Transformer]]
     station_ids: list[list[str]]
     segment_edge_ids: dict[tuple[int, int], str]
-    # POC target
-    p_poc_kw: float
-    pf_target: float
-    # tier voltages
-    v_lv_kv: float
-    v_mv_kv: float
-    v_hv_kv: float | None  # None = MV interconnection (no MV/HV transformer)
-    # sizing rules
-    max_utilization: float
-    collection_loss_pct: float
-    export_loss_pct_per_km: float
-    max_circuit_current_a: float
-    max_loading: float
-    # drawn arrangement
-    circuits: list[list[Transformer]]
     segment_lengths: dict[tuple[int, int], float]  # km, complete by construction
     segment_candidates: dict[tuple[int, int], list[Cable]]  # forced sections only
-    # export step
-    hv_mode: str  # "none" | "auto" | "model" | "custom"
-    hv_transformer: Transformer | None  # None for "none" and "auto"
-    hv_n_parallel: int
-    export_length_km: float
-    export_cable: Cable | None  # forced export section, if any
-    # aux totals (taken at the MV busbar)
     aux_p_kw: float
     aux_q_kvar: float
+    max_loading: float
+    p_poc_target_kw: float
+    q_poc_target_kvar: float = 0.0
 
     @property
     def fleet(self) -> list[tuple[Transformer, int]]:
@@ -738,6 +831,125 @@ class GraphInputs:
         return sum(len(c) for c in self.circuits)
 
 
+@dataclass
+class GraphInputs:
+    """Everything the engine needs to solve a drawing, plus the canvas ids that
+    every result maps back to.
+
+    Plant-level concerns — point of connection, HV/tier voltages, the shared
+    export step, and the sizing rules — stay flat here. Everything specific to
+    one fleet (busbar identity, circuits, station identities, segment data,
+    auxiliary totals, maximum loading, that branch's own active/reactive
+    target) lives on :class:`BranchInputs`, one per drawn busbar whose fleet
+    has a positive active target — see ``branches``.
+
+    ``busbar_id``, ``aux_ids``, ``circuits``, ``station_ids``,
+    ``segment_edge_ids``, ``segment_lengths``, ``segment_candidates``,
+    ``aux_p_kw``, ``aux_q_kvar``, ``max_loading``, ``fleet`` and
+    ``n_stations`` are kept as FIRST-BRANCH properties, mirroring
+    ``PlantArchitecture._sole_branch`` (raise rather than silently prefer the
+    first once there is more than one branch) — so the result-mapping layer
+    migrates incrementally instead of needing every caller rewritten at once.
+    """
+
+    # canvas identity
+    poc_id: str
+    hv_tx_id: str | None
+    export_edge_id: str | None
+    # POC target
+    pf_target: float
+    q_share_pv: float | None  # None = default to pro-rata by active power
+    # tier voltages
+    v_lv_kv: float
+    v_mv_kv: float
+    v_hv_kv: float | None  # None = MV interconnection (no MV/HV transformer)
+    # sizing rules
+    max_utilization: float
+    collection_loss_pct: float
+    export_loss_pct_per_km: float
+    max_circuit_current_a: float
+    # export step
+    hv_mode: str  # "none" | "auto" | "model" | "custom"
+    hv_transformer: Transformer | None  # None for "none" and "auto"
+    hv_n_parallel: int
+    export_length_km: float
+    export_cable: Cable | None  # forced export section, if any
+    # branches
+    branches: list[BranchInputs]
+
+    @property
+    def p_poc_kw(self) -> float:
+        """Combined active target across every branch — what the shared
+        export chain is sized against (step 1 of the solve order; see
+        :func:`backend.solve.solve_architecture`). For a single-fleet design
+        this is exactly that fleet's own target, unchanged from before this
+        ticket."""
+        return sum(b.p_poc_target_kw for b in self.branches)
+
+    @property
+    def _sole_branch(self) -> BranchInputs:
+        """The only branch, for the single-fleet compatibility properties.
+
+        Raises rather than quietly preferring the first — see
+        ``PlantArchitecture._sole_branch`` for the house rationale. A caller
+        still reading these once a second branch exists would otherwise get
+        one fleet's figures presented as the whole drawing."""
+        if len(self.branches) != 1:
+            raise ValueError(
+                f"This is a single-fleet accessor, but the drawing has "
+                f"{len(self.branches)} branches. Read `branches` instead."
+            )
+        return self.branches[0]
+
+    @property
+    def busbar_id(self) -> str:
+        return self._sole_branch.busbar_id
+
+    @property
+    def aux_ids(self) -> list[str]:
+        return self._sole_branch.aux_ids
+
+    @property
+    def circuits(self) -> list[list[Transformer]]:
+        return self._sole_branch.circuits
+
+    @property
+    def station_ids(self) -> list[list[str]]:
+        return self._sole_branch.station_ids
+
+    @property
+    def segment_edge_ids(self) -> dict[tuple[int, int], str]:
+        return self._sole_branch.segment_edge_ids
+
+    @property
+    def segment_lengths(self) -> dict[tuple[int, int], float]:
+        return self._sole_branch.segment_lengths
+
+    @property
+    def segment_candidates(self) -> dict[tuple[int, int], list[Cable]]:
+        return self._sole_branch.segment_candidates
+
+    @property
+    def aux_p_kw(self) -> float:
+        return self._sole_branch.aux_p_kw
+
+    @property
+    def aux_q_kvar(self) -> float:
+        return self._sole_branch.aux_q_kvar
+
+    @property
+    def max_loading(self) -> float:
+        return self._sole_branch.max_loading
+
+    @property
+    def fleet(self) -> list[tuple[Transformer, int]]:
+        return self._sole_branch.fleet
+
+    @property
+    def n_stations(self) -> int:
+        return self._sole_branch.n_stations
+
+
 def graph_to_inputs(diagram: dict, db) -> GraphInputs:
     """Read a VALID diagram into engine inputs.
 
@@ -746,10 +958,16 @@ def graph_to_inputs(diagram: dict, db) -> GraphInputs:
     trunk edges in the diagram's edge list (the drawing's own order) and the
     stations inside a circuit follow the chain outward from the busbar —
     positions 0, 1, 2 ... map to segments 1, 2, 3 ...
+
+    One :class:`BranchInputs` is built per busbar whose fleet has a positive
+    active target. A busbar whose fleet's target is zero (the default for
+    ``p_target_bess_mw``) contributes NO branch at all — not an error, the
+    topology gate this ticket is built around: the design solves as
+    single-fleet even though the busbar, its stations and its aux load are
+    genuinely drawn on the canvas.
     """
     nodes, edges = _parse_structure(diagram, [])
     poc_id = next(nid for nid, n in nodes.items() if n["kind"] == "poc")
-    busbar_id = next(nid for nid, n in nodes.items() if n["kind"] == "busbar")
     tree = _root_tree(nodes, edges, poc_id)
 
     v_lv = _tier_kv(diagram, "lv")
@@ -757,7 +975,8 @@ def graph_to_inputs(diagram: dict, db) -> GraphInputs:
     v_hv = _tier_kv(diagram, "hv")
 
     # Export step: the block hanging off the POC is either the MV/HV transformer
-    # (HV interconnection) or the busbar itself (MV interconnection).
+    # (HV interconnection) or a busbar directly (MV interconnection). Every
+    # busbar hangs off this same block — see the topology contract.
     poc_child, export_edge = tree.children[poc_id][0]
     hv_tx_id = poc_child if nodes[poc_child]["kind"] == "hv_tx" else None
     hv_mode = "none"
@@ -773,55 +992,101 @@ def graph_to_inputs(diagram: dict, db) -> GraphInputs:
     export_cable = (db.cables.get(export_sizing.get("cable"))
                     if export_sizing.get("mode") == "forced" else None)
 
-    # Circuits: one per station hanging off the busbar, walked outward.
-    circuits: list[list[Transformer]] = []
-    station_ids: list[list[str]] = []
-    segment_edge_ids: dict[tuple[int, int], str] = {}
-    segment_lengths: dict[tuple[int, int], float] = {}
-    segment_candidates: dict[tuple[int, int], list[Cable]] = {}
-    aux_ids: list[str] = []
-    aux_p_kw = aux_q_kvar = 0.0
+    poc_props = _props(nodes[poc_id])
+    p_target_pv_kw = (_num(poc_props.get("p_target_mw")) or 0.0) * 1000.0
+    p_target_bess_kw = (_num(poc_props.get("p_target_bess_mw", 0.0)) or 0.0) * 1000.0
+    q_share_pv = _num(poc_props.get("q_share_pv"))
+    max_loading = _rule(diagram, "max_loading")
 
-    for child, edge in tree.children[busbar_id]:
-        if nodes[child]["kind"] == "aux":
-            props = _props(nodes[child])
-            aux_ids.append(child)
-            aux_p_kw += _num(props.get("p_kw", 0.0)) or 0.0
-            aux_q_kvar += _num(props.get("q_kvar", 0.0)) or 0.0
-            continue
-        c_idx = len(circuits) + 1
-        transformers: list[Transformer] = []
-        ids: list[str] = []
-        node_id, segment_edge = child, edge
-        while True:
-            k = len(transformers) + 1
-            transformers.append(_station_transformer(nodes[node_id], db, v_mv, v_lv))
-            ids.append(node_id)
-            segment_edge_ids[(c_idx, k)] = segment_edge["id"]
-            segment_lengths[(c_idx, k)] = _length_km(segment_edge)
-            sizing = _dict(segment_edge.get("sizing"))
-            if sizing.get("mode") == "forced":
-                # A forced section is a one-cable catalogue: select_cable still
-                # escalates parallel circuits, but never swaps the section.
-                segment_candidates[(c_idx, k)] = [db.cables[sizing["cable"]]]
-            downstream = [(n, e) for n, e in tree.children[node_id]
-                          if nodes[n]["kind"] == "station"]
-            if not downstream:
-                break
-            node_id, segment_edge = downstream[0]
-        circuits.append(transformers)
-        station_ids.append(ids)
+    busbar_parent = hv_tx_id if hv_tx_id is not None else poc_id
+    busbar_children = [child for child, _edge in tree.children[busbar_parent]
+                       if nodes[child]["kind"] == "busbar"]
+
+    branches: list[BranchInputs] = []
+    for busbar_id in busbar_children:
+        # The busbar's effective kind decides which point-of-connection target
+        # this branch answers to, so the stations under it have to be known
+        # before the branch is built — an undeclared busbar takes their kind.
+        stations_under: list[str] = []
+        frontier = [busbar_id]
+        while frontier:
+            for child, _edge in tree.children[frontier.pop()]:
+                if nodes[child]["kind"] == "station":
+                    stations_under.append(child)
+                    frontier.append(child)
+        kind = _effective_busbar_kind(nodes, busbar_id, stations_under)
+        # `p_target_mw` is the PV figure only where there is a second fleet to
+        # tell it apart from. A design with ONE busbar has a single target and
+        # no ambiguity, whatever kind that fleet is — which is what keeps a
+        # single-fleet BESS plant (ticket 02) solving off the target it
+        # actually carries instead of looking for a BESS field it never wrote.
+        if len(busbar_children) == 1:
+            p_target_kw = p_target_pv_kw
+        else:
+            p_target_kw = p_target_bess_kw if kind == "bess" else p_target_pv_kw
+        if p_target_kw <= 0:
+            continue  # the topology gate: a zero-target busbar is no branch
+
+        circuits: list[list[Transformer]] = []
+        station_ids: list[list[str]] = []
+        segment_edge_ids: dict[tuple[int, int], str] = {}
+        segment_lengths: dict[tuple[int, int], float] = {}
+        segment_candidates: dict[tuple[int, int], list[Cable]] = {}
+        aux_ids: list[str] = []
+        aux_p_kw = aux_q_kvar = 0.0
+
+        for child, edge in tree.children[busbar_id]:
+            if nodes[child]["kind"] == "aux":
+                props = _props(nodes[child])
+                aux_ids.append(child)
+                aux_p_kw += _num(props.get("p_kw", 0.0)) or 0.0
+                aux_q_kvar += _num(props.get("q_kvar", 0.0)) or 0.0
+                continue
+            c_idx = len(circuits) + 1
+            transformers: list[Transformer] = []
+            ids: list[str] = []
+            node_id, segment_edge = child, edge
+            while True:
+                k = len(transformers) + 1
+                transformers.append(_station_transformer(nodes[node_id], db, v_mv, v_lv))
+                ids.append(node_id)
+                segment_edge_ids[(c_idx, k)] = segment_edge["id"]
+                segment_lengths[(c_idx, k)] = _length_km(segment_edge)
+                sizing = _dict(segment_edge.get("sizing"))
+                if sizing.get("mode") == "forced":
+                    # A forced section is a one-cable catalogue: select_cable
+                    # still escalates parallel circuits, but never swaps the
+                    # section.
+                    segment_candidates[(c_idx, k)] = [db.cables[sizing["cable"]]]
+                downstream = [(n, e) for n, e in tree.children[node_id]
+                              if nodes[n]["kind"] == "station"]
+                if not downstream:
+                    break
+                node_id, segment_edge = downstream[0]
+            circuits.append(transformers)
+            station_ids.append(ids)
+
+        branches.append(BranchInputs(
+            kind=kind,
+            busbar_id=busbar_id,
+            aux_ids=aux_ids,
+            circuits=circuits,
+            station_ids=station_ids,
+            segment_edge_ids=segment_edge_ids,
+            segment_lengths=segment_lengths,
+            segment_candidates=segment_candidates,
+            aux_p_kw=aux_p_kw,
+            aux_q_kvar=aux_q_kvar,
+            max_loading=max_loading,
+            p_poc_target_kw=p_target_kw,
+        ))
 
     return GraphInputs(
         poc_id=poc_id,
-        busbar_id=busbar_id,
         hv_tx_id=hv_tx_id,
-        aux_ids=aux_ids,
         export_edge_id=export_edge["id"],
-        station_ids=station_ids,
-        segment_edge_ids=segment_edge_ids,
-        p_poc_kw=(_num(_props(nodes[poc_id]).get("p_target_mw")) or 0.0) * 1000.0,
-        pf_target=_num(_props(nodes[poc_id]).get("pf")) or 1.0,
+        pf_target=_num(poc_props.get("pf")) or 1.0,
+        q_share_pv=q_share_pv,
         v_lv_kv=v_lv,
         v_mv_kv=v_mv,
         v_hv_kv=v_hv if hv_tx_id is not None else None,
@@ -829,17 +1094,12 @@ def graph_to_inputs(diagram: dict, db) -> GraphInputs:
         collection_loss_pct=_rule(diagram, "collection_loss_pct"),
         export_loss_pct_per_km=_rule(diagram, "export_loss_pct_per_km"),
         max_circuit_current_a=_rule(diagram, "max_circuit_current_a"),
-        max_loading=_rule(diagram, "max_loading"),
-        circuits=circuits,
-        segment_lengths=segment_lengths,
-        segment_candidates=segment_candidates,
         hv_mode=hv_mode,
         hv_transformer=hv_transformer,
         hv_n_parallel=hv_n_parallel,
         export_length_km=export_length_km,
         export_cable=export_cable,
-        aux_p_kw=aux_p_kw,
-        aux_q_kvar=aux_q_kvar,
+        branches=branches,
     )
 
 
@@ -867,73 +1127,102 @@ def _segment_payload(segment, forced: bool) -> dict:
     }
 
 
-def map_results(inputs: GraphInputs, stage1: SizingResult,
+def map_results(inputs: GraphInputs, stage1s: list[SizingResult],
                 arch: PlantArchitecture) -> dict:
     """Key the engine results back to the canvas: ``{edges, nodes, summary,
     warnings}``, all plain JSON-able values.
 
+    ``stage1s`` carries one Stage-1 result per branch, same order as
+    ``inputs.branches`` and ``arch.branches`` — the shape
+    :func:`backend.solve.solve_architecture` returns.
+
     The mapping is purely positional (see the module docstring): circuit c,
-    segment k of the architecture belongs to ``segment_edge_ids[(c, k)]`` and
-    station position k - 1 to ``station_ids[c - 1][k - 1]``. Warnings are the
-    engine's own flags — over-current circuits, an overloaded fleet, a failed
-    power balance — re-pointed at the block or cable that shows them, so the
-    editor can highlight the drawing instead of printing a note.
+    segment k of a branch's architecture belongs to that branch's
+    ``segment_edge_ids[(c, k)]`` and station position k - 1 to
+    ``station_ids[c - 1][k - 1]``. Warnings are the engine's own flags —
+    over-current circuits, an overloaded fleet, a failed power balance —
+    re-pointed at the block or cable that shows them, so the editor can
+    highlight the drawing instead of printing a note.
+
+    For a SINGLE-branch plant the summary payload is byte-identical to what it
+    was before branches existed — the golden-snapshot physics gate depends on
+    that. A multi-branch plant cannot reuse ``PlantArchitecture``'s sole-branch
+    compatibility properties (they raise), so its summary carries plant-wide
+    totals plus an additive ``branches`` list of each fleet's own figures,
+    rather than reshaping the existing single-fleet keys.
     """
-    layout = arch.layout
     edges: dict[str, dict] = {}
     nodes: dict[str, dict] = {}
     warnings: list[GraphIssue] = []
 
-    for circuit, plans, ids in zip(arch.circuits, layout.circuit_plans,
-                                   inputs.station_ids):
-        for segment in circuit.segments:
-            key = (circuit.index, segment.index)
-            edge_id = inputs.segment_edge_ids[key]
-            edges[edge_id] = _segment_payload(
-                segment, forced=key in inputs.segment_candidates)
-        for station, plan, node_id in zip(circuit.stations, plans, ids):
-            nodes[node_id] = {
-                "kind": "station",
-                "circuit": circuit.index,
-                "position": station.index,
-                "model": station.model,
-                "s_rated_kva": station.s_rated_kva,
-                "loading": station.loading,
-                "p_lv_kw": station.p_lv_kw,
-                "q_lv_kvar": station.q_lv_kvar,
-                "s_lv_kva": station.s_lv_kva,
-                "dp_tx_kw": station.dp_tx_kw,
-                "dq_tx_kvar": station.dq_tx_kvar,
-                "p_mv_kw": station.p_mv_kw,
-                "q_mv_kvar": station.q_mv_kvar,
-                "s_mv_kva": station.s_mv_kva,
-                "i_a": plan.i_a,
-            }
-        if not circuit.current_ok:
-            warnings.append(GraphIssue(
-                "circuit_over_current",
-                f"Circuit {circuit.index} draws {circuit.i_trunk_a:,.0f} A, above "
-                f"the {layout.max_circuit_current_a:,.0f} A planning cap — move a "
-                f"station to another circuit or raise the cap.",
-                edge_id=inputs.segment_edge_ids[(circuit.index, 1)]))
+    for branch_inputs, branch_arch in zip(inputs.branches, arch.branches):
+        layout = branch_arch.layout
+        for circuit, plans, ids in zip(branch_arch.circuits, layout.circuit_plans,
+                                       branch_inputs.station_ids):
+            for segment in circuit.segments:
+                key = (circuit.index, segment.index)
+                edge_id = branch_inputs.segment_edge_ids[key]
+                edges[edge_id] = _segment_payload(
+                    segment, forced=key in branch_inputs.segment_candidates)
+            for station, plan, node_id in zip(circuit.stations, plans, ids):
+                nodes[node_id] = {
+                    # "kind" is the CANVAS node type, the discriminator the
+                    # editor keys every node payload on — it stays "station".
+                    # The fleet the station belongs to is a separate axis and
+                    # gets its own key; collapsing the two would leave the
+                    # frontend unable to tell a station from a busbar.
+                    "kind": "station",
+                    "fleet_kind": station.kind,
+                    "circuit": circuit.index,
+                    "position": station.index,
+                    "model": station.model,
+                    "s_rated_kva": station.s_rated_kva,
+                    "loading": station.loading,
+                    "p_lv_kw": station.p_lv_kw,
+                    "q_lv_kvar": station.q_lv_kvar,
+                    "s_lv_kva": station.s_lv_kva,
+                    "dp_tx_kw": station.dp_tx_kw,
+                    "dq_tx_kvar": station.dq_tx_kvar,
+                    "p_mv_kw": station.p_mv_kw,
+                    "q_mv_kvar": station.q_mv_kvar,
+                    "s_mv_kva": station.s_mv_kva,
+                    "i_a": plan.i_a,
+                }
+            if not circuit.current_ok:
+                warnings.append(GraphIssue(
+                    "circuit_over_current",
+                    f"Circuit {circuit.index} draws {circuit.i_trunk_a:,.0f} A, above "
+                    f"the {layout.max_circuit_current_a:,.0f} A planning cap — move a "
+                    f"station to another circuit or raise the cap.",
+                    edge_id=branch_inputs.segment_edge_ids[(circuit.index, 1)]))
 
-    p_busbar = sum(c.p_busbar_kw for c in arch.circuits)
-    q_busbar = sum(c.q_busbar_kvar for c in arch.circuits)
-    nodes[inputs.busbar_id] = {
-        "kind": "busbar",
-        "p_kw": p_busbar,
-        "q_kvar": q_busbar,
-        "s_kva": math.hypot(p_busbar, q_busbar),
-        "n_circuits": arch.n_circuits,
-        "circuit_sizes": layout.circuit_sizes,
-        "v_kv": layout.v_mv_kv,
-    }
-    for aux_id in inputs.aux_ids:
-        nodes[aux_id] = {"kind": "aux"}
-    if inputs.aux_ids:
-        # The engine takes one lumped aux draw at the busbar; report the total
-        # on the first aux block so the canvas has somewhere to show it.
-        nodes[inputs.aux_ids[0]].update(p_kw=arch.aux_p_kw, q_kvar=arch.aux_q_kvar)
+        p_busbar = sum(c.p_busbar_kw for c in branch_arch.circuits)
+        q_busbar = sum(c.q_busbar_kvar for c in branch_arch.circuits)
+        nodes[branch_inputs.busbar_id] = {
+            "kind": "busbar",
+            "p_kw": p_busbar,
+            "q_kvar": q_busbar,
+            "s_kva": math.hypot(p_busbar, q_busbar),
+            "n_circuits": len(branch_arch.circuits),
+            "circuit_sizes": layout.circuit_sizes,
+            "v_kv": layout.v_mv_kv,
+        }
+        for aux_id in branch_inputs.aux_ids:
+            nodes[aux_id] = {"kind": "aux"}
+        if branch_inputs.aux_ids:
+            # The engine takes one lumped aux draw per branch busbar; report
+            # the total on the branch's first aux block so the canvas has
+            # somewhere to show it.
+            nodes[branch_inputs.aux_ids[0]].update(
+                p_kw=branch_arch.aux_p_kw, q_kvar=branch_arch.aux_q_kvar)
+
+        if not layout.loading_ok:
+            warnings.append(GraphIssue(
+                "fleet_overloaded",
+                f"The drawn stations carry {layout.fleet_loading * 100:.0f} % of their "
+                f"combined rating — the required inverter power exceeds the installed "
+                f"station capacity. Add stations or pick bigger units.",
+                node_id=branch_inputs.busbar_id))
 
     export = arch.export
     if inputs.hv_tx_id is not None and export is not None:
@@ -954,29 +1243,30 @@ def map_results(inputs: GraphInputs, stage1: SizingResult,
             edges[inputs.export_edge_id] = _segment_payload(
                 export.hv_cable, forced=inputs.export_cable is not None)
 
+    if len(arch.branches) == 1:
+        p_refined_delivered_kw = arch.p_poc_refined_delivered_kw
+    else:
+        refined = [r.p_poc_refined_delivered_kw for r in arch.branch_refinements]
+        p_refined_delivered_kw = (
+            sum(refined) if all(r is not None for r in refined) else None
+        )
     nodes[inputs.poc_id] = {
         "kind": "poc",
         "p_target_kw": inputs.p_poc_kw,
         "pf_target": inputs.pf_target,
         "p_delivered_kw": arch.p_poc_delivered_kw,
         "q_delivered_kvar": arch.q_poc_delivered_kvar,
-        "p_refined_delivered_kw": arch.p_poc_refined_delivered_kw,
-        "meets_target": (arch.p_poc_refined_delivered_kw is None
-                         or arch.p_poc_refined_delivered_kw >= inputs.p_poc_kw - 1e-6),
+        "p_refined_delivered_kw": p_refined_delivered_kw,
+        "meets_target": (p_refined_delivered_kw is None
+                         or p_refined_delivered_kw >= inputs.p_poc_kw - 1e-6),
     }
 
-    if not layout.loading_ok:
-        warnings.append(GraphIssue(
-            "fleet_overloaded",
-            f"The drawn stations carry {layout.fleet_loading * 100:.0f} % of their "
-            f"combined rating — the required inverter power exceeds the installed "
-            f"station capacity. Add stations or pick bigger units.",
-            node_id=inputs.busbar_id))
     if not arch.power_balance_ok:
         warnings.append(GraphIssue(
             "power_balance",
             "Internal power-balance check failed — the results are not trustworthy.",
-            node_id=inputs.busbar_id))
+            node_id=(inputs.branches[0].busbar_id if inputs.branches
+                     else inputs.poc_id)))
     if (export is not None and export.hv_cable is not None
             and not export.hv_cable_sized):
         warnings.append(GraphIssue(
@@ -985,38 +1275,118 @@ def map_results(inputs: GraphInputs, stage1: SizingResult,
             "is shown but not sized (zero losses assumed).",
             edge_id=inputs.export_edge_id))
 
-    p_inv_refined = arch.p_inv_refined_kw
-    summary = {
-        "p_inv_kw": stage1.p_inv_kw,
-        "q_inv_kvar": stage1.q_inv_kvar,
-        "s_inv_kva": stage1.s_inv_kva,
-        "pf_inv": stage1.pf_inv,
-        "p_inv_refined_kw": p_inv_refined,
-        "q_inv_refined_kvar": arch.q_inv_refined_kvar,
-        "s_inv_refined_kva": arch.s_inv_refined_kva,
-        "correction_factor": arch.correction_factor,
-        "p_poc_target_kw": arch.p_poc_target_kw,
-        "p_poc_delivered_kw": arch.p_poc_delivered_kw,
-        "q_poc_delivered_kvar": arch.q_poc_delivered_kvar,
-        "p_poc_refined_delivered_kw": arch.p_poc_refined_delivered_kw,
-        "n_stations": layout.n_transformers,
-        "n_circuits": arch.n_circuits,
-        "circuit_sizes": layout.circuit_sizes,
-        "s_fleet_kva": layout.s_fleet_kva,
-        "fleet_loading": layout.fleet_loading,
-        "loading_ok": layout.loading_ok,
-        "total_cable_loss_kw": arch.total_cable_loss_kw,
-        "total_transformer_loss_kw": arch.total_transformer_loss_kw,
-        "total_active_loss_kw": arch.total_active_loss_kw,
-        "loss_percent_of_p_inv": (arch.total_active_loss_kw / p_inv_refined * 100.0
-                                  if p_inv_refined else None),
-        "worst_trunk_current_a": max((c.i_trunk_a for c in arch.circuits), default=0.0),
-        "max_circuit_current_a": layout.max_circuit_current_a,
-        "all_current_ok": arch.all_current_ok,
-        "power_balance_ok": arch.power_balance_ok,
-        "v_mv_kv": layout.v_mv_kv,
-        "v_hv_kv": export.v_hv_kv if export is not None else None,
-    }
+    if len(arch.branches) == 1:
+        # Exactly the pre-branch computation, unchanged — the golden-snapshot
+        # gate (a physics diff against the pre-refactor engine) depends on
+        # this being byte-identical for every single-fleet design.
+        layout = arch.layout
+        stage1 = stage1s[0]
+        p_inv_refined = arch.p_inv_refined_kw
+        summary = {
+            "p_inv_kw": stage1.p_inv_kw,
+            "q_inv_kvar": stage1.q_inv_kvar,
+            "s_inv_kva": stage1.s_inv_kva,
+            "pf_inv": stage1.pf_inv,
+            "p_inv_refined_kw": p_inv_refined,
+            "q_inv_refined_kvar": arch.q_inv_refined_kvar,
+            "s_inv_refined_kva": arch.s_inv_refined_kva,
+            "correction_factor": arch.correction_factor,
+            "p_poc_target_kw": arch.p_poc_target_kw,
+            "p_poc_delivered_kw": arch.p_poc_delivered_kw,
+            "q_poc_delivered_kvar": arch.q_poc_delivered_kvar,
+            "p_poc_refined_delivered_kw": arch.p_poc_refined_delivered_kw,
+            "n_stations": layout.n_transformers,
+            "n_circuits": arch.n_circuits,
+            "circuit_sizes": layout.circuit_sizes,
+            "s_fleet_kva": layout.s_fleet_kva,
+            "fleet_loading": layout.fleet_loading,
+            "loading_ok": layout.loading_ok,
+            "total_cable_loss_kw": arch.total_cable_loss_kw,
+            "total_transformer_loss_kw": arch.total_transformer_loss_kw,
+            "total_active_loss_kw": arch.total_active_loss_kw,
+            "loss_percent_of_p_inv": (arch.total_active_loss_kw / p_inv_refined * 100.0
+                                      if p_inv_refined else None),
+            "worst_trunk_current_a": max((c.i_trunk_a for c in arch.circuits), default=0.0),
+            "max_circuit_current_a": layout.max_circuit_current_a,
+            "all_current_ok": arch.all_current_ok,
+            "power_balance_ok": arch.power_balance_ok,
+            "v_mv_kv": layout.v_mv_kv,
+            "v_hv_kv": export.v_hv_kv if export is not None else None,
+        }
+    else:
+        branches_summary = []
+        for branch_inputs, branch_arch, refinement, stage1 in zip(
+            inputs.branches, arch.branches, arch.branch_refinements, stage1s
+        ):
+            branches_summary.append({
+                "kind": branch_inputs.kind,
+                "p_inv_kw": stage1.p_inv_kw,
+                "q_inv_kvar": stage1.q_inv_kvar,
+                "s_inv_kva": stage1.s_inv_kva,
+                "pf_inv": stage1.pf_inv,
+                "p_inv_refined_kw": refinement.p_inv_refined_kw,
+                "q_inv_refined_kvar": refinement.q_inv_refined_kvar,
+                "s_inv_refined_kva": refinement.s_inv_refined_kva,
+                "correction_factor": refinement.correction_factor,
+                "p_poc_target_kw": refinement.p_poc_target_kw,
+                "p_poc_delivered_kw": refinement.p_poc_delivered_kw,
+                "p_poc_refined_delivered_kw": refinement.p_poc_refined_delivered_kw,
+                "n_stations": branch_arch.layout.n_transformers,
+                "n_circuits": len(branch_arch.circuits),
+                "circuit_sizes": branch_arch.layout.circuit_sizes,
+                "s_fleet_kva": branch_arch.layout.s_fleet_kva,
+                "fleet_loading": branch_arch.layout.fleet_loading,
+                "loading_ok": branch_arch.layout.loading_ok,
+            })
+        n_stations = sum(b.layout.n_transformers for b in arch.branches)
+        n_circuits = sum(len(b.circuits) for b in arch.branches)
+        circuit_sizes = [n for b in arch.branches for n in b.layout.circuit_sizes]
+        s_fleet_kva = sum(b.layout.s_fleet_kva for b in arch.branches)
+        worst_trunk_current_a = max(
+            (c.i_trunk_a for b in arch.branches for c in b.circuits), default=0.0)
+        all_current_ok = all(c.current_ok for b in arch.branches for c in b.circuits)
+        p_inv_refined_total = sum(r.p_inv_refined_kw for r in arch.branch_refinements)
+        # PlantArchitecture.total_cable_loss_kw / total_transformer_loss_kw are
+        # sole-branch compat properties (they read `self.circuits`) and raise
+        # here — computed directly from every branch plus the shared export
+        # step instead.
+        total_cable_loss_kw = sum(
+            seg.dp_kw for b in arch.branches for c in b.circuits for seg in c.segments
+        )
+        total_transformer_loss_kw = sum(
+            st.dp_tx_kw for b in arch.branches for c in b.circuits for st in c.stations
+        )
+        if arch.export is not None:
+            if arch.export.hv_cable is not None:
+                total_cable_loss_kw += arch.export.hv_cable.dp_kw
+            total_transformer_loss_kw += arch.export.dp_tx_kw
+        total_active_loss_kw = total_cable_loss_kw + total_transformer_loss_kw
+        summary = {
+            "p_inv_kw": sum(s.p_inv_kw for s in stage1s),
+            "q_inv_kvar": sum(s.q_inv_kvar for s in stage1s),
+            "s_inv_kva": math.hypot(sum(s.p_inv_kw for s in stage1s),
+                                    sum(s.q_inv_kvar for s in stage1s)),
+            "p_poc_delivered_kw": arch.p_poc_delivered_kw,
+            "q_poc_delivered_kvar": arch.q_poc_delivered_kvar,
+            "p_poc_refined_delivered_kw": p_refined_delivered_kw,
+            "n_stations": n_stations,
+            "n_circuits": n_circuits,
+            "circuit_sizes": circuit_sizes,
+            "s_fleet_kva": s_fleet_kva,
+            "total_cable_loss_kw": total_cable_loss_kw,
+            "total_transformer_loss_kw": total_transformer_loss_kw,
+            "total_active_loss_kw": total_active_loss_kw,
+            "loss_percent_of_p_inv": (total_active_loss_kw / p_inv_refined_total * 100.0
+                                      if p_inv_refined_total else None),
+            "worst_trunk_current_a": worst_trunk_current_a,
+            "max_circuit_current_a": max(b.layout.max_circuit_current_a
+                                         for b in arch.branches),
+            "all_current_ok": all_current_ok,
+            "power_balance_ok": arch.power_balance_ok,
+            "v_mv_kv": arch.branches[0].layout.v_mv_kv,
+            "v_hv_kv": export.v_hv_kv if export is not None else None,
+            "branches": branches_summary,
+        }
 
     return {
         "edges": edges,

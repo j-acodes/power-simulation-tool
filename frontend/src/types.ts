@@ -92,7 +92,12 @@ export interface EdgeResult {
 }
 
 export interface StationNodeResult {
+  /** The canvas node type — the discriminator this union narrows on. */
   kind: 'station'
+  /** Which fleet the station belongs to. A separate axis from `kind`: the
+   *  sizing physics is identical either way, so this is a label, not an
+   *  input. Absent on results produced before the fleet kind was wired. */
+  fleet_kind?: 'pv' | 'bess'
   circuit: number
   position: number
   model: string
