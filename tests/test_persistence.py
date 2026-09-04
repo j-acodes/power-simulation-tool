@@ -3,6 +3,7 @@ locking 409 conflict path, cascade delete). Uses the tmp-file SQLite DB
 injected by ``tests/conftest.py`` — never touches a real ``powertool.db``.
 """
 
+import pytest
 from fastapi.testclient import TestClient
 
 from backend.main import app
@@ -169,3 +170,27 @@ def test_404s_for_missing_ids():
         json={"payload": SAMPLE_PAYLOAD, "version": 1, "last_edited_by": "Alice"},
     )
     assert resp.status_code == 404
+
+
+def test_startup_refuses_a_database_missing_a_declared_column(tmp_path):
+    """The regression this guards: `technology` was added to the model, the
+    existing database never got the column, and the app served pre-feature
+    behaviour while every test stayed green. A start against such a database
+    must fail loudly and name the fix instead."""
+    from sqlalchemy import text
+
+    from backend.models import Base, SchemaOutOfDate, check_schema, make_engine
+
+    db = tmp_path / "stale.db"
+    engine = make_engine(f"sqlite:///{db}")
+    Base.metadata.create_all(engine)
+    check_schema(engine)  # freshly created: nothing missing.
+
+    # Age the database by one column, the way adding a field to a model does.
+    with engine.begin() as conn:
+        conn.execute(text("ALTER TABLE designs DROP COLUMN technology"))
+
+    with pytest.raises(SchemaOutOfDate) as excinfo:
+        check_schema(engine)
+    assert "designs.technology" in str(excinfo.value)
+    assert "scripts/reset_db.py" in str(excinfo.value)

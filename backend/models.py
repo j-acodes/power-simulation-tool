@@ -12,7 +12,7 @@ from __future__ import annotations
 import os
 from datetime import datetime, timezone
 
-from sqlalchemy import JSON, DateTime, ForeignKey, Integer, String, create_engine
+from sqlalchemy import JSON, DateTime, ForeignKey, Integer, String, create_engine, inspect
 from sqlalchemy.engine import Engine
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, sessionmaker
 
@@ -59,6 +59,41 @@ def make_engine(database_url: str | None = None) -> Engine:
     url = database_url or os.environ.get("DATABASE_URL", "sqlite:///powertool.db")
     connect_args = {"check_same_thread": False} if url.startswith("sqlite") else {}
     return create_engine(url, connect_args=connect_args)
+
+
+class SchemaOutOfDate(RuntimeError):
+    """An existing database is missing columns the models declare."""
+
+
+def check_schema(engine: Engine) -> None:
+    """Refuse to start against a database whose tables predate the models.
+
+    ``Base.metadata.create_all`` creates missing TABLES but never alters an
+    existing one, and this project has no Alembic. So adding a column leaves
+    an existing database silently short of it: the app reads rows without the
+    column and behaves as though the feature were never built, while the whole
+    test suite stays green because tests build their database from scratch.
+    That failure is invisible to every automated check there is, which is why
+    it is worth a startup check rather than a note telling someone to remember.
+
+    Raising here converts a silent wrong-behaviour bug into a loud refusal that
+    names the fix.
+    """
+    inspector = inspect(engine)
+    missing: list[str] = []
+    for name, table in Base.metadata.tables.items():
+        if not inspector.has_table(name):
+            continue  # create_all will make it; only EXISTING tables can drift.
+        present = {c["name"] for c in inspector.get_columns(name)}
+        missing += [f"{name}.{c.name}" for c in table.columns if c.name not in present]
+    if missing:
+        raise SchemaOutOfDate(
+            "The database is missing columns the models declare: "
+            + ", ".join(sorted(missing))
+            + ". This project has no migrations, so the database has to be "
+            "recreated: run `python scripts/reset_db.py` (it names what it "
+            "will destroy and asks before deleting anything)."
+        )
 
 
 def make_session_factory(engine: Engine) -> sessionmaker:
