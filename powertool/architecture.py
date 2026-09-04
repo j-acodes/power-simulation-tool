@@ -571,40 +571,112 @@ def auto_hv_transformer(s_kva: float, v_hv_kv: float, v_mv_kv: float) -> Transfo
     )
 
 
-def _delivered_with_frozen_cables(
-    layout: PlantLayout,
-    circuits: list[CircuitResult],
-    export: "ExportResult | None",
-    aux_p_kw: float,
-    aux_q_kvar: float,
-    k: float,
-) -> tuple[float, float]:
-    """Delivered POC (P [kW], Q [kvar]) when the inverter output is scaled by
-    ``k``, keeping every cable selection FROZEN.
+@dataclass
+class BranchArchitecture:
+    """One branch's (one fleet's) sized MV circuits and its busbar totals,
+    before the shared plant-level export step.
 
-    Re-evaluates the forward loss cascade only — no cable re-selection — so the
-    discrete picks cannot flap while the inverter refinement iterates on the
-    smooth scalar ``k``.
+    ``p_busbar_kw`` / ``q_busbar_kvar`` are what this branch contributes to
+    the shared MV/HV bus: every circuit's delivery to the busbar, less this
+    branch's own auxiliary load (auxiliary load is a per-busbar figure — see
+    the Auxiliary load entry in CONTEXT.md — so it is taken out here, at the
+    branch level, never inflating a station's own sizing).
     """
+
+    layout: PlantLayout
+    circuits: list[CircuitResult]
+    aux_p_kw: float
+    aux_q_kvar: float
+
+    @property
+    def p_busbar_kw(self) -> float:
+        return sum(c.p_busbar_kw for c in self.circuits) - self.aux_p_kw
+
+    @property
+    def q_busbar_kvar(self) -> float:
+        return sum(c.q_busbar_kvar for c in self.circuits) - self.aux_q_kvar
+
+
+def size_branch(
+    layout: PlantLayout,
+    cable_candidates: list[Cable],
+    *,
+    max_utilization: float = 0.80,
+    max_loss_percent_base: float = 1.30,
+    max_loss_percent_per_km: float = 0.0,
+    max_vdrop_percent: float | None = None,
+    max_parallel: int = 12,
+    segment_lengths: dict[tuple[int, int], float] | None = None,
+    segment_candidates: dict[tuple[int, int], list[Cable]] | None = None,
+    aux_p_kw: float = 0.0,
+    aux_q_kvar: float = 0.0,
+) -> BranchArchitecture:
+    """Size one branch's (one fleet's) MV circuits — the per-branch half of
+    Stage 2. See :func:`size_plant` for the plant-level half that sizes the
+    shared HV transformer and export cable once, on the combined result of
+    every branch.
+    """
+    circuits = size_circuits(
+        layout,
+        cable_candidates,
+        max_utilization=max_utilization,
+        max_loss_percent_base=max_loss_percent_base,
+        max_loss_percent_per_km=max_loss_percent_per_km,
+        max_vdrop_percent=max_vdrop_percent,
+        max_parallel=max_parallel,
+        segment_lengths=segment_lengths,
+        segment_candidates=segment_candidates,
+    )
+    return BranchArchitecture(
+        layout=layout,
+        circuits=circuits,
+        aux_p_kw=aux_p_kw,
+        aux_q_kvar=aux_q_kvar,
+    )
+
+
+def _delivered_with_frozen_cables(
+    branches: list[BranchArchitecture],
+    export: "ExportResult | None",
+    k: list[float],
+) -> tuple[float, float]:
+    """Delivered POC (P [kW], Q [kvar]) when each branch's collection output
+    is scaled by its own ``k[i]``, keeping every cable selection FROZEN.
+
+    Re-evaluates the forward loss cascade only — no cable re-selection — so
+    the discrete picks cannot flap while the correction scalars iterate.
+    Each branch's own aux load is subtracted at its own busbar; the branch
+    totals are then summed at the shared bus, and the export step (shared HV
+    transformer, then HV cable) is applied ONCE.
+    """
+    if len(k) != len(branches):
+        raise ValueError(
+            f"Need one correction scalar per branch, got {len(k)} for "
+            f"{len(branches)} branches."
+        )
     p_total = q_total = 0.0
-    for circuit, plans in zip(circuits, layout.circuit_plans):
-        p = q = 0.0
-        # Far station first; stations may be heterogeneous (mixed fleet).
-        for seg, plan in zip(reversed(circuit.segments), reversed(plans)):
-            p_mv, q_mv = station_mv_output(
-                plan.p_lv_kw * k, plan.q_lv_kvar * k, plan.transformer
-            )
-            p += p_mv
-            q += q_mv
-            s = math.hypot(p, q)
-            sel = seg.selection
-            dp, dq = sel.cable.series_losses(s, layout.v_mv_kv, seg.length_km)
-            p -= dp / sel.n_parallel
-            q -= dq / sel.n_parallel
-        p_total += p
-        q_total += q
-    p_total -= aux_p_kw
-    q_total -= aux_q_kvar
+    for branch, k_i in zip(branches, k):
+        p_branch = q_branch = 0.0
+        for circuit, plans in zip(branch.circuits, branch.layout.circuit_plans):
+            p = q = 0.0
+            # Far station first; stations may be heterogeneous (mixed fleet).
+            for seg, plan in zip(reversed(circuit.segments), reversed(plans)):
+                p_mv, q_mv = station_mv_output(
+                    plan.p_lv_kw * k_i, plan.q_lv_kvar * k_i, plan.transformer
+                )
+                p += p_mv
+                q += q_mv
+                s = math.hypot(p, q)
+                sel = seg.selection
+                dp, dq = sel.cable.series_losses(s, branch.layout.v_mv_kv, seg.length_km)
+                p -= dp / sel.n_parallel
+                q -= dq / sel.n_parallel
+            p_branch += p
+            q_branch += q
+        p_branch -= branch.aux_p_kw
+        q_branch -= branch.aux_q_kvar
+        p_total += p_branch
+        q_total += q_branch
 
     if export is not None:
         if export.hv_transformer is not None:
@@ -643,8 +715,8 @@ class ExportResult:
 
 @dataclass
 class PlantArchitecture:
-    """Full Stage-2 result: layout, sized circuits, export step, plant totals,
-    and the refined inverter requirement.
+    """Full Stage-2 result: every branch, the shared export step, plant
+    totals, and the refined inverter requirement.
 
     Refinement rule — NEVER fall short at the POC: losses grow with the square
     of load, so a single proportional correction would deliver slightly UNDER
@@ -652,13 +724,16 @@ class PlantArchitecture:
     cascade with the cable selections frozen (no re-selection, so the discrete
     picks cannot flap) until the delivered POC power is >= the target.
     Overshoot is curtailable; shortfall is not acceptable.
+
+    ``layout``, ``circuits``, ``aux_p_kw`` and ``aux_q_kvar`` are
+    single-branch compatibility properties, delegating to the sole branch —
+    every design today has exactly one. They exist so the reporting, PDF and
+    result-mapping layers keep compiling unchanged; a design with more than
+    one branch is not produced yet (see ``branches``).
     """
 
-    layout: PlantLayout
-    circuits: list[CircuitResult]
+    branches: list[BranchArchitecture]
     export: ExportResult | None  # None = plant delivered at the MV busbar
-    aux_p_kw: float
-    aux_q_kvar: float
     # Delivered at the POC when the inverters produce the Stage-1 output
     p_poc_delivered_kw: float
     q_poc_delivered_kvar: float
@@ -671,6 +746,22 @@ class PlantArchitecture:
     # POC power delivered with the refined inverter output (>= target by rule)
     p_poc_refined_delivered_kw: float | None
     power_balance_ok: bool
+
+    @property
+    def layout(self) -> PlantLayout:
+        return self.branches[0].layout
+
+    @property
+    def circuits(self) -> list[CircuitResult]:
+        return self.branches[0].circuits
+
+    @property
+    def aux_p_kw(self) -> float:
+        return self.branches[0].aux_p_kw
+
+    @property
+    def aux_q_kvar(self) -> float:
+        return self.branches[0].aux_q_kvar
 
     @property
     def n_circuits(self) -> int:
@@ -699,18 +790,13 @@ class PlantArchitecture:
         return all(c.current_ok for c in self.circuits)
 
 
-def size_architecture(
-    layout: PlantLayout,
+def size_plant(
+    branches: list[BranchArchitecture],
     stage1: SizingResult,
-    cable_candidates: list[Cable],
     *,
     max_utilization: float = 0.80,
-    max_loss_percent_base: float = 1.30,
-    max_loss_percent_per_km: float = 0.0,
     max_vdrop_percent: float | None = None,
     max_parallel: int = 12,
-    segment_lengths: dict[tuple[int, int], float] | None = None,
-    segment_candidates: dict[tuple[int, int], list[Cable]] | None = None,
     hv_transformer: Transformer | None = None,
     auto_hv: bool = False,
     hv_n_parallel: int = 1,
@@ -718,20 +804,17 @@ def size_architecture(
     hv_cable_length_km: float = 0.0,
     v_hv_kv: float | None = None,
     export_loss_percent_per_km: float = 0.1,
-    aux_p_kw: float = 0.0,
-    aux_q_kvar: float = 0.0,
     p_poc_target_kw: float | None = None,
 ) -> PlantArchitecture:
-    """Size the full plant architecture and recompute the delivered POC power.
+    """Size the shared HV transformer and export cable ONCE, on the combined
+    result of every already-sized branch — the plant-level half of Stage 2.
 
-    Forward power flow, inverter -> POC: MV circuits (size_circuits) deliver to
-    the busbar; the aux load is taken there; then, when present, the MV/HV
-    transformer and the HV export cable consume their losses on the way to the
-    POC. HV-side parameters are all optional — without them the plant is
-    delivered at the MV busbar (MV interconnection).
-
-    ``segment_lengths`` and ``segment_candidates`` are passed straight through
-    to :func:`size_circuits` (per-run lengths and per-run forced sections).
+    Forward power flow, busbar -> POC: every branch's busbar total (already
+    net of its own aux load, see :class:`BranchArchitecture`) is summed at the
+    shared bus; then, when present, the MV/HV transformer and the HV export
+    cable consume their losses on the way to the POC. HV-side parameters are
+    all optional — without them the plant is delivered at the shared MV bus
+    (MV interconnection).
 
     ``auto_hv=True`` sizes ONE MV/HV transformer automatically from the plant
     power and ``v_hv_kv`` (see :func:`auto_hv_transformer`) instead of taking
@@ -739,29 +822,25 @@ def size_architecture(
 
     When ``p_poc_target_kw`` is given, the refined inverter requirement is the
     Stage-1 output scaled so the delivered POC power lands AT OR ABOVE the
-    target — never below (see PlantArchitecture).
+    target — never below (see PlantArchitecture). Today every plant has one
+    branch, so the correction is a single scalar shared by the (one) branch;
+    :func:`_delivered_with_frozen_cables` is nonetheless expressed over a list
+    of branches and per-branch scalars, ready for more than one.
     """
-    circuits = size_circuits(
-        layout,
-        cable_candidates,
-        max_utilization=max_utilization,
-        max_loss_percent_base=max_loss_percent_base,
-        max_loss_percent_per_km=max_loss_percent_per_km,
-        max_vdrop_percent=max_vdrop_percent,
-        max_parallel=max_parallel,
-        segment_lengths=segment_lengths,
-        segment_candidates=segment_candidates,
-    )
-
-    p = sum(c.p_busbar_kw for c in circuits)
-    q = sum(c.q_busbar_kvar for c in circuits)
-    p -= aux_p_kw
-    q -= aux_q_kvar
+    p = sum(b.p_busbar_kw for b in branches)
+    q = sum(b.q_busbar_kvar for b in branches)
 
     if auto_hv:
         if v_hv_kv is None:
             raise ValueError("auto_hv requires v_hv_kv (the HV interconnection voltage).")
-        hv_transformer = auto_hv_transformer(math.hypot(p, q), v_hv_kv, layout.v_mv_kv)
+        mv_voltages = {b.layout.v_mv_kv for b in branches}
+        if len(mv_voltages) > 1:
+            raise ValueError(
+                f"One shared MV/HV transformer cannot serve branches at "
+                f"different MV voltages: {sorted(mv_voltages)}."
+            )
+        v_mv_kv = branches[0].layout.v_mv_kv
+        hv_transformer = auto_hv_transformer(math.hypot(p, q), v_hv_kv, v_mv_kv)
         hv_n_parallel = 1
 
     export: ExportResult | None = None
@@ -867,9 +946,8 @@ def size_architecture(
             )
         correction = p_poc_target_kw / p
         for _ in range(50):  # geometric convergence; a handful suffice
-            p_refined_delivered, _ = _delivered_with_frozen_cables(
-                layout, circuits, export, aux_p_kw, aux_q_kvar, correction
-            )
+            k = [correction] * len(branches)
+            p_refined_delivered, _ = _delivered_with_frozen_cables(branches, export, k)
             if p_refined_delivered >= p_poc_target_kw:
                 break
             correction *= p_poc_target_kw / p_refined_delivered
@@ -878,22 +956,19 @@ def size_architecture(
 
     # Conservation check, same spirit as the Stage-1 solver: everything the
     # stations take in at LV must come out at the POC or be consumed en route.
-    p_in = sum(st.p_lv_kw for c in circuits for st in c.stations)
+    p_in = sum(st.p_lv_kw for b in branches for c in b.circuits for st in c.stations)
     consumed = (
-        sum(st.dp_tx_kw for c in circuits for st in c.stations)
-        + sum(seg.dp_kw for c in circuits for seg in c.segments)
-        + aux_p_kw
+        sum(st.dp_tx_kw for b in branches for c in b.circuits for st in c.stations)
+        + sum(seg.dp_kw for b in branches for c in b.circuits for seg in c.segments)
+        + sum(b.aux_p_kw for b in branches)
         + (export.dp_tx_kw if export is not None else 0.0)
         + (export.hv_cable.dp_kw if export is not None and export.hv_cable else 0.0)
     )
     balance_ok = math.isclose(p_in, p + consumed, rel_tol=1e-6)
 
     return PlantArchitecture(
-        layout=layout,
-        circuits=circuits,
+        branches=branches,
         export=export,
-        aux_p_kw=aux_p_kw,
-        aux_q_kvar=aux_q_kvar,
         p_poc_delivered_kw=p,
         q_poc_delivered_kvar=q,
         p_poc_target_kw=p_poc_target_kw,
@@ -903,4 +978,65 @@ def size_architecture(
         s_inv_refined_kva=math.hypot(p_inv_refined, q_inv_refined),
         p_poc_refined_delivered_kw=p_refined_delivered,
         power_balance_ok=balance_ok,
+    )
+
+
+def size_architecture(
+    layout: PlantLayout,
+    stage1: SizingResult,
+    cable_candidates: list[Cable],
+    *,
+    max_utilization: float = 0.80,
+    max_loss_percent_base: float = 1.30,
+    max_loss_percent_per_km: float = 0.0,
+    max_vdrop_percent: float | None = None,
+    max_parallel: int = 12,
+    segment_lengths: dict[tuple[int, int], float] | None = None,
+    segment_candidates: dict[tuple[int, int], list[Cable]] | None = None,
+    hv_transformer: Transformer | None = None,
+    auto_hv: bool = False,
+    hv_n_parallel: int = 1,
+    hv_cable_candidates: list[Cable] | None = None,
+    hv_cable_length_km: float = 0.0,
+    v_hv_kv: float | None = None,
+    export_loss_percent_per_km: float = 0.1,
+    aux_p_kw: float = 0.0,
+    aux_q_kvar: float = 0.0,
+    p_poc_target_kw: float | None = None,
+) -> PlantArchitecture:
+    """Size the full plant architecture and recompute the delivered POC power.
+
+    The single-branch entry point: sizes one branch's MV circuits
+    (:func:`size_branch`) and then the shared HV transformer and export cable
+    (:func:`size_plant`) on that one branch's result. ``segment_lengths`` and
+    ``segment_candidates`` are passed straight through to
+    :func:`size_circuits` (per-run lengths and per-run forced sections).
+    """
+    branch = size_branch(
+        layout,
+        cable_candidates,
+        max_utilization=max_utilization,
+        max_loss_percent_base=max_loss_percent_base,
+        max_loss_percent_per_km=max_loss_percent_per_km,
+        max_vdrop_percent=max_vdrop_percent,
+        max_parallel=max_parallel,
+        segment_lengths=segment_lengths,
+        segment_candidates=segment_candidates,
+        aux_p_kw=aux_p_kw,
+        aux_q_kvar=aux_q_kvar,
+    )
+    return size_plant(
+        [branch],
+        stage1,
+        max_utilization=max_utilization,
+        max_vdrop_percent=max_vdrop_percent,
+        max_parallel=max_parallel,
+        hv_transformer=hv_transformer,
+        auto_hv=auto_hv,
+        hv_n_parallel=hv_n_parallel,
+        hv_cable_candidates=hv_cable_candidates,
+        hv_cable_length_km=hv_cable_length_km,
+        v_hv_kv=v_hv_kv,
+        export_loss_percent_per_km=export_loss_percent_per_km,
+        p_poc_target_kw=p_poc_target_kw,
     )
