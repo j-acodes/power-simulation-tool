@@ -23,6 +23,7 @@ from powertool import ComponentDatabase, size_generation
 
 from .models import Base, Design, Project, make_engine, make_session_factory
 from .schemas import (
+    BessSolutionInfo,
     CableInfo,
     CatalogueDefaults,
     CatalogueResponse,
@@ -80,22 +81,38 @@ def get_session() -> Iterator[Session]:
         session.close()
 
 
+def _transformer_info(key: str, tx) -> TransformerInfo:
+    return TransformerInfo(
+        key=key,
+        display_name=tx.display_name,
+        s_rated_kva=tx.s_rated_kva,
+        hv_kv=tx.hv_kv,
+        lv_kv=tx.lv_kv,
+        brand=tx.brand,
+        uk_percent=tx.uk_percent,
+        pk_kw=tx.pk_kw,
+        p0_kw=tx.p0_kw,
+        i0_percent=tx.i0_percent,
+    )
+
+
 @app.get("/api/catalogue", response_model=CatalogueResponse)
 def get_catalogue() -> CatalogueResponse:
-    transformers = [
-        TransformerInfo(
+    transformers = [_transformer_info(key, tx) for key, tx in db.transformers.items()]
+    bess_transformers = [
+        _transformer_info(key, tx) for key, tx in db.bess_transformers.items()
+    ]
+    bess_solutions = [
+        BessSolutionInfo(
             key=key,
-            display_name=tx.display_name,
-            s_rated_kva=tx.s_rated_kva,
-            hv_kv=tx.hv_kv,
-            lv_kv=tx.lv_kv,
-            brand=tx.brand,
-            uk_percent=tx.uk_percent,
-            pk_kw=tx.pk_kw,
-            p0_kw=tx.p0_kw,
-            i0_percent=tx.i0_percent,
+            e_container_kwh=sol.e_container_kwh,
+            pcs_p_kw=sol.pcs_p_kw,
+            pcs_lv_kv=sol.pcs_lv_kv,
+            aux_p_kw=sol.aux_p_kw,
+            aux_q_kvar=sol.aux_q_kvar,
+            containers_by_duration=sol.containers_by_duration,
         )
-        for key, tx in db.transformers.items()
+        for key, sol in db.bess_solutions.items()
     ]
 
     cables: dict[str, list[CableInfo]] = {}
@@ -124,7 +141,10 @@ def get_catalogue() -> CatalogueResponse:
         ),
     )
 
-    return CatalogueResponse(transformers=transformers, cables=cables, defaults=defaults)
+    return CatalogueResponse(
+        transformers=transformers, cables=cables, defaults=defaults,
+        bess_solutions=bess_solutions, bess_transformers=bess_transformers,
+    )
 
 
 @app.post("/api/stage1", response_model=Stage1Response)

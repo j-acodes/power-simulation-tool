@@ -1,0 +1,42 @@
+# BESS supplier solutions.
+#
+# *** PLACEHOLDER DATA — NOT FROM A REAL DATASHEET ***
+# No supplier quotation exists yet for this project. The figures below are
+# engineering guesses at the right ORDER OF MAGNITUDE for a modern containerised
+# BESS product (container energy, PCS power/voltage, worst-case auxiliary draw),
+# invented so the BESS sizing path can be built and tested ahead of a real
+# quotation. Every entry here must be replaced once a supplier datasheet is
+# available — see the header of transformers.yaml for the precedent this
+# project follows once real data lands.
+#
+#   e_container_kwh       : usable energy of ONE container [kWh]
+#   pcs_p_kw              : active power rating of ONE container's PCS [kW]
+#   pcs_lv_kv             : PCS AC output (line-to-line) voltage [kV] — the
+#                           BESS station transformer paired with this solution
+#                           must carry this same lv_kv (see
+#                           data/bess_transformers.yaml)
+#   aux_p_kw / aux_q_kvar : worst-case auxiliary draw (cooling, BMS, HVAC) of
+#                           ONE station, taken from the (imagined) spec sheet
+#   containers_by_duration: discharge hours -> containers per station, read
+#                           verbatim — never interpolated, derived or rounded
+#
+bess_solutions:
+  GENERIC_BESS_5MWH_LV069:      # placeholder: liquid-cooled 20ft container, 690 V PCS
+    e_container_kwh: 5000.0
+    pcs_p_kw: 2500.0
+    pcs_lv_kv: 0.69
+    aux_p_kw: 40.0
+    aux_q_kvar: 10.0
+    containers_by_duration:
+      2.0: 4
+      4.0: 8
+
+  GENERIC_BESS_3MWH_LV100:      # placeholder: liquid-cooled 20ft container, 1.0 kV PCS
+    e_container_kwh: 3440.0
+    pcs_p_kw: 1725.0
+    pcs_lv_kv: 1.0
+    aux_p_kw: 30.0
+    aux_q_kvar: 8.0
+    containers_by_duration:
+      2.0: 6
+      4.0: 12

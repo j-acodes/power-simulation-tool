@@ -134,6 +134,16 @@ class CableInfo(BaseModel):
     rated_current_a: float | None
 
 
+class BessSolutionInfo(BaseModel):
+    key: str
+    e_container_kwh: float
+    pcs_p_kw: float
+    pcs_lv_kv: float
+    aux_p_kw: float
+    aux_q_kvar: float
+    containers_by_duration: dict[float, int]
+
+
 class TiersDefaults(BaseModel):
     lv_kv: float
     mv_kv: float
@@ -156,6 +166,8 @@ class CatalogueResponse(BaseModel):
     transformers: list[TransformerInfo]
     cables: dict[str, list[CableInfo]]
     defaults: CatalogueDefaults
+    bess_solutions: list[BessSolutionInfo]
+    bess_transformers: list[TransformerInfo]
 
 
 # --- Projects / Designs persistence (M4) ---------------------------------

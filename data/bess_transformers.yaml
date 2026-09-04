@@ -1,0 +1,38 @@
+# BESS station transformers.
+#
+# A SEPARATE catalogue from data/transformers.yaml (the PV string-inverter
+# stations), on purpose: a BESS station's LV rating must match its BESS
+# solution's PCS voltage (see data/bess.yaml), which has no reason to equal
+# the PV LV bus, so mixing the two catalogues would only invite mismatches.
+#
+# *** PLACEHOLDER DATA — NOT FROM A REAL DATASHEET ***
+# No real BESS station transformer has been selected for this project yet.
+# Ratings follow the same placeholder assumptions already used for the PV
+# catalogue above (see transformers.yaml) pending a real datasheet:
+#   uk_percent = 8.0   (uniform placeholder)
+#   p0_kw      = 0.1% of the rating
+#   pk_kw      = 1.0% of the rating
+#   i0_percent = 0.0
+# lv_kv is chosen to match the PCS voltage of one of the placeholder BESS
+# solutions; hv_kv is left null (MV section voltage is a per-study choice).
+#
+bess_transformers:
+  GENERIC_BESS_TX_2750_LV069:   # sized for GENERIC_BESS_5MWH_LV069 (2500 kW PCS)
+    s_rated_kva: 2750
+    uk_percent: 8.0
+    pk_kw: 27.5
+    p0_kw: 2.75
+    i0_percent: 0.0
+    hv_kv: null
+    lv_kv: 0.69
+    brand: Generic
+
+  GENERIC_BESS_TX_1750_LV100:   # sized for GENERIC_BESS_3MWH_LV100 (1725 kW PCS)
+    s_rated_kva: 1750
+    uk_percent: 8.0
+    pk_kw: 17.5
+    p0_kw: 1.75
+    i0_percent: 0.0
+    hv_kv: null
+    lv_kv: 1.0
+    brand: Generic

@@ -161,15 +161,28 @@ def _custom_transformer(props: dict, name: str, hv_kv: float | None,
     return tx
 
 
+def _fleet_kind(props: dict) -> str:
+    """A station's fleet kind: ``pv`` or ``bess``. Absent parses as ``pv`` —
+    the backward-compatibility guarantee for every design already saved."""
+    kind = props.get("fleet_kind")
+    return kind if kind in ("pv", "bess") else "pv"
+
+
 def _station_transformer(node: dict, db, v_mv_kv: float | None,
                          v_lv_kv: float | None) -> Transformer | None:
     """The Transformer a station node stands for, or None when its props are
-    unusable (unknown catalogue key or invalid custom parameters)."""
+    unusable (unknown catalogue key or invalid custom parameters).
+
+    A catalogue-mode station picks from the transformer catalogue that
+    matches its fleet kind: PV stations from ``db.transformers``, BESS
+    stations from the separate ``db.bess_transformers``.
+    """
     props = _props(node)
     mode = props.get("mode") or ("catalogue" if props.get("model") else None)
     if mode == "catalogue":
         key = props.get("model")
-        tx = db.transformers.get(key) if isinstance(key, str) else None
+        catalogue = db.bess_transformers if _fleet_kind(props) == "bess" else db.transformers
+        tx = catalogue.get(key) if isinstance(key, str) else None
         return tx
     if mode == "custom":
         return _custom_transformer(props, f"Station {node.get('id')}",
@@ -523,16 +536,30 @@ def _check_props(nodes, tree, db, diagram, issues) -> None:
                     "The Point of Connection needs a power factor in (0, 1].",
                     node_id=nid))
         elif kind == "station":
+            fleet_kind = _fleet_kind(props)
+            # An ABSENT fleet kind legitimately means "pv" (old designs). A
+            # PRESENT but unrecognised one is a structural error, not an
+            # unknown key to shrug off: coercing "BESS" or "wind" to "pv"
+            # would size the station against the wrong catalogue silently.
+            raw_kind = props.get("fleet_kind")
+            if raw_kind is not None and raw_kind not in ("pv", "bess"):
+                issues.append(GraphIssue(
+                    "bad_fleet_kind",
+                    f"Station '{nid}' has fleet kind {raw_kind!r}; it must be "
+                    f"'pv' or 'bess'.", node_id=nid))
             mode = props.get("mode") or ("catalogue" if props.get("model") else None)
+            tx = None
             if mode == "catalogue":
-                if _station_transformer(node, db, v_mv, v_lv) is None:
+                tx = _station_transformer(node, db, v_mv, v_lv)
+                if tx is None:
                     issues.append(GraphIssue(
                         "unknown_model",
                         f"Station '{nid}' uses transformer "
                         f"{props.get('model')!r}, which is not in the catalogue.",
                         node_id=nid))
             elif mode == "custom":
-                if _station_transformer(node, db, v_mv, v_lv) is None:
+                tx = _station_transformer(node, db, v_mv, v_lv)
+                if tx is None:
                     issues.append(GraphIssue(
                         "bad_props",
                         f"Station '{nid}' has incomplete or inconsistent custom "
@@ -543,6 +570,23 @@ def _check_props(nodes, tree, db, diagram, issues) -> None:
                     "unknown_model",
                     f"Station '{nid}' has no transformer: pick a catalogue model "
                     f"or enter custom parameters.", node_id=nid))
+
+            if fleet_kind == "bess":
+                solution_name = props.get("bess_solution")
+                solution = (db.bess_solutions.get(solution_name)
+                           if isinstance(solution_name, str) else None)
+                if solution is None:
+                    issues.append(GraphIssue(
+                        "unknown_bess_solution",
+                        f"Station '{nid}' names no BESS solution: pick one from "
+                        f"the catalogue.", node_id=nid))
+                elif (tx is not None and tx.lv_kv is not None
+                      and abs(tx.lv_kv - solution.pcs_lv_kv) > 1e-9):
+                    issues.append(GraphIssue(
+                        "bess_lv_mismatch",
+                        f"Station '{nid}' transformer LV ({tx.lv_kv:g} kV) "
+                        f"disagrees with {solution.name}'s PCS voltage "
+                        f"({solution.pcs_lv_kv:g} kV).", node_id=nid))
         elif kind == "hv_tx":
             mode = props.get("mode") or "auto"
             n_parallel = _num(props.get("n_parallel", 1))

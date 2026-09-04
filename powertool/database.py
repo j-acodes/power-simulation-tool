@@ -10,7 +10,7 @@ from pathlib import Path
 
 import yaml
 
-from .components import Cable, Transformer
+from .components import BessSolution, Cable, Transformer
 
 # data/ lives next to the powertool/ package, one level up from this file.
 DATA_DIR = Path(__file__).resolve().parent.parent / "data"
@@ -33,6 +33,33 @@ def load_transformers(path: str | Path | None = None) -> dict[str, Transformer]:
     }
 
 
+def load_bess_solutions(path: str | Path | None = None) -> dict[str, BessSolution]:
+    """Load BESS supplier solutions from a YAML file, keyed by name."""
+    path = Path(path) if path else DATA_DIR / "bess.yaml"
+    raw = yaml.safe_load(path.read_text()) or {}
+    solutions: dict[str, BessSolution] = {}
+    for name, params in (raw.get("bess_solutions") or {}).items():
+        params = dict(params)
+        durations = params.pop("containers_by_duration", None) or {}
+        params["containers_by_duration"] = {float(k): int(v) for k, v in durations.items()}
+        solutions[name] = BessSolution(name=name, **params)
+    return solutions
+
+
+def load_bess_transformers(path: str | Path | None = None) -> dict[str, Transformer]:
+    """Load BESS station transformer types from a YAML file, keyed by name.
+
+    A separate catalogue from :func:`load_transformers` (the PV string-inverter
+    stations) — deliberately not a category field on the same one.
+    """
+    path = Path(path) if path else DATA_DIR / "bess_transformers.yaml"
+    raw = yaml.safe_load(path.read_text()) or {}
+    return {
+        name: Transformer(name=name, **params)
+        for name, params in (raw.get("bess_transformers") or {}).items()
+    }
+
+
 class ComponentDatabase:
     """In-memory catalogue of component types loaded from the YAML files."""
 
@@ -40,19 +67,26 @@ class ComponentDatabase:
         self,
         cables: dict[str, Cable] | None = None,
         transformers: dict[str, Transformer] | None = None,
+        bess_solutions: dict[str, BessSolution] | None = None,
+        bess_transformers: dict[str, Transformer] | None = None,
     ) -> None:
         self.cables = cables or {}
         self.transformers = transformers or {}
+        self.bess_solutions = bess_solutions or {}
+        self.bess_transformers = bess_transformers or {}
 
     @classmethod
     def load(cls, data_dir: str | Path | None = None) -> "ComponentDatabase":
         """Load the full catalogue from a data directory (defaults to ``data/``)."""
         if data_dir is None:
-            return cls(load_cables(), load_transformers())
+            return cls(load_cables(), load_transformers(), load_bess_solutions(),
+                       load_bess_transformers())
         data_dir = Path(data_dir)
         return cls(
             load_cables(data_dir / "cables.yaml"),
             load_transformers(data_dir / "transformers.yaml"),
+            load_bess_solutions(data_dir / "bess.yaml"),
+            load_bess_transformers(data_dir / "bess_transformers.yaml"),
         )
 
     def cable(self, name: str) -> Cable:
@@ -69,6 +103,24 @@ class ComponentDatabase:
         except KeyError:
             raise KeyError(
                 f"Transformer '{name}' not found in database. Available: {sorted(self.transformers)}"
+            ) from None
+
+    def bess_solution(self, name: str) -> BessSolution:
+        try:
+            return self.bess_solutions[name]
+        except KeyError:
+            raise KeyError(
+                f"BESS solution '{name}' not found in database. "
+                f"Available: {sorted(self.bess_solutions)}"
+            ) from None
+
+    def bess_transformer(self, name: str) -> Transformer:
+        try:
+            return self.bess_transformers[name]
+        except KeyError:
+            raise KeyError(
+                f"BESS transformer '{name}' not found in database. "
+                f"Available: {sorted(self.bess_transformers)}"
             ) from None
 
     def cables_for_voltage(self, v_kv: float) -> list[Cable]:

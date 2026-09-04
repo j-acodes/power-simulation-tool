@@ -81,6 +81,22 @@ def test_minimal_drawing_is_valid():
     assert validate_graph(_minimal(), db) == []
 
 
+def test_station_without_fleet_kind_parses_as_pv_and_solves_identically():
+    # This is the backward-compatibility guarantee for every design already
+    # saved: a station that never heard of fleet_kind must behave exactly as
+    # it did before this concept existed.
+    diagram = _minimal()
+    assert "fleet_kind" not in diagram["nodes"][2]["props"]
+    without = client.post("/api/solve", json=diagram).json()
+
+    explicit_pv = _minimal()
+    explicit_pv["nodes"][2]["props"]["fleet_kind"] = "pv"
+    with_pv = client.post("/api/solve", json=explicit_pv).json()
+
+    assert without["issues"] == [] and without["results"] is not None
+    assert without == with_pv
+
+
 def test_unknown_keys_are_ignored():
     # Permissive parsing: the canvas carries cosmetic fields the engine never
     # reads, and the schema will grow. Unknown keys must not fail a drawing.
@@ -232,6 +248,57 @@ def test_custom_station_transformer_accepted_and_checked():
     # uk% below the resistive share implied by Pk: the loss model rejects it.
     diagram["nodes"][2]["props"]["uk_percent"] = 0.5
     assert "bad_props" in _codes(validate_graph(diagram, db))
+
+
+def test_bess_station_without_solution_is_rejected():
+    diagram = _minimal()
+    diagram["nodes"][2]["props"] = {
+        "mode": "catalogue", "model": "GENERIC_BESS_TX_2750_LV069", "fleet_kind": "bess",
+    }
+    issues = validate_graph(diagram, db)
+    assert "unknown_bess_solution" in _codes(issues)
+    assert any(i.node_id == "s1" for i in issues if i.code == "unknown_bess_solution")
+
+
+def test_bess_station_lv_mismatch_is_rejected():
+    diagram = _minimal()
+    diagram["nodes"][2]["props"] = {
+        "mode": "catalogue", "model": "GENERIC_BESS_TX_2750_LV069", "fleet_kind": "bess",
+        # GENERIC_BESS_TX_2750_LV069 is 0.69 kV; this solution's PCS is 1.0 kV.
+        "bess_solution": "GENERIC_BESS_3MWH_LV100",
+    }
+    issues = validate_graph(diagram, db)
+    assert "bess_lv_mismatch" in _codes(issues)
+    assert any(i.node_id == "s1" for i in issues if i.code == "bess_lv_mismatch")
+
+
+def test_bess_single_fleet_design_validates_and_solves_like_pv():
+    # A discharging battery is modelled as a generator: with an identical
+    # transformer, a BESS station must size to exactly the same numbers a PV
+    # station would — sizing behaviour does not change in this ticket.
+    identical_tx = {
+        "mode": "custom", "name": "Identical station", "s_rated_kva": 3000.0,
+        "uk_percent": 6.0, "pk_kw": 30.0, "p0_kw": 3.0, "i0_percent": 0.5,
+    }
+
+    pv = _minimal()
+    pv["settings"]["tiers"]["lv_kv"] = 0.69
+    pv["nodes"][2]["props"] = dict(identical_tx)
+    assert validate_graph(pv, db) == []
+    pv_result = client.post("/api/solve", json=pv).json()
+    assert pv_result["issues"] == []
+
+    bess = _minimal()
+    bess["settings"]["tiers"]["lv_kv"] = 0.69
+    bess["nodes"][2]["props"] = {
+        **identical_tx, "fleet_kind": "bess", "bess_solution": "GENERIC_BESS_5MWH_LV069",
+    }
+    assert validate_graph(bess, db) == []
+    bess_result = client.post("/api/solve", json=bess).json()
+    assert bess_result["issues"] == []
+
+    assert bess_result["results"]["nodes"]["s1"] == pv_result["results"]["nodes"]["s1"]
+    assert bess_result["results"]["summary"] == pv_result["results"]["summary"]
 
 
 # --- graph_to_inputs: the positional bijection ------------------------------
@@ -560,3 +627,16 @@ def test_golden_rearranging_the_drawing_changes_the_numbers():
     # ... and the drawing is now over the 400 A feeder cap, flagged on its trunk.
     assert [w["edge_id"] for w in results["warnings"]
             if w["code"] == "circuit_over_current"] == ["c1_seg1"]
+
+
+def test_unrecognised_fleet_kind_is_rejected_not_coerced():
+    # An ABSENT fleet kind means "pv" (see the backward-compatibility test).
+    # A PRESENT but unrecognised one must be an issue: silently coercing
+    # "BESS" to "pv" would validate the station against the PV catalogue and
+    # size it as PV, with nothing anywhere saying so.
+    for bad in ("BESS", "wind", "", 123):
+        diagram = _minimal()
+        diagram["nodes"][2]["props"]["fleet_kind"] = bad
+        issues = validate_graph(diagram, db)
+        assert "bad_fleet_kind" in _codes(issues), f"{bad!r} was accepted"
+        assert any(i.node_id == "s1" for i in issues if i.code == "bad_fleet_kind")

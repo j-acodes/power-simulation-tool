@@ -218,6 +218,16 @@ export interface CableInfo {
   rated_current_a: number | null
 }
 
+export interface BessSolutionInfo {
+  key: string
+  e_container_kwh: number
+  pcs_p_kw: number
+  pcs_lv_kv: number
+  aux_p_kw: number
+  aux_q_kvar: number
+  containers_by_duration: Record<string, number> // discharge hours -> containers per station
+}
+
 export interface CatalogueDefaults {
   tiers: { lv_kv: number; mv_kv: number; hv_kv: number }
   rules: RuleSettings
@@ -227,6 +237,8 @@ export interface CatalogueResponse {
   transformers: TransformerInfo[]
   cables: Record<string, CableInfo[]> // keyed by rated_voltage_kv formatted "%g"
   defaults: CatalogueDefaults
+  bess_solutions: BessSolutionInfo[]
+  bess_transformers: TransformerInfo[]
 }
 
 // --- Projects / Designs (M4 persistence) ------------------------------------

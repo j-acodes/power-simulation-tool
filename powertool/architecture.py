@@ -46,6 +46,8 @@ class StationPlan:
     s_mv_kva: float
     i_a: float  # MV-side current at the layout's v_mv_kv
     loading: float  # s_lv / s_rated (uniform across the fleet)
+    v_lv_kv: float  # the station's own transformer LV rating
+    kind: str = "pv"  # fleet kind ("pv" or "bess"); see powertool.graph
 
 
 @dataclass
@@ -207,6 +209,7 @@ def arrange_plant(
             s_mv_kva=s_mv,
             i_a=current_a(s_mv, v_mv_kv),
             loading=loading,
+            v_lv_kv=tx.lv_kv if tx.lv_kv is not None else 0.0,
         )
         plans.extend([plan] * count)  # identical figures for every unit of a model
 
@@ -304,6 +307,7 @@ def arrange_plant_manual(
             s_mv_kva=s_mv,
             i_a=current_a(s_mv, v_mv_kv),
             loading=loading,
+            v_lv_kv=tx.lv_kv if tx.lv_kv is not None else 0.0,
         )
 
     return PlantLayout(
@@ -337,6 +341,8 @@ class StationResult:
     loading: float  # s_lv / s_rated
     s_rated_kva: float
     model: str  # display label, e.g. "3300 kVA - Huawei"
+    v_lv_kv: float  # the station's own transformer LV rating
+    kind: str = "pv"  # fleet kind ("pv" or "bess"); see powertool.graph
 
 
 @dataclass
@@ -446,6 +452,8 @@ def size_circuits(
                 loading=plan.loading,
                 s_rated_kva=plan.transformer.s_rated_kva,
                 model=plan.transformer.display_name,
+                v_lv_kv=plan.v_lv_kv,
+                kind=plan.kind,
             )
             for k, plan in enumerate(plans, start=1)
         ]

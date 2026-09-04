@@ -191,3 +191,24 @@ class AuxLoad:
     name: str
     p_kw: float
     q_kvar: float = 0.0
+
+
+@dataclass(frozen=True)
+class BessSolution:
+    """A named BESS supplier product, selected from a catalogue.
+
+    Choosing a solution fixes everything the sizing of a BESS station depends
+    on: the energy in one container, the power and LV voltage of one PCS, the
+    worst-case auxiliary draw, and the container count the supplier offers at
+    each discharge duration. ``containers_by_duration`` is READ, never
+    interpolated, derived or rounded — a duration the solution does not sell
+    cannot be requested.
+    """
+
+    name: str
+    e_container_kwh: float
+    pcs_p_kw: float
+    pcs_lv_kv: float
+    aux_p_kw: float                          # worst case, from the spec sheet
+    aux_q_kvar: float
+    containers_by_duration: dict[float, int]  # discharge hours -> containers per station

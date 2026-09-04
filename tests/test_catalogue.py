@@ -64,3 +64,26 @@ def test_only_branded_pv_stations(db):
     assert "MV_2500kVA_20_0.8kV" not in db.transformers
     assert set(db.transformers) == set(PV_STATIONS)
     assert all(tx.brand for tx in db.transformers.values())
+
+
+def test_bess_solutions_load(db):
+    assert db.bess_solutions
+    for sol in db.bess_solutions.values():
+        assert sol.e_container_kwh > 0
+        assert sol.pcs_p_kw > 0
+        assert sol.pcs_lv_kv > 0
+        assert sol.containers_by_duration
+        assert all(count >= 1 for count in sol.containers_by_duration.values())
+
+
+def test_bess_station_transformers_load_and_pair_with_solutions(db):
+    # A SEPARATE catalogue from the PV transformer stations.
+    assert db.bess_transformers
+    assert set(db.bess_transformers) & set(db.transformers) == set()
+
+    # Every placeholder solution has at least one BESS station transformer
+    # whose LV rating matches its PCS voltage.
+    for sol in db.bess_solutions.values():
+        assert any(
+            tx.lv_kv == pytest.approx(sol.pcs_lv_kv) for tx in db.bess_transformers.values()
+        ), f"no BESS station transformer pairs with {sol.name}'s PCS voltage"

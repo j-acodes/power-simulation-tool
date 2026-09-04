@@ -125,6 +125,13 @@ function NodeProperties({ node }: { node: DiagramNode }) {
       {node.kind === 'station' && (
         <>
           <label className="field">
+            <span>Fleet kind</span>
+            <select value={String(props.fleet_kind ?? 'pv')} onChange={(e) => patch({ fleet_kind: e.target.value })}>
+              <option value="pv">PV</option>
+              <option value="bess">BESS</option>
+            </select>
+          </label>
+          <label className="field">
             <span>Mode</span>
             <select value={String(props.mode ?? 'catalogue')} onChange={(e) => patch({ mode: e.target.value })}>
               <option value="catalogue">Catalogue model</option>
@@ -136,7 +143,7 @@ function NodeProperties({ node }: { node: DiagramNode }) {
               <span>Model</span>
               <select value={String(props.model ?? '')} onChange={(e) => patch({ model: e.target.value })}>
                 <option value="">— select —</option>
-                {catalogue?.transformers.map((tx) => (
+                {(props.fleet_kind === 'bess' ? catalogue?.bess_transformers : catalogue?.transformers)?.map((tx) => (
                   <option key={tx.key} value={tx.key}>
                     {tx.key}
                   </option>
@@ -145,6 +152,19 @@ function NodeProperties({ node }: { node: DiagramNode }) {
             </label>
           )}
           {props.mode === 'custom' && <CustomTransformerFields props={props} onChange={patch} />}
+          {props.fleet_kind === 'bess' && (
+            <label className="field">
+              <span>BESS solution</span>
+              <select value={String(props.bess_solution ?? '')} onChange={(e) => patch({ bess_solution: e.target.value })}>
+                <option value="">— select —</option>
+                {catalogue?.bess_solutions.map((sol) => (
+                  <option key={sol.key} value={sol.key}>
+                    {sol.key}
+                  </option>
+                ))}
+              </select>
+            </label>
+          )}
         </>
       )}
       {node.kind === 'aux' && (

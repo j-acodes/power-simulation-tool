@@ -5,6 +5,17 @@ import { useStore } from '../store'
 import type { DiagramNode, NodeKind, TransformerInfo } from '../types'
 import type { PaletteDropPayload } from '../canvas/Editor'
 
+const BESS_CUSTOM_PROPS = {
+  mode: 'custom',
+  fleet_kind: 'bess',
+  name: 'Custom BESS station',
+  s_rated_kva: 2750,
+  uk_percent: 8,
+  pk_kw: 27.5,
+  p0_kw: 2.75,
+  i0_percent: 0,
+}
+
 function onDragStart(event: React.DragEvent, payload: PaletteDropPayload) {
   event.dataTransfer.setData('application/reactflow', JSON.stringify(payload))
   event.dataTransfer.effectAllowed = 'move'
@@ -57,6 +68,10 @@ export function Palette() {
   const hasBusbar = nodes.some((n) => n.kind === 'busbar')
 
   const brandGroups = useMemo(() => (catalogue ? groupByBrand(catalogue.transformers) : []), [catalogue])
+  const bessBrandGroups = useMemo(
+    () => (catalogue ? groupByBrand(catalogue.bess_transformers) : []),
+    [catalogue],
+  )
 
   return (
     <CollapsiblePanel title="Palette" side="left" className="palette">
@@ -95,6 +110,31 @@ export function Palette() {
           kind="station"
           props={{ mode: 'custom', name: 'Custom station', s_rated_kva: 1000, uk_percent: 6, pk_kw: 8, p0_kw: 1, i0_percent: 0.5 }}
         />
+      </div>
+      <div className="palette-section">
+        <details className="palette-group" open>
+          <summary>BESS stations — catalogue</summary>
+          {!catalogue && <p className="palette-hint">Loading catalogue…</p>}
+          {bessBrandGroups.map(([brand, transformers]) => (
+            <details key={brand} className="palette-group" open>
+              <summary>{brand}</summary>
+              {transformers.map((tx) => (
+                <Item
+                  key={tx.key}
+                  label={tx.key}
+                  kind="station"
+                  props={{ mode: 'catalogue', model: tx.key, fleet_kind: 'bess' }}
+                  selected={selection?.type === 'palette' && selection.key === tx.key}
+                  onClick={() => setSelection({ type: 'palette', key: tx.key })}
+                />
+              ))}
+            </details>
+          ))}
+        </details>
+      </div>
+      <div className="palette-section">
+        <h3>BESS stations — custom</h3>
+        <Item label="Custom BESS station" kind="station" props={BESS_CUSTOM_PROPS} />
       </div>
     </CollapsiblePanel>
   )
