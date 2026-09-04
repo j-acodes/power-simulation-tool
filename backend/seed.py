@@ -17,7 +17,7 @@ from __future__ import annotations
 
 import math
 
-from powertool import ComponentDatabase, arrange_plant, size_pv_inverters
+from powertool import ComponentDatabase, arrange_plant, size_generation
 from powertool.architecture import PlantLayout
 from powertool.sizing import SizingResult
 
@@ -71,7 +71,7 @@ def _stage1_for_count(n: int, params: dict, db: ComponentDatabase,
         p_poc_kw=p_poc_kw,
         pf_target=params["pf_target"],
     )
-    return size_pv_inverters(chain, p_poc_kw=p_poc_kw, pf_target=params["pf_target"])
+    return size_generation(chain, p_poc_kw=p_poc_kw, pf_target=params["pf_target"])
 
 
 def seed_diagram(params: dict, db: ComponentDatabase) -> dict:

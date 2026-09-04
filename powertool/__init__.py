@@ -27,7 +27,13 @@ from .database import ComponentDatabase
 from .diagram import architecture_to_dot
 from .pdf_report import build_pdf_report
 from .report import build_report
-from .sizing import ElementLoss, SizingResult, size_pv_inverters
+from .sizing import (
+    ElementLoss,
+    SizingResult,
+    size_generation,
+    size_generation_pq,
+    size_pv_inverters,
+)
 
 __all__ = [
     "Cable",
@@ -40,6 +46,8 @@ __all__ = [
     "AutoCable",
     "CableSelection",
     "select_cable",
+    "size_generation",
+    "size_generation_pq",
     "size_pv_inverters",
     "SizingResult",
     "ElementLoss",

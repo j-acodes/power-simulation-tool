@@ -1,9 +1,10 @@
-"""PV inverter sizing via a backward loss-cascade along a radial chain.
+"""Generation sizing via a backward loss-cascade along a radial chain.
 
 This is the core engine. Given the power we want to deliver at the Point of
 Connection (POC) and a power-factor target, it walks the electrical chain
-*backward* from the POC toward the inverter, accumulating active and reactive
-losses, to find the P / Q / S the inverters must actually deliver.
+*backward* from the POC toward the conversion level, accumulating active and
+reactive losses, to find the P / Q / S the inverters (PV) or PCS units (BESS)
+must actually deliver.
 
 Sign convention (see the team's worst-case sizing rationale):
     Q_poc > 0 means reactive power *injected* by the plant at the POC. This is
@@ -17,6 +18,8 @@ computed at each section's nominal line-to-line voltage (see powertool.chain).
 from __future__ import annotations
 
 import math
+import warnings
+import dataclasses
 from dataclasses import dataclass
 
 from .cable_sizing import AutoCable, select_cable, select_cable_worst_case
@@ -98,7 +101,7 @@ class SizingResult:
     def report(self) -> str:
         """A human-readable summary table for scripts / the CLI."""
         lines = []
-        lines.append("PV inverter sizing — backward loss cascade (POC -> inverter)")
+        lines.append("Generation sizing — backward loss cascade (POC -> inverter)")
         lines.append("=" * 64)
         lines.append(
             f"POC target:  P = {self.p_poc_kw:,.1f} kW   "
@@ -180,37 +183,39 @@ def _element_contribution(
     raise TypeError(f"Unsupported component type in chain: {type(comp).__name__}")
 
 
-def size_pv_inverters(
-    chain: Chain, p_poc_kw: float, pf_target: float = 1.0
+def size_generation_pq(
+    chain: Chain, p_head_kw: float, q_head_kvar: float
 ) -> SizingResult:
-    """Size the PV inverters for a target POC power and power factor.
+    """Size the generation for an active/reactive power pair at the head of the chain.
+
+    This is the reactive-in sibling of :func:`size_generation`: it takes the
+    active and reactive power already *assigned* at the head of the chain,
+    rather than deriving the reactive figure from a power-factor target the
+    chain owns. It exists for callers that split one point-of-connection
+    reactive requirement across several chains, where each chain's reactive
+    duty is assigned to it rather than expressed as its own power factor.
 
     Parameters
     ----------
     chain : Chain
-        Electrical path, ordered from POC (first element) to inverter (last).
-    p_poc_kw : float
-        Active power to deliver at the Point of Connection [kW].
-    pf_target : float
-        Power-factor target at the POC (0 < pf <= 1). Reactive power is taken as
-        *injected* at the POC (the worst case for inverter sizing).
+        Electrical path, ordered from the head (first element) to inverter (last).
+    p_head_kw : float
+        Active power to deliver at the head of the chain [kW].
+    q_head_kvar : float
+        Reactive power to deliver at the head of the chain [kvar], *injected*
+        (the worst case for inverter sizing).
 
     Returns
     -------
     SizingResult
         P / Q / S at inverter level plus a per-element loss breakdown.
     """
-    if not 0.0 < pf_target <= 1.0:
-        raise ValueError(f"pf_target must be in (0, 1], got {pf_target}")
-    if p_poc_kw <= 0:
-        raise ValueError(f"p_poc_kw must be positive, got {p_poc_kw}")
+    if p_head_kw <= 0:
+        raise ValueError(f"p_head_kw must be positive, got {p_head_kw}")
 
-    # Reactive target at the POC from the power factor (injected => positive).
-    q_poc_kvar = p_poc_kw * math.tan(math.acos(pf_target))
-
-    # Walk the chain POC -> inverter, accumulating losses into the running P, Q.
-    p = p_poc_kw
-    q = q_poc_kvar
+    # Walk the chain head -> inverter, accumulating losses into the running P, Q.
+    p = p_head_kw
+    q = q_head_kvar
     losses: list[ElementLoss] = []
 
     for element in chain:
@@ -308,14 +313,19 @@ def size_pv_inverters(
     s_inv = math.hypot(p, q)
     pf_inv = p / s_inv if s_inv > 0 else 1.0
 
-    # Conservation check: P at inverter must equal POC power plus all active losses.
-    expected_p = p_poc_kw + sum(e.dp_kw for e in losses)
+    # Conservation check: P at inverter must equal head power plus all active losses.
+    expected_p = p_head_kw + sum(e.dp_kw for e in losses)
     power_balance_ok = math.isclose(p, expected_p, rel_tol=_BALANCE_RTOL)
 
+    # Effective power factor at the head, for display/echo purposes only —
+    # this form takes P and Q directly rather than a power-factor target.
+    s_head = math.hypot(p_head_kw, q_head_kvar)
+    pf_head = p_head_kw / s_head if s_head > 0 else 1.0
+
     return SizingResult(
-        p_poc_kw=p_poc_kw,
-        q_poc_kvar=q_poc_kvar,
-        pf_target=pf_target,
+        p_poc_kw=p_head_kw,
+        q_poc_kvar=q_head_kvar,
+        pf_target=pf_head,
         p_inv_kw=p,
         q_inv_kvar=q,
         s_inv_kva=s_inv,
@@ -323,3 +333,57 @@ def size_pv_inverters(
         losses=losses,
         power_balance_ok=power_balance_ok,
     )
+
+
+def size_generation(
+    chain: Chain, p_poc_kw: float, pf_target: float = 1.0
+) -> SizingResult:
+    """Size the generation for a target POC power and power factor.
+
+    Computes the reactive power implied by ``pf_target`` and delegates to
+    :func:`size_generation_pq`.
+
+    Parameters
+    ----------
+    chain : Chain
+        Electrical path, ordered from POC (first element) to inverter (last).
+    p_poc_kw : float
+        Active power to deliver at the Point of Connection [kW].
+    pf_target : float
+        Power-factor target at the POC (0 < pf <= 1). Reactive power is taken as
+        *injected* at the POC (the worst case for inverter sizing).
+
+    Returns
+    -------
+    SizingResult
+        P / Q / S at inverter level plus a per-element loss breakdown.
+    """
+    if not 0.0 < pf_target <= 1.0:
+        raise ValueError(f"pf_target must be in (0, 1], got {pf_target}")
+
+    # Reactive target at the POC from the power factor (injected => positive).
+    q_poc_kvar = p_poc_kw * math.tan(math.acos(pf_target))
+
+    # Echo the caller's target back verbatim. size_generation_pq derives an
+    # *effective* power factor from P and Q, which round-trips to within an ulp
+    # of the target but is a different quantity: what was asked for, versus what
+    # the numbers imply. Callers of this form asked for a target.
+    result = size_generation_pq(chain, p_poc_kw, q_poc_kvar)
+    return dataclasses.replace(result, pf_target=pf_target)
+
+
+def size_pv_inverters(
+    chain: Chain, p_poc_kw: float, pf_target: float = 1.0
+) -> SizingResult:
+    """Deprecated alias for :func:`size_generation`.
+
+    .. deprecated::
+        Use :func:`size_generation` instead. This name predates the module
+        going asset-neutral and will be removed in a future release.
+    """
+    warnings.warn(
+        "size_pv_inverters is deprecated; use size_generation instead.",
+        DeprecationWarning,
+        stacklevel=2,
+    )
+    return size_generation(chain, p_poc_kw, pf_target)

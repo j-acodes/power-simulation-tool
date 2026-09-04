@@ -278,14 +278,14 @@ def build_report(
     stage1: SizingResult,
     arch: PlantArchitecture,
     *,
-    plant_name: str = "PV Plant",
+    plant_name: str = "Plant",
     generated_at: datetime | None = None,
 ) -> str:
     """Full Markdown sizing report: methodology + detailed loss tables."""
     when = (generated_at or datetime.now()).strftime("%Y-%m-%d %H:%M")
     parts = [
         f"# {plant_name} — Sizing Report",
-        f"*Generated {when} · PV plant sizing tool*",
+        f"*Generated {when} · plant sizing tool*",
         "",
         _summary_section(stage1, arch),
         "",

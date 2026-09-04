@@ -19,7 +19,7 @@ from powertool import (
     auto_hv_transformer,
     build_pdf_report,
     size_architecture,
-    size_pv_inverters,
+    size_generation,
 )
 from powertool.graph import GraphInputs, graph_to_inputs, map_results, validate_graph
 
@@ -213,7 +213,7 @@ def solve_architecture(inputs: GraphInputs, db: ComponentDatabase):
     circuits and their order verbatim), so every run is sized with its own drawn
     length and any section the user pinned on the canvas is forced.
     """
-    stage1 = size_pv_inverters(build_diagram_chain(inputs, db),
+    stage1 = size_generation(build_diagram_chain(inputs, db),
                                p_poc_kw=inputs.p_poc_kw,
                                pf_target=inputs.pf_target)
     layout = arrange_plant_manual(

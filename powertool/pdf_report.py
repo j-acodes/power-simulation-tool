@@ -361,7 +361,7 @@ def build_pdf_report(
     stage1: SizingResult,
     arch: PlantArchitecture,
     *,
-    plant_name: str = "PV Plant",
+    plant_name: str = "Plant",
     generated_at: datetime | None = None,
 ) -> bytes:
     """Full PDF sizing report: methodology + detailed loss tables. Returns bytes."""
@@ -374,7 +374,7 @@ def build_pdf_report(
 
     story: list = [
         Paragraph(f"{plant_name} — Sizing Report", _H1),
-        Paragraph(f"Generated {when} · PV plant sizing tool", _SUB),
+        Paragraph(f"Generated {when} · plant sizing tool", _SUB),
         HRFlowable(width="100%", thickness=2, color=_GREEN, spaceBefore=4,
                    spaceAfter=10),
     ]

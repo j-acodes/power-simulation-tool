@@ -8,7 +8,15 @@ import math
 
 import pytest
 
-from powertool import Cable, Chain, ChainElement, Transformer, size_pv_inverters
+from powertool import (
+    Cable,
+    Chain,
+    ChainElement,
+    Transformer,
+    size_generation,
+    size_generation_pq,
+    size_pv_inverters,
+)
 
 
 def test_single_transformer_unity_pf():
@@ -94,3 +102,42 @@ def test_invalid_poc_power_raises():
     chain = Chain([ChainElement(t, v_kv=20)])
     with pytest.raises(ValueError):
         size_pv_inverters(chain, p_poc_kw=-100, pf_target=1.0)
+
+
+def test_power_factor_form_delegates_to_reactive_in_form():
+    # size_generation must compute Q from the PF target and delegate to
+    # size_generation_pq; both forms produce identical results for the same
+    # effective (P, Q) at the head of the chain.
+    t = Transformer("t", s_rated_kva=5000, uk_percent=6.0, pk_kw=40.0)
+    chain = Chain([ChainElement(t, v_kv=20)])
+    p_poc_kw, pf_target = 4000.0, 0.95
+    q_poc_kvar = p_poc_kw * math.tan(math.acos(pf_target))
+
+    via_pf = size_generation(chain, p_poc_kw=p_poc_kw, pf_target=pf_target)
+    via_pq = size_generation_pq(chain, p_head_kw=p_poc_kw, q_head_kvar=q_poc_kvar)
+
+    assert via_pf.p_inv_kw == pytest.approx(via_pq.p_inv_kw)
+    assert via_pf.q_inv_kvar == pytest.approx(via_pq.q_inv_kvar)
+    assert via_pf.s_inv_kva == pytest.approx(via_pq.s_inv_kva)
+    assert via_pf.q_poc_kvar == pytest.approx(via_pq.q_poc_kvar)
+
+
+def test_size_pv_inverters_alias_is_deprecated_but_equivalent():
+    t = Transformer("t", s_rated_kva=2500, uk_percent=6.0, pk_kw=24.0)
+    chain = Chain([ChainElement(t, v_kv=20)])
+    with pytest.warns(DeprecationWarning):
+        via_alias = size_pv_inverters(chain, p_poc_kw=2000, pf_target=1.0)
+    via_new_name = size_generation(chain, p_poc_kw=2000, pf_target=1.0)
+    assert via_alias.p_inv_kw == pytest.approx(via_new_name.p_inv_kw)
+
+
+def test_power_factor_target_is_echoed_verbatim():
+    # pf_target echoes what the caller ASKED FOR, not an effective power factor
+    # recomputed from P and Q. The two agree to within an ulp, so an approx
+    # comparison would pass either way — this asserts exact equality on purpose,
+    # because they are different quantities and only one of them is a target.
+    t = Transformer("t", s_rated_kva=5000, uk_percent=6.0, pk_kw=40.0)
+    chain = Chain([ChainElement(t, v_kv=20)])
+    for pf in (0.8, 0.92, 0.95, 0.995, 1.0):
+        result = size_generation(chain, p_poc_kw=4000.0, pf_target=pf)
+        assert result.pf_target == pf

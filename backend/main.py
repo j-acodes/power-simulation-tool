@@ -19,7 +19,7 @@ from fastapi.responses import FileResponse, Response
 from sqlalchemy import delete, func, select, update
 from sqlalchemy.orm import Session
 
-from powertool import ComponentDatabase, size_pv_inverters
+from powertool import ComponentDatabase, size_generation
 
 from .models import Base, Design, Project, make_engine, make_session_factory
 from .schemas import (
@@ -62,7 +62,7 @@ engine = make_engine()
 SessionLocal = make_session_factory(engine)
 Base.metadata.create_all(engine)
 
-app = FastAPI(title="PV Plant Sizing API")
+app = FastAPI(title="Plant Sizing API")
 
 app.add_middleware(
     CORSMiddleware,
@@ -139,7 +139,7 @@ def post_stage1(req: Stage1Request) -> Stage1Response:
         p_poc_kw=req.p_poc_kw,
         pf_target=req.pf_target,
     )
-    result = size_pv_inverters(chain, p_poc_kw=req.p_poc_kw, pf_target=req.pf_target)
+    result = size_generation(chain, p_poc_kw=req.p_poc_kw, pf_target=req.pf_target)
 
     return Stage1Response(
         p_inv_kw=result.p_inv_kw,
@@ -172,7 +172,7 @@ def _filename_slug(name: str) -> str:
 
 
 @app.post("/api/report")
-def post_report(diagram: dict = Body(...), name: str = "PV Plant") -> Response:
+def post_report(diagram: dict = Body(...), name: str = "Plant") -> Response:
     """Download the PDF sizing report for a drawn diagram.
 
     Body is the diagram payload (as for /api/solve); ``name`` titles the report
