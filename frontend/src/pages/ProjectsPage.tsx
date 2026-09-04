@@ -18,7 +18,7 @@ import { useConfirmDialog, usePromptDialog, useTechnologyDialog } from '../compo
 import { EXAMPLE_DIAGRAM } from '../example'
 import { useStore } from '../store'
 import { sortRows, type Sort, type SortDir } from '../sort'
-import { convertDiagramTechnology, legalCloneTargets, narrowingWarning, technologyLabel } from '../technology'
+import { convertDiagramTechnology, legalCloneTargets, narrowingWarning, permitsFleetKind, technologyLabel } from '../technology'
 import type { Diagram, DesignSummary, ProjectDetail, ProjectSummary } from '../types'
 
 function formatDate(iso: string): string {
@@ -197,7 +197,11 @@ export function ProjectsPage() {
     })
     if (!result || !result.technology) return
     const { value: name, technology } = result
-    const fromExample = await confirm({
+    // The example plant's stations carry no fleet kind, so they parse as PV —
+    // offering it on a battery design would seed a fleet that design's own
+    // technology forbids, the same hole the seed wizard has. Where PV isn't
+    // permitted there is no choice to make, so the question isn't asked.
+    const fromExample = permitsFleetKind(technology, 'pv') && await confirm({
       title: 'Start from example plant?',
       message: 'Choose "Example plant" to start pre-populated, or "Empty diagram" for a blank canvas.',
       confirmLabel: 'Example plant',
@@ -375,7 +379,7 @@ export function ProjectsPage() {
                             {d.name}
                           </Link>
                         </td>
-                        <td>{d.technology}</td>
+                        <td>{technologyLabel(d.technology)}</td>
                         <td>{d.poc_target ?? '…'}</td>
                         <td className="num">{d.stations ?? '…'}</td>
                         <td className="num">{d.circuits ?? (d.stations === undefined ? '…' : '—')}</td>

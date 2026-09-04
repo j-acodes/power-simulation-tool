@@ -65,6 +65,10 @@ def test_design_crud_happy_path():
     assert detail["designs"][0]["id"] == design["id"]
     assert detail["designs"][0]["technology"] == "pv"
 
+    resp = client.delete(f"/api/designs/{design['id']}")
+    assert resp.status_code == 204
+    assert client.get(f"/api/designs/{design['id']}").status_code == 404
+
 
 def test_design_create_requires_valid_technology():
     project = _create_project("Plant Zeta")
@@ -84,10 +88,6 @@ def test_design_create_requires_valid_technology():
     for technology in ("pv", "bess", "hybrid"):
         design = _create_design(project["id"], f"Design {technology}", technology)
         assert design["technology"] == technology
-
-    resp = client.delete(f"/api/designs/{design['id']}")
-    assert resp.status_code == 204
-    assert client.get(f"/api/designs/{design['id']}").status_code == 404
 
 
 def test_project_delete_cascades_designs():
