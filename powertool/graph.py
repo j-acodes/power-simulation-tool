@@ -1148,7 +1148,7 @@ def graph_to_inputs(diagram: dict, db) -> GraphInputs:
                 }
                 containers = sum(containers_by_station.values())
                 e_delivered_kwh = sum(
-                    containers_by_station[sid] * solution.e_container_kwh
+                    containers_by_station[sid] * solution.e_nominal_kwh
                     for sid, solution in per_station
                 )
 

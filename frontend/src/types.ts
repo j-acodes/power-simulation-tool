@@ -281,12 +281,21 @@ export interface CableInfo {
 
 export interface BessSolutionInfo {
   key: string
-  e_container_kwh: number
-  pcs_p_kw: number
+  display_name: string
+  brand: string
+  series: string
+  model: string
+  e_nominal_kwh: number
+  pcs_s_kva: number
+  pcs_count: number
   pcs_lv_kv: number
+  duration_h: number
   aux_p_kw: number
   aux_q_kvar: number
-  containers_by_duration: Record<string, number> // discharge hours -> containers per station
+  containers_per_station: number
+  datasheet_version: string | null
+  preliminary: boolean
+  datasheet_url: string | null
 }
 
 export interface CatalogueDefaults {

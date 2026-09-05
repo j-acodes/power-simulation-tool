@@ -37,13 +37,10 @@ def load_bess_solutions(path: str | Path | None = None) -> dict[str, BessSolutio
     """Load BESS supplier solutions from a YAML file, keyed by name."""
     path = Path(path) if path else DATA_DIR / "bess.yaml"
     raw = yaml.safe_load(path.read_text()) or {}
-    solutions: dict[str, BessSolution] = {}
-    for name, params in (raw.get("bess_solutions") or {}).items():
-        params = dict(params)
-        durations = params.pop("containers_by_duration", None) or {}
-        params["containers_by_duration"] = {float(k): int(v) for k, v in durations.items()}
-        solutions[name] = BessSolution(name=name, **params)
-    return solutions
+    return {
+        name: BessSolution(name=name, **params)
+        for name, params in (raw.get("bess_solutions") or {}).items()
+    }
 
 
 def load_bess_transformers(path: str | Path | None = None) -> dict[str, Transformer]:

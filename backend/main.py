@@ -106,12 +106,21 @@ def get_catalogue() -> CatalogueResponse:
     bess_solutions = [
         BessSolutionInfo(
             key=key,
-            e_container_kwh=sol.e_container_kwh,
-            pcs_p_kw=sol.pcs_p_kw,
+            display_name=sol.display_name,
+            brand=sol.brand,
+            series=sol.series,
+            model=sol.model,
+            e_nominal_kwh=sol.e_nominal_kwh,
+            pcs_s_kva=sol.pcs_s_kva,
+            pcs_count=sol.pcs_count,
             pcs_lv_kv=sol.pcs_lv_kv,
+            duration_h=sol.duration_h,
             aux_p_kw=sol.aux_p_kw,
             aux_q_kvar=sol.aux_q_kvar,
-            containers_by_duration=sol.containers_by_duration,
+            containers_per_station=sol.containers_per_station,
+            datasheet_version=sol.datasheet_version,
+            preliminary=sol.preliminary,
+            datasheet_url=sol.datasheet_url,
         )
         for key, sol in db.bess_solutions.items()
     ]

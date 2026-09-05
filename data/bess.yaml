@@ -1,42 +1,51 @@
 # BESS supplier solutions.
 #
-# *** PLACEHOLDER DATA — NOT FROM A REAL DATASHEET ***
-# No supplier quotation exists yet for this project. The figures below are
-# engineering guesses at the right ORDER OF MAGNITUDE for a modern containerised
-# BESS product (container energy, PCS power/voltage, worst-case auxiliary draw),
-# invented so the BESS sizing path can be built and tested ahead of a real
-# quotation. Every entry here must be replaced once a supplier datasheet is
-# available — see the header of transformers.yaml for the precedent this
-# project follows once real data lands.
+# Each entry is a real supplier product, identified as its own datasheet
+# identifies it: brand, series and model number. The catalogue key is a slug
+# of brand and model. The display name (see BessSolution.display_name) leads
+# with the series and qualifies it with the model number, because the series
+# is how the product is recognised and the model number is what distinguishes
+# two durations of the same series.
 #
-#   e_container_kwh       : usable energy of ONE container [kWh]
-#   pcs_p_kw              : active power rating of ONE container's PCS [kW]
-#   pcs_lv_kv             : PCS AC output (line-to-line) voltage [kV] — the
-#                           BESS station transformer paired with this solution
-#                           must carry this same lv_kv (see
-#                           data/bess_transformers.yaml)
-#   aux_p_kw / aux_q_kvar : worst-case auxiliary draw (cooling, BMS, HVAC) of
-#                           ONE station, taken from the (imagined) spec sheet
-#   containers_by_duration: discharge hours -> containers per station, read
-#                           verbatim — never interpolated, derived or rounded
+#   brand, series, model  : as printed on the datasheet
+#   e_nominal_kwh          : nominal usable energy of ONE container [kWh]
+#   pcs_s_kva / pcs_count  : apparent power of ONE PCS unit [kVA], and the
+#                            number of PCS units per container
+#   pcs_lv_kv              : PCS AC output (line-to-line) voltage [kV] — the
+#                            BESS station transformer paired with this
+#                            solution must carry this same lv_kv (see
+#                            data/bess_transformers.yaml)
+#   duration_h             : discharge duration DECLARED by the model number,
+#                            not derived from energy and power — see
+#                            BessSolution's docstring
+#   aux_p_kw / aux_q_kvar  : worst-case auxiliary draw (cooling, BMS, HVAC) of
+#                            ONE station; 0.0 means the datasheet publishes no
+#                            figure, not that the station draws nothing
+#   containers_per_station : PROVISIONAL — containers per station transformer.
+#                            Ticket 02 moves this to the pairing between a
+#                            solution and a station transformer, where it
+#                            actually belongs; until then it is read straight
+#                            off this field, unoverridable.
+#   datasheet_version / preliminary / datasheet_url : provenance of the
+#                            transcription; datasheet_url may be empty when
+#                            the source is not publicly linkable.
 #
 bess_solutions:
-  GENERIC_BESS_5MWH_LV069:      # placeholder: liquid-cooled 20ft container, 690 V PCS
-    e_container_kwh: 5000.0
-    pcs_p_kw: 2500.0
+  sungrow-st6900ux-4h:
+    brand: Sungrow
+    series: PowerTitan 3.0
+    model: ST6900UX-4H
+    e_nominal_kwh: 6904.0
+    pcs_s_kva: 450.0
+    pcs_count: 4
     pcs_lv_kv: 0.69
-    aux_p_kw: 40.0
-    aux_q_kvar: 10.0
-    containers_by_duration:
-      2.0: 4
-      4.0: 8
-
-  GENERIC_BESS_3MWH_LV100:      # placeholder: liquid-cooled 20ft container, 1.0 kV PCS
-    e_container_kwh: 3440.0
-    pcs_p_kw: 1725.0
-    pcs_lv_kv: 1.0
-    aux_p_kw: 30.0
-    aux_q_kvar: 8.0
-    containers_by_duration:
-      2.0: 6
-      4.0: 12
+    duration_h: 4.0            # from the "4H" in the model number: 6904 kWh /
+                                # (4 x 450 kVA) works out to 3.84 h, but the
+                                # duration is declared, not derived (see
+                                # BessSolution's docstring)
+    aux_p_kw: 0.0               # not published by this datasheet
+    aux_q_kvar: 0.0              # not published by this datasheet
+    containers_per_station: 1   # PROVISIONAL — see header comment above
+    datasheet_version: Version 3
+    preliminary: true
+    datasheet_url: ""

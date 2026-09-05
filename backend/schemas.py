@@ -142,12 +142,21 @@ class CableInfo(BaseModel):
 
 class BessSolutionInfo(BaseModel):
     key: str
-    e_container_kwh: float
-    pcs_p_kw: float
+    display_name: str
+    brand: str
+    series: str
+    model: str
+    e_nominal_kwh: float
+    pcs_s_kva: float
+    pcs_count: int
     pcs_lv_kv: float
+    duration_h: float
     aux_p_kw: float
     aux_q_kvar: float
-    containers_by_duration: dict[float, int]
+    containers_per_station: int
+    datasheet_version: str | None
+    preliminary: bool
+    datasheet_url: str | None
 
 
 class TiersDefaults(BaseModel):

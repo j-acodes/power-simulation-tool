@@ -276,9 +276,10 @@ def test_bess_station_without_solution_is_rejected():
 def test_bess_station_lv_mismatch_is_rejected():
     diagram = _minimal()
     diagram["nodes"][2]["props"] = {
-        "mode": "catalogue", "model": "GENERIC_BESS_TX_2750_LV069", "fleet_kind": "bess",
-        # GENERIC_BESS_TX_2750_LV069 is 0.69 kV; this solution's PCS is 1.0 kV.
-        "bess_solution": "GENERIC_BESS_3MWH_LV100",
+        # GENERIC_BESS_TX_1750_LV100 is 1.0 kV; sungrow-st6900ux-4h's PCS is
+        # 0.69 kV.
+        "mode": "catalogue", "model": "GENERIC_BESS_TX_1750_LV100", "fleet_kind": "bess",
+        "bess_solution": "sungrow-st6900ux-4h",
     }
     issues = validate_graph(diagram, db)
     assert "bess_lv_mismatch" in _codes(issues)
@@ -304,7 +305,7 @@ def test_bess_single_fleet_design_validates_and_solves_like_pv():
     bess = _minimal()
     bess["settings"]["tiers"]["lv_kv"] = 0.69
     bess["nodes"][2]["props"] = {
-        **identical_tx, "fleet_kind": "bess", "bess_solution": "GENERIC_BESS_5MWH_LV069",
+        **identical_tx, "fleet_kind": "bess", "bess_solution": "sungrow-st6900ux-4h",
     }
     assert validate_graph(bess, db) == []
     bess_result = client.post("/api/solve", json=bess).json()
@@ -727,7 +728,7 @@ def test_aux_load_on_a_second_busbar_validates():
         _node("bus2", "busbar", fleet_kind="bess"),
         _node("s2", "station", mode="catalogue",
               model="GENERIC_BESS_TX_2750_LV069", fleet_kind="bess",
-              bess_solution="GENERIC_BESS_5MWH_LV069"),
+              bess_solution="sungrow-st6900ux-4h"),
         _node("aux2", "aux", p_kw=20.0, q_kvar=5.0),
     ]
     diagram["edges"] += [

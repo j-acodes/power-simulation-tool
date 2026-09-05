@@ -69,11 +69,38 @@ def test_only_branded_pv_stations(db):
 def test_bess_solutions_load(db):
     assert db.bess_solutions
     for sol in db.bess_solutions.values():
-        assert sol.e_container_kwh > 0
-        assert sol.pcs_p_kw > 0
+        assert sol.brand and sol.series and sol.model
+        assert sol.e_nominal_kwh > 0
+        assert sol.pcs_s_kva > 0
+        assert sol.pcs_count >= 1
         assert sol.pcs_lv_kv > 0
-        assert sol.containers_by_duration
-        assert all(count >= 1 for count in sol.containers_by_duration.values())
+        assert sol.duration_h > 0
+        assert sol.containers_per_station >= 1
+
+
+def test_sungrow_powertitan_entry_present_with_published_parameters(db):
+    # The only entry in the catalogue: the invented placeholders are gone, and
+    # this one carries the real datasheet figures, keyed by a slug of brand
+    # and model.
+    sol = db.bess_solutions["sungrow-st6900ux-4h"]
+    assert sol.brand == "Sungrow"
+    assert sol.series == "PowerTitan 3.0"
+    assert sol.model == "ST6900UX-4H"
+    assert sol.display_name == "PowerTitan 3.0 — ST6900UX-4H"
+    assert sol.e_nominal_kwh == 6904.0
+    assert sol.pcs_s_kva == 450.0
+    assert sol.pcs_count == 4
+    assert sol.pcs_lv_kv == 0.69
+    assert sol.duration_h == 4.0
+    # The datasheet publishes no auxiliary figure: zero, not an estimate.
+    assert sol.aux_p_kw == 0.0
+    assert sol.aux_q_kvar == 0.0
+    assert sol.containers_per_station == 1
+    assert sol.preliminary is True
+
+
+def test_no_bess_solution_is_placeholder_data(db):
+    assert set(db.bess_solutions) == {"sungrow-st6900ux-4h"}
 
 
 def test_bess_station_transformers_load_and_pair_with_solutions(db):

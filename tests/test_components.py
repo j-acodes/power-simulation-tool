@@ -67,42 +67,46 @@ def test_transformer_invalid_uk_raises():
         _ = t.ux_percent
 
 
-# --- BessSolution: the duration table is read, never derived -----------------
+# --- BessSolution: the discharge duration is declared, never derived --------
 
 def _solution(**overrides):
     from powertool.components import BessSolution
     params = dict(
-        name="TEST_BESS", e_container_kwh=5000.0, pcs_p_kw=2500.0, pcs_lv_kv=0.69,
-        aux_p_kw=40.0, aux_q_kvar=10.0, containers_by_duration={2.0: 4, 4.0: 8},
+        name="TEST_BESS", brand="Acme", series="Series", model="Model",
+        e_nominal_kwh=5000.0, pcs_s_kva=1250.0, pcs_count=2, pcs_lv_kv=0.69,
+        duration_h=4.0, aux_p_kw=40.0, aux_q_kvar=10.0, containers_per_station=8,
     )
     params.update(overrides)
     return BessSolution(**params)
 
 
-def test_container_count_is_read_verbatim_from_the_table():
+def test_display_name_leads_with_series_and_qualifies_with_model():
+    sol = _solution(series="PowerTitan 3.0", model="ST6900UX-4H")
+    assert sol.display_name == "PowerTitan 3.0 — ST6900UX-4H"
+
+
+def test_container_count_is_read_verbatim_at_the_declared_duration():
     sol = _solution()
-    assert sol.containers_at(2.0) == 4
     assert sol.containers_at(4.0) == 8
 
 
 def test_a_duration_the_solution_does_not_sell_is_refused_not_interpolated():
-    # 3 h sits exactly between two tabulated durations, so any interpolating or
-    # rounding implementation would happily invent 6 containers. The supplier's
-    # own figure is the one that appears in a design review; there is no figure
-    # for 3 h, so there is no answer to give.
+    # The supplier's own figure is the one that appears in a design review;
+    # there is no figure for any duration but the declared one, so there is no
+    # answer to give for another.
     sol = _solution()
-    with pytest.raises(KeyError, match="3"):
-        sol.containers_at(3.0)
+    with pytest.raises(KeyError, match="2"):
+        sol.containers_at(2.0)
 
 
-def test_supported_durations_are_sorted():
-    sol = _solution(containers_by_duration={4.0: 8, 1.0: 2, 2.0: 4})
-    assert sol.supported_durations == [1.0, 2.0, 4.0]
+def test_supported_durations_is_the_single_declared_duration():
+    sol = _solution(duration_h=4.0)
+    assert sol.supported_durations == [4.0]
 
 
 def test_a_duration_matches_despite_float_representation():
     # Durations arrive from YAML and from a JSON payload, so the same duration
-    # can reach us as 2 or 2.0 or 2.0000000001. An exact dict lookup would miss.
+    # can reach us as 4 or 4.0 or 4.0000000001. An exact comparison would miss.
     sol = _solution()
-    assert sol.containers_at(2) == 4
-    assert sol.containers_at(2.0 + 1e-12) == 4
+    assert sol.containers_at(4) == 8
+    assert sol.containers_at(4.0 + 1e-12) == 8

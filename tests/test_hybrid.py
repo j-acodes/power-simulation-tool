@@ -44,7 +44,7 @@ def _hybrid_with_drawn_bess(p_target_bess_mw: float = 0.0) -> dict:
         _node("bus_b", "busbar", fleet_kind="bess"),
         _node("s_b1", "station", mode="catalogue",
               model="GENERIC_BESS_TX_2750_LV069", fleet_kind="bess",
-              bess_solution="GENERIC_BESS_5MWH_LV069"),
+              bess_solution="sungrow-st6900ux-4h"),
         _node("aux_b", "aux", p_kw=40.0, q_kvar=8.0),
     ]
     diagram["edges"] += [
@@ -173,7 +173,7 @@ def test_a_legacy_bess_plant_can_gain_a_pv_busbar():
     diagram["settings"]["tiers"]["lv_kv"] = 0.69
     diagram["nodes"][2]["props"] = {
         "mode": "catalogue", "model": "GENERIC_BESS_TX_2750_LV069",
-        "fleet_kind": "bess", "bess_solution": "GENERIC_BESS_5MWH_LV069",
+        "fleet_kind": "bess", "bess_solution": "sungrow-st6900ux-4h",
     }
     # The busbar deliberately keeps no fleet_kind — that is what a saved design
     # looks like. Add a declared PV busbar with a station of its own.
@@ -208,7 +208,7 @@ def test_two_undeclared_busbars_are_still_a_duplicate():
 # --- BESS sizing and compliance (ticket 07) ---------------------------------
 
 def _bess_only(duration=None, model="GENERIC_BESS_TX_2750_LV069",
-               solution="GENERIC_BESS_5MWH_LV069", p_target_mw=3.0):
+               solution="sungrow-st6900ux-4h", p_target_mw=3.0):
     """A single-fleet BESS plant, optionally with a discharge duration set."""
     d = _minimal()
     d["settings"]["tiers"]["lv_kv"] = 0.69
@@ -221,13 +221,12 @@ def _bess_only(duration=None, model="GENERIC_BESS_TX_2750_LV069",
     return d
 
 
-def test_container_count_and_delivered_energy_come_from_the_table():
+def test_container_count_and_delivered_energy_come_from_the_declared_duration():
     from powertool.graph import graph_to_inputs
-    # GENERIC_BESS_5MWH_LV069: 4 containers at 2 h, 8 at 4 h, 5000 kWh each.
-    for hours, per_station in ((2.0, 4), (4.0, 8)):
-        branch = graph_to_inputs(_bess_only(duration=hours), db).branches[0]
-        assert branch.containers == per_station          # one station drawn
-        assert branch.e_delivered_kwh == per_station * 5000.0
+    # sungrow-st6900ux-4h: 1 container at its declared 4 h duration, 6904 kWh.
+    branch = graph_to_inputs(_bess_only(duration=4.0), db).branches[0]
+    assert branch.containers == 1          # one station drawn
+    assert branch.e_delivered_kwh == 6904.0
 
 
 def test_an_unsupported_duration_is_rejected_server_side():
@@ -253,23 +252,24 @@ def test_a_bess_design_without_a_duration_still_solves():
 def test_the_energy_gate_is_independent_of_the_loading_gate():
     """Both gates are hard, and an engineer has to see WHICH one failed.
 
-    One drawn station of GENERIC_BESS_5MWH_LV069 gives 8 containers at 4 h
-    (read from the table, not derived), so 40 MWh delivered whatever the target.
-    Raising the target raises the energy owed without touching what is
-    installed, which is how the two gates are pulled apart here.
+    One drawn station of sungrow-st6900ux-4h delivers exactly its declared
+    6904 kWh at its 4 h duration (read from the datasheet, not derived),
+    whatever the target. Raising the target raises the energy owed without
+    touching what is installed, which is how the two gates are pulled apart
+    here.
     """
-    ok = client.post("/api/solve", json=_bess_only(duration=4.0, p_target_mw=3.0)).json()
+    ok = client.post("/api/solve", json=_bess_only(duration=4.0, p_target_mw=1.0)).json()
     assert ok["issues"] == []
     fleet = ok["results"]["summary"]["branches"][0]
-    assert fleet["containers"] == 8
-    assert fleet["e_delivered_kwh"] == 40_000.0
-    assert fleet["e_required_kwh"] == 12_000.0   # 3 MW for 4 h
+    assert fleet["containers"] == 1
+    assert fleet["e_delivered_kwh"] == 6904.0
+    assert fleet["e_required_kwh"] == 4_000.0   # 1 MW for 4 h
     assert fleet["energy_ok"] is True
 
-    # 12 MW for 4 h owes 48 MWh; the same single station still delivers 40 MWh.
+    # 12 MW for 4 h owes 48 MWh; the same single station still delivers 6904 kWh.
     short = client.post("/api/solve", json=_bess_only(duration=4.0, p_target_mw=12.0)).json()
     fleet = short["results"]["summary"]["branches"][0]
-    assert fleet["e_delivered_kwh"] == 40_000.0
+    assert fleet["e_delivered_kwh"] == 6904.0
     assert fleet["e_required_kwh"] == 48_000.0
     assert fleet["energy_ok"] is False
     # ...and the loading gate is reported separately, against this fleet's own
@@ -299,17 +299,19 @@ def test_bess_aux_is_reported_but_never_sizes_the_pcs():
     design["nodes"] = [n for n in design["nodes"] if n["kind"] != "aux"]
     design["edges"] = [e for e in design["edges"] if e["id"] != "e_aux"]
 
-    # The same design against a catalogue whose solution draws no auxiliary
-    # power at all. Every sizing figure must be identical.
-    zero_aux = dataclasses.replace(db.bess_solutions["GENERIC_BESS_5MWH_LV069"],
-                                   aux_p_kw=0.0, aux_q_kvar=0.0)
-    db_zero = ComponentDatabase(db.cables, db.transformers,
-                                {**db.bess_solutions,
-                                 "GENERIC_BESS_5MWH_LV069": zero_aux},
-                                db.bess_transformers)
+    # sungrow-st6900ux-4h publishes no auxiliary figure (zero, per the
+    # datasheet). Compare it against a hypothetical catalogue entry that draws
+    # a non-zero worst-case auxiliary load — every sizing figure must be
+    # identical regardless.
+    with_aux_solution = dataclasses.replace(db.bess_solutions["sungrow-st6900ux-4h"],
+                                            aux_p_kw=40.0, aux_q_kvar=10.0)
+    db_with_aux = ComponentDatabase(db.cables, db.transformers,
+                                    {**db.bess_solutions,
+                                     "sungrow-st6900ux-4h": with_aux_solution},
+                                    db.bess_transformers)
 
-    with_aux = solve_diagram(design, db)
-    without = solve_diagram(design, db_zero)
+    with_aux = solve_diagram(design, db_with_aux)
+    without = solve_diagram(design, db)
     assert with_aux["issues"] == [] and without["issues"] == []
     a = with_aux["results"]["summary"]["branches"][0]
     b = without["results"]["summary"]["branches"][0]
@@ -326,9 +328,21 @@ def test_bess_aux_is_reported_but_never_sizes_the_pcs():
 
 
 def test_bess_aux_is_summed_across_the_fleet():
+    import dataclasses
+    from powertool.database import ComponentDatabase
     from powertool.graph import graph_to_inputs
+
+    # sungrow-st6900ux-4h publishes no auxiliary figure; a non-zero one from
+    # this test's own replacement is what proves it reaches the branch total.
+    with_aux_solution = dataclasses.replace(db.bess_solutions["sungrow-st6900ux-4h"],
+                                            aux_p_kw=40.0, aux_q_kvar=10.0)
+    db_with_aux = ComponentDatabase(db.cables, db.transformers,
+                                    {**db.bess_solutions,
+                                     "sungrow-st6900ux-4h": with_aux_solution},
+                                    db.bess_transformers)
+
     design = _bess_only(duration=4.0)
-    branch = graph_to_inputs(design, db).branches[0]
+    branch = graph_to_inputs(design, db_with_aux).branches[0]
     assert branch.bess_aux_p_kw == 40.0
     assert branch.bess_aux_q_kvar == 10.0
     # The drawn aux node is a separate figure and stays separate.
@@ -336,9 +350,9 @@ def test_bess_aux_is_summed_across_the_fleet():
 
 
 def test_container_count_is_reported_on_each_station():
-    solved = client.post("/api/solve", json=_bess_only(duration=2.0)).json()
+    solved = client.post("/api/solve", json=_bess_only(duration=4.0)).json()
     assert solved["issues"] == []
-    assert solved["results"]["nodes"]["s1"]["containers"] == 4
+    assert solved["results"]["nodes"]["s1"]["containers"] == 1
     # A PV station has no container count at all, rather than a zero that would
     # read as "none needed".
     pv = client.post("/api/solve", json=_minimal()).json()

@@ -59,6 +59,33 @@ def test_catalogue_returns_transformers_cables_and_defaults():
     assert data["defaults"]["rules"]["max_utilization"] == 0.80
 
 
+def test_catalogue_serves_the_reshaped_bess_solution():
+    resp = client.get("/api/catalogue")
+    assert resp.status_code == 200
+    data = resp.json()
+
+    assert len(data["bess_solutions"]) == 1
+    sol = data["bess_solutions"][0]
+    assert sol["key"] == "sungrow-st6900ux-4h"
+    assert sol["display_name"] == "PowerTitan 3.0 — ST6900UX-4H"
+    assert sol["brand"] == "Sungrow"
+    assert sol["series"] == "PowerTitan 3.0"
+    assert sol["model"] == "ST6900UX-4H"
+    assert sol["e_nominal_kwh"] == 6904.0
+    assert sol["pcs_s_kva"] == 450.0
+    assert sol["pcs_count"] == 4
+    assert sol["pcs_lv_kv"] == 0.69
+    assert sol["duration_h"] == 4.0
+    assert sol["aux_p_kw"] == 0.0
+    assert sol["aux_q_kvar"] == 0.0
+    assert sol["containers_per_station"] == 1
+    assert sol["preliminary"] is True
+    # The reshaped fields are gone from the wire contract entirely.
+    assert "containers_by_duration" not in sol
+    assert "e_container_kwh" not in sol
+    assert "pcs_p_kw" not in sol
+
+
 def test_stage1_example_plant_matches_direct_engine_computation():
     resp = client.post("/api/stage1", json=EXAMPLE_PAYLOAD)
     assert resp.status_code == 200
