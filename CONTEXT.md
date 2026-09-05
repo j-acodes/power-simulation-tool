@@ -81,19 +81,28 @@ balance only below the export step, never inflating the power a station or a PCS
 _Avoid_: parasitic load, house load
 
 **BESS solution**:
-A named battery product, selected from a catalogue, that fixes everything the sizing of a
-BESS station depends on: the energy in one container, the power and LV voltage of one PCS,
-the worst-case auxiliary draw, and the container count the supplier offers at each discharge
-duration. Choosing a BESS solution is choosing a real product, not filling in a spec sheet by
-hand.
+A named battery product, selected from a catalogue and identified the way a supplier quote
+identifies it: brand, series and model number. It fixes the nominal energy of one container,
+the rating and LV voltage of its PCS, the worst-case auxiliary draw, and the discharge
+duration its model number declares. Choosing a BESS solution is choosing a real product, not
+filling in a spec sheet by hand.
 _Avoid_: BESS product, battery model
 
 **Container**:
 One physical enclosure of battery cells and its share of conversion equipment, as offered by
-a BESS solution. The number of containers behind a station comes straight from the solution's
-own table for the chosen discharge duration — it is read, never computed, interpolated or
-rounded.
+a BESS solution. The number of containers behind a station comes from the pairing between that
+station's transformer and its solution — read, never computed, interpolated or rounded. It can
+be overridden on a station that is only partially populated, which is the one place a
+container count is a judgement rather than a supplier's figure.
 _Avoid_: battery unit, pack
+
+**Pairing**:
+The record, carried by a BESS station transformer, of which BESS solutions it is actually sold
+with and how many containers it serves for each. It exists because a container is not a
+complete station: a transformerless product emits LV and reaches the MV busbar only through a
+station transformer its own datasheet says nothing about. A solution and a station transformer
+that are not paired cannot be combined, however well their voltages happen to agree.
+_Avoid_: compatibility, match, association
 
 **PCS**:
 The battery-fleet name for the conversion equipment at a station — the point where DC storage
@@ -107,9 +116,13 @@ The PV-fleet name for the same conversion-level role that a BESS fleet calls the
 _Avoid_: PCS, when the fleet kind is PV
 
 **Discharge duration**:
-The number of hours a BESS fleet must sustain its point-of-connection power. It is a
-project-level setting, restricted to whichever durations the chosen BESS solution actually
-offers — a duration the solution does not sell cannot be requested.
+The number of hours a BESS fleet must sustain its point-of-connection power. A BESS solution
+**declares** its duration through its model number rather than deriving it from energy and
+power: the ST6900UX-4H sells 4 h, although its energy over its PCS rating works out to 3.84 h.
+The nameplate is what gets procured, so the nameplate is what the catalogue records — the same
+stance ADR-0002 takes for technology. As a project-level setting it is restricted to the
+durations the drawn stations' own station transformers are paired to sell; a duration nobody
+in the design is sold cannot be requested.
 _Avoid_: duration, discharge hours (as a bare, unqualified term)
 
 **Delivered energy**:
@@ -118,3 +131,13 @@ of one container, summed across the fleet. A design meets its energy compliance 
 when delivered energy is at least the fleet's point-of-connection power times the discharge
 duration.
 _Avoid_: stored energy, capacity
+
+**Simulated parameter / typed parameter**:
+The two tiers every catalogue parameter falls into, and the distinction the catalogue is built
+around. A **simulated** parameter is one the sizing engine reads — nominal energy, PCS rating
+and LV voltage, discharge duration, auxiliary draw. A **typed** parameter is structured,
+stored and shown, but never computed with: cell chemistry, dimensions, ingress protection,
+the operating envelope. Both are transcribed from a datasheet with equal care; only one of
+them can change a number in a design review. There is no third, free-form tier — a datasheet
+row that fits neither is not stored at all.
+_Avoid_: display field, metadata (both blur the point, which is what the engine reads)

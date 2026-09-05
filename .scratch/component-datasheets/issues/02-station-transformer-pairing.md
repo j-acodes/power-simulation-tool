@@ -30,20 +30,20 @@ unbuildable station.
 
 **Blocked by:** 01 (Reshape the BESS solution around a declared discharge duration).
 
-**Status:** ready-for-agent
+**Status:** done (8d319d6)
 
-- [ ] A BESS station transformer declares the solutions it is sold with, each with a container
+- [x] A BESS station transformer declares the solutions it is sold with, each with a container
       count, and the pairing is served by the catalogue endpoint and typed in the frontend
-- [ ] Choosing a station transformer restricts the discharge durations on offer to those
+- [x] Choosing a station transformer restricts the discharge durations on offer to those
       available among its paired solutions
-- [ ] Choosing a duration restricts the solutions on offer to those paired with that station
+- [x] Choosing a duration restricts the solutions on offer to those paired with that station
       transformer at that duration
-- [ ] Container count per station defaults from the pairing
-- [ ] The engineer can override the container count, and the override survives a save and reload
-- [ ] A payload naming a solution not paired with its station transformer is rejected
+- [x] Container count per station defaults from the pairing
+- [x] The engineer can override the container count, and the override survives a save and reload
+- [x] A payload naming a solution not paired with its station transformer is rejected
       server-side with a validation issue
-- [ ] A payload naming a duration unavailable for its station transformer is rejected
+- [x] A payload naming a duration unavailable for its station transformer is rejected
       server-side
-- [ ] The existing LV-voltage-match check still fires on a pairing whose voltages disagree
-- [ ] Delivered energy and the energy compliance gate still behave as before, now reading the
+- [x] The existing LV-voltage-match check still fires on a pairing whose voltages disagree
+- [x] Delivered energy and the energy compliance gate still behave as before, now reading the
       count from the pairing

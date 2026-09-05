@@ -28,21 +28,21 @@ read the diff; do not regenerate it blindly.
 
 **Blocked by:** None (can start immediately).
 
-**Status:** ready-for-agent
+**Status:** done (9164453)
 
-- [ ] A BESS solution declares a single discharge duration; the per-solution duration table no
+- [x] A BESS solution declares a single discharge duration; the per-solution duration table no
       longer exists anywhere in the model, the catalogue payload, the frontend types or the YAML
-- [ ] A BESS solution carries brand, series and model number, and is keyed by a slug of brand
+- [x] A BESS solution carries brand, series and model number, and is keyed by a slug of brand
       and model
-- [ ] The display name leads with the series and qualifies it with the model number
-- [ ] PCS rating is stored as apparent power per unit plus a unit count, and nothing in the
+- [x] The display name leads with the series and qualifies it with the model number
+- [x] PCS rating is stored as apparent power per unit plus a unit count, and nothing in the
       engine reads either
-- [ ] The Sungrow ST6900UX-4H entry is present with its published DC, AC and system parameters;
+- [x] The Sungrow ST6900UX-4H entry is present with its published DC, AC and system parameters;
       no entry in the catalogue is flagged as placeholder data
-- [ ] The auxiliary figures are zero for Sungrow, because the datasheet publishes none
-- [ ] The catalogue endpoint serves the reshaped solution and the frontend types match it
-- [ ] The existing discharge-duration control still works, sourced from the new shape
-- [ ] A design naming a deleted solution fails validation with the existing unknown-solution
+- [x] The auxiliary figures are zero for Sungrow, because the datasheet publishes none
+- [x] The catalogue endpoint serves the reshaped solution and the frontend types match it
+- [x] The existing discharge-duration control still works, sourced from the new shape
+- [x] A design naming a deleted solution fails validation with the existing unknown-solution
       error rather than crashing
-- [ ] The database has been reset and the application starts clean
-- [ ] The golden snapshot is regenerated and its diff is explained in the commit
+- [x] The database has been reset and the application starts clean
+- [x] The golden snapshot is regenerated and its diff is explained in the commit

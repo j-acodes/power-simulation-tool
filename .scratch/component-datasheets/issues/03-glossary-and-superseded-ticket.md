@@ -26,14 +26,14 @@ synonyms it explicitly rejects.
 
 **Blocked by:** 02 (Pair a station transformer with the solutions it is sold with).
 
-**Status:** ready-for-agent
+**Status:** done
 
-- [ ] The BESS solution entry no longer references a per-solution duration table
-- [ ] The Container entry describes the count as coming from the pairing, and as overridable
-- [ ] The Discharge duration entry describes the restriction as coming from the station
+- [x] The BESS solution entry no longer references a per-solution duration table
+- [x] The Container entry describes the count as coming from the pairing, and as overridable
+- [x] The Discharge duration entry describes the restriction as coming from the station
       transformer's pairings
-- [ ] A glossary entry exists for the pairing between a station transformer and its solutions
-- [ ] A glossary entry exists for the simulated/typed parameter distinction
-- [ ] The BESS module's sizing ticket carries a note naming what superseded its container-count
+- [x] A glossary entry exists for the pairing between a station transformer and its solutions
+- [x] A glossary entry exists for the simulated/typed parameter distinction
+- [x] The BESS module's sizing ticket carries a note naming what superseded its container-count
       and duration behaviour
-- [ ] No glossary entry describes behaviour the code no longer has
+- [x] No glossary entry describes behaviour the code no longer has
