@@ -353,6 +353,31 @@ def _singleton(nodes: dict[str, dict], kind: str, issues: list[GraphIssue],
     return found[0]
 
 
+def _pairings_for(props: dict, db) -> dict[str, int] | None:
+    """The pairings of the station transformer these props select, or ``None``.
+
+    ``None`` covers every way there is nothing to read: a custom (hand-typed)
+    transformer, a model key that is not a string, an unknown key, and a
+    catalogue transformer sold with nothing. Callers all treat those the same
+    way, so they are deliberately not distinguished here.
+    """
+    tx_key = props.get("model")
+    if not isinstance(tx_key, str):
+        return None
+    return db.bess_pairings.get(tx_key) or None
+
+
+def _valid_container_override(value: object) -> bool:
+    """Whether ``containers_override`` is usable: a positive whole number.
+
+    ``bool`` is excluded explicitly because it is an ``int`` subclass in Python
+    and ``True`` would otherwise read as one container. Both the reader
+    (:func:`_bess_container_count`) and the validator (:func:`_check_props`)
+    ask this one question, so the rule cannot drift between them.
+    """
+    return isinstance(value, int) and not isinstance(value, bool) and value > 0
+
+
 def _bess_station_durations(nodes: dict[str, dict], db) -> list[set[float]]:
     """Per BESS station whose chosen station transformer resolves to a real
     catalogue entry, the discharge durations that transformer is PAIRED to
@@ -372,8 +397,7 @@ def _bess_station_durations(nodes: dict[str, dict], db) -> list[set[float]]:
         props = _props(node)
         if _fleet_kind(props) != "bess":
             continue
-        tx_key = props.get("model")
-        pairings = db.bess_pairings.get(tx_key) if isinstance(tx_key, str) else None
+        pairings = _pairings_for(props, db)
         if not pairings:
             continue
         durations = {
@@ -424,12 +448,11 @@ def _bess_container_count(props: dict, db, solution) -> int | None:
     solution.
     """
     override = props.get("containers_override")
-    if isinstance(override, int) and not isinstance(override, bool) and override > 0:
+    if _valid_container_override(override):
         return override
     if solution is None:
         return None
-    tx_key = props.get("model")
-    pairings = db.bess_pairings.get(tx_key) if isinstance(tx_key, str) else None
+    pairings = _pairings_for(props, db)
     if not pairings:
         return None
     return pairings.get(solution.name)
@@ -828,8 +851,7 @@ def _check_props(nodes, tree, db, diagram, issues) -> None:
                     # has no supplier pairing to check against.
                     if mode == "catalogue":
                         tx_key = props.get("model")
-                        pairings = (db.bess_pairings.get(tx_key)
-                                   if isinstance(tx_key, str) else None)
+                        pairings = _pairings_for(props, db)
                         if not pairings or solution_name not in pairings:
                             issues.append(GraphIssue(
                                 "unpaired_bess_solution",
@@ -838,8 +860,7 @@ def _check_props(nodes, tree, db, diagram, issues) -> None:
                                 f"paired solution.", node_id=nid))
                 if "containers_override" in props:
                     override = props.get("containers_override")
-                    if (isinstance(override, bool) or not isinstance(override, int)
-                            or override <= 0):
+                    if not _valid_container_override(override):
                         issues.append(GraphIssue(
                             "bad_props",
                             f"Station '{nid}' has containers_override "

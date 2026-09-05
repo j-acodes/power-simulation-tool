@@ -37,20 +37,20 @@ mechanism.
 **Blocked by:** 01 (Reshape the BESS solution around a declared discharge duration), 02 (Pair a
 station transformer with the solutions it is sold with).
 
-**Status:** ready-for-agent
+**Status:** done (801e882)
 
-- [ ] Every typed parameter listed above is stored, served by the catalogue endpoint and typed in
+- [x] Every typed parameter listed above is stored, served by the catalogue endpoint and typed in
       the frontend, for both BESS solutions and BESS station transformers
-- [ ] No free-form or untyped key/value tier exists anywhere in the model or the payload
-- [ ] Selecting a catalogue component in the palette offers a way to open its specification
+- [x] No free-form or untyped key/value tier exists anywhere in the model or the payload
+- [x] Selecting a catalogue component in the palette offers a way to open its specification
       full-screen
-- [ ] The overlay renders the simulated parameters in their own block, before the rest of the
+- [x] The overlay renders the simulated parameters in their own block, before the rest of the
       specification
-- [ ] The remaining parameters are grouped as the datasheet groups them, not alphabetically or
+- [x] The remaining parameters are grouped as the datasheet groups them, not alphabetically or
       as one flat list
-- [ ] A station transformer's specification shows the solutions it is paired with, and a
+- [x] A station transformer's specification shows the solutions it is paired with, and a
       solution's shows the station transformers it is paired with
-- [ ] A datasheet link is shown when a URL is present and nothing is shown when it is empty
-- [ ] An entry whose datasheet is marked preliminary says so
-- [ ] Escape closes the overlay and the underlying view is unchanged, including canvas state
-- [ ] Nothing in the overlay is editable
+- [x] A datasheet link is shown when a URL is present and nothing is shown when it is empty
+- [x] An entry whose datasheet is marked preliminary says so
+- [x] Escape closes the overlay and the underlying view is unchanged, including canvas state
+- [x] Nothing in the overlay is editable
