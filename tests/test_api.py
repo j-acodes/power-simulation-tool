@@ -86,6 +86,65 @@ def test_catalogue_serves_the_reshaped_bess_solution():
     assert "containers_per_station" not in sol
 
 
+def test_catalogue_serves_the_bess_solution_typed_specification():
+    # The typed tier (ticket 04): structured, stored, displayed, never
+    # computed with — see CONTEXT.md's "Simulated parameter / typed
+    # parameter" entry. Transcribed from the Sungrow ST6900UX-4H datasheet.
+    resp = client.get("/api/catalogue")
+    assert resp.status_code == 200
+    data = resp.json()
+
+    sol = data["bess_solutions"][0]
+    assert sol["cell_type"] == "LFP"
+    assert sol["dc_v_min"] == 1101.6
+    assert sol["dc_v_max"] == 1489.2
+    assert sol["ac_v_min"] == 621.0
+    assert sol["ac_v_max"] == 759.0
+    assert sol["ac_i_a"] == 414.0
+    assert sol["pf_at_nominal"] == 0.99
+    assert sol["q_range_percent"] == 100.0
+    assert sol["f_nominal_hz"] == "50 / 60"
+    assert sol["thdi_percent"] == 1.0
+    assert sol["isolation"] == "Transformerless"
+    assert sol["width_mm"] == 6058
+    assert sol["height_mm"] == 2896
+    assert sol["depth_mm"] == 2438
+    assert sol["weight_kg"] == 55000
+    assert sol["ip_rating"] == "IP55"
+    assert sol["corrosion_class"] == "C4"
+    assert sol["temp_min_c"] == -30.0
+    assert sol["temp_max_c"] == 45.0
+    assert sol["humidity_min_pct"] == 0.0
+    assert sol["humidity_max_pct"] == 100.0
+    assert sol["altitude_max_m"] == 4000.0
+    assert sol["cooling"] == "Intelligent Liquid Cooling"
+    # There is no free-form/untyped tier: every field is a named, typed key.
+    assert "spec" not in sol
+    assert "specifications" not in sol
+
+
+def test_catalogue_serves_bess_transformer_typed_fields():
+    # A BESS station transformer's typed tier (ticket 04): model, vector
+    # group, cooling, datasheet URL. Placeholder data leaves them unset.
+    resp = client.get("/api/catalogue")
+    assert resp.status_code == 200
+    data = resp.json()
+
+    by_key = {tx["key"]: tx for tx in data["bess_transformers"]}
+    tx = by_key["GENERIC_BESS_TX_2750_LV069"]
+    assert tx["model"] is None
+    assert tx["vector_group"] is None
+    assert tx["cooling"] is None
+    assert tx["datasheet_url"] is None
+
+    # A PV transformer carries the same fields, shared type, also unset.
+    pv = data["transformers"][0]
+    assert pv["model"] is None
+    assert pv["vector_group"] is None
+    assert pv["cooling"] is None
+    assert pv["datasheet_url"] is None
+
+
 def test_catalogue_serves_the_bess_station_transformer_pairing():
     # The pairing lives on the station transformer (ticket 02): a BESS
     # solution key -> containers per station, so the durations and solutions

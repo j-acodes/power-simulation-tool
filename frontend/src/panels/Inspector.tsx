@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import { fmt, kvGroupKey, pct, powerFactor } from '../format'
 import { CollapsiblePanel } from './CollapsiblePanel'
 import { LABEL } from '../labels'
@@ -5,6 +6,9 @@ import { useCatalogue } from '../hooks/useCatalogue'
 import { useStore } from '../store'
 import { takenBusbarSlots } from '../canvas/connect'
 import { permitsFleetKind } from '../technology'
+import { Row, SectionTitle } from '../components/DetailRows'
+import { ModalShell } from '../components/Modal'
+import { SpecView } from '../components/SpecView'
 import type { DiagramEdge, DiagramNode, EdgeResult, NodeResult, TransformerInfo } from '../types'
 
 function NumberField({
@@ -24,21 +28,6 @@ function NumberField({
       <input type="number" step={step} value={Number.isFinite(value) ? value : ''} onChange={(e) => onChange(e.target.valueAsNumber)} />
     </label>
   )
-}
-
-/** Read-only "label: value" row, used for the catalogue preview and every
- * Results section. */
-function Row({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="kv-row">
-      <span className="k">{label}</span>
-      <span className="v">{value}</span>
-    </div>
-  )
-}
-
-function SectionTitle({ children }: { children: string }) {
-  return <h3 className="inspector-section-title">{children}</h3>
 }
 
 function CustomTransformerFields({
@@ -383,6 +372,7 @@ export function Inspector() {
   const diagram = useStore((s) => s.diagram)
   const results = useStore((s) => s.results)
   const catalogue = useCatalogue()
+  const [specViewOpen, setSpecViewOpen] = useState(false)
 
   if (!selection) {
     return (
@@ -394,10 +384,40 @@ export function Inspector() {
 
   if (selection.type === 'palette') {
     const tx = catalogue?.transformers.find((t) => t.key === selection.key)
+    // A BESS solution or BESS station transformer selected in the palette
+    // gets a control to open its full specification full-screen (ticket 04).
+    // The PV branch above is untouched; a BESS station transformer's own
+    // compact preview (replacing "Loading…") is ticket 06's job.
+    const bessTx = catalogue?.bess_transformers.find((t) => t.key === selection.key)
+    const bessSolution = catalogue?.bess_solutions.find((s) => s.key === selection.key)
+    const specTarget = bessTx
+      ? ({ kind: 'bess_transformer', item: bessTx } as const)
+      : bessSolution
+        ? ({ kind: 'bess_solution', item: bessSolution } as const)
+        : null
+
     return (
       <CollapsiblePanel title="Inspector" side="right" className="inspector">
         <SectionTitle>Catalogue preview</SectionTitle>
-        {tx ? <TransformerPreview tx={tx} /> : <p className="panel-hint">Loading…</p>}
+        {tx && <TransformerPreview tx={tx} />}
+        {specTarget && (
+          <div>
+            <h3>{specTarget.item.display_name}</h3>
+            <button type="button" onClick={() => setSpecViewOpen(true)}>
+              View full specification
+            </button>
+          </div>
+        )}
+        {!tx && !specTarget && <p className="panel-hint">Loading…</p>}
+        {specViewOpen && specTarget && (
+          <ModalShell size="full" onEscape={() => setSpecViewOpen(false)}>
+            <SpecView
+              target={specTarget}
+              solutions={catalogue?.bess_solutions ?? []}
+              transformers={catalogue?.bess_transformers ?? []}
+            />
+          </ModalShell>
+        )}
       </CollapsiblePanel>
     )
   }

@@ -1,7 +1,8 @@
 import { spawn } from 'node:child_process'
 import { fileURLToPath } from 'node:url'
 import react from '@vitejs/plugin-react'
-import { defineConfig, type Plugin } from 'vite'
+import type { Plugin } from 'vite'
+import { defineConfig } from 'vitest/config'
 
 const repoRoot = fileURLToPath(new URL('..', import.meta.url))
 
@@ -59,5 +60,12 @@ export default defineConfig({
     proxy: {
       '/api': 'http://localhost:8000',
     },
+  },
+  test: {
+    environment: 'jsdom',
+    // React Testing Library's auto-cleanup-after-each-test hooks itself onto
+    // a global `afterEach` — without this it silently no-ops and DOM nodes
+    // leak between tests in the same file.
+    globals: true,
   },
 })

@@ -189,6 +189,42 @@
   max-width: calc(100vw - 3rem);
 }
 
+/* Near-viewport, for the full-screen specification view (SpecView). Scrolls
+   its own content rather than the page, so the overlay itself never grows
+   past the viewport. */
+.modal.modal-full {
+  width: calc(100vw - 3rem);
+  height: calc(100vh - 3rem);
+  max-width: calc(100vw - 3rem);
+  overflow-y: auto;
+}
+
+/* SpecView: the read-only full-screen specification (ticket 04). The
+   "simulated" block is marked visually distinct — it's the entire point of
+   the view (what the engine reads vs. the rest of the datasheet). */
+.spec-view-header h2 {
+  margin-bottom: 0.25rem;
+}
+
+.spec-view-preliminary {
+  display: inline-block;
+  margin-top: 0.25rem;
+  padding: 0.15rem 0.5rem;
+  border-radius: 4px;
+  font-size: 0.85em;
+  color: var(--accent);
+  background: var(--accent-bg);
+  border: 1px solid var(--accent-border);
+}
+
+.spec-view-simulated {
+  padding: 0.75rem 1rem;
+  margin-bottom: 1rem;
+  border: 1px solid var(--accent-border);
+  border-radius: 8px;
+  background: var(--accent-bg);
+}
+
 .results-tables-header {
   display: flex;
   align-items: center;

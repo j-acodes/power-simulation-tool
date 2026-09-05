@@ -30,6 +30,11 @@
 # (paired_solutions), because one solution is sold behind many station
 # transformer ratings, each serving a different count.
 #
+# Everything below datasheet_url is TYPED: stored and displayed, never
+# computed with (see CONTEXT.md's "Simulated parameter / typed parameter"
+# entry). Where the datasheet states an inequality ("> 0.99", "< 1 %"), the
+# bound is stored and the comparator lives in the view.
+#
 bess_solutions:
   sungrow-st6900ux-4h:
     brand: Sungrow
@@ -48,3 +53,27 @@ bess_solutions:
     datasheet_version: Version 3
     preliminary: true
     datasheet_url: ""
+    # Typed specification, transcribed by hand from the datasheet.
+    cell_type: LFP
+    dc_v_min: 1101.6
+    dc_v_max: 1489.2
+    ac_v_min: 621.0
+    ac_v_max: 759.0
+    ac_i_a: 414.0                # per PCS unit
+    pf_at_nominal: 0.99          # datasheet says "> 0.99"
+    q_range_percent: 100.0       # datasheet says "-100 % ~ 100 %" (symmetric)
+    f_nominal_hz: "50 / 60"      # string: the product supports both
+    thdi_percent: 1.0            # datasheet says "< 1 %"
+    isolation: Transformerless
+    width_mm: 6058
+    height_mm: 2896
+    depth_mm: 2438
+    weight_kg: 55000
+    ip_rating: IP55
+    corrosion_class: C4
+    temp_min_c: -30.0
+    temp_max_c: 45.0
+    humidity_min_pct: 0.0
+    humidity_max_pct: 100.0
+    altitude_max_m: 4000.0
+    cooling: Intelligent Liquid Cooling

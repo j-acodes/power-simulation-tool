@@ -16,6 +16,11 @@ function solution(overrides: Partial<BessSolutionInfo>): BessSolutionInfo {
     e_nominal_kwh: 5000, pcs_s_kva: 625, pcs_count: 4, pcs_lv_kv: 0.69, duration_h: 4,
     aux_p_kw: 40, aux_q_kvar: 10,
     datasheet_version: null, preliminary: false, datasheet_url: null,
+    cell_type: null, dc_v_min: null, dc_v_max: null, ac_v_min: null, ac_v_max: null,
+    ac_i_a: null, pf_at_nominal: null, q_range_percent: null, f_nominal_hz: null,
+    thdi_percent: null, isolation: null, width_mm: null, height_mm: null, depth_mm: null,
+    weight_kg: null, ip_rating: null, corrosion_class: null, temp_min_c: null, temp_max_c: null,
+    humidity_min_pct: null, humidity_max_pct: null, altitude_max_m: null, cooling: null,
     ...overrides,
   }
 }
@@ -24,6 +29,7 @@ function transformer(overrides: Partial<TransformerInfo>): TransformerInfo {
   return {
     key: 'TX', display_name: 'TX', s_rated_kva: 2750, hv_kv: null, lv_kv: 0.69,
     brand: 'Generic', uk_percent: 8, pk_kw: 27.5, p0_kw: 2.75, i0_percent: 0,
+    model: null, vector_group: null, cooling: null, datasheet_url: null,
     paired_solutions: {},
     ...overrides,
   }

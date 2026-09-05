@@ -23,9 +23,10 @@ export function ModalShell({
   onEscape: () => void
   onEnter?: () => void
   /** Wider variants for content-heavy modals — 'wide' for a form (SeedWizard),
-   * 'xl' for the full results tables. The default is sized for prompt/confirm
+   * 'xl' for the full results tables, 'full' for a near-viewport overlay
+   * (the specification view). The default is sized for prompt/confirm
    * dialogs only. */
-  size?: 'wide' | 'xl'
+  size?: 'wide' | 'xl' | 'full'
 }) {
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {

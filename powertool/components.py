@@ -93,6 +93,10 @@ class Transformer:
     hv_kv: float | None = None
     lv_kv: float | None = None
     brand: str | None = None  # manufacturer, for catalogue display
+    model: str | None = None  # typed parameter — never computed with
+    vector_group: str | None = None  # typed parameter — never computed with
+    cooling: str | None = None  # typed parameter — never computed with
+    datasheet_url: str | None = None  # typed parameter — never computed with
 
     @property
     def display_name(self) -> str:
@@ -249,6 +253,36 @@ class BessSolution:
     datasheet_version: str | None = None
     preliminary: bool = False
     datasheet_url: str | None = None
+
+    # --- Typed parameters ------------------------------------------------
+    # Structured, stored, displayed — never read by the sizing engine. See
+    # CONTEXT.md's "Simulated parameter / typed parameter" entry. All optional:
+    # ``None`` means the datasheet is silent, not zero. Where the datasheet
+    # states an inequality (e.g. "> 0.99", "< 1 %"), the bound is stored here
+    # and the comparator belongs in the view, not the data.
+    cell_type: str | None = None
+    dc_v_min: float | None = None
+    dc_v_max: float | None = None
+    ac_v_min: float | None = None
+    ac_v_max: float | None = None
+    ac_i_a: float | None = None                 # per PCS unit
+    pf_at_nominal: float | None = None
+    q_range_percent: float | None = None        # symmetric bound, e.g. 100.0 == "-100% ~ 100%"
+    f_nominal_hz: str | None = None             # string: some products support two frequencies
+    thdi_percent: float | None = None
+    isolation: str | None = None
+    width_mm: float | None = None
+    height_mm: float | None = None
+    depth_mm: float | None = None
+    weight_kg: float | None = None
+    ip_rating: str | None = None
+    corrosion_class: str | None = None
+    temp_min_c: float | None = None
+    temp_max_c: float | None = None
+    humidity_min_pct: float | None = None
+    humidity_max_pct: float | None = None
+    altitude_max_m: float | None = None
+    cooling: str | None = None
 
     @property
     def display_name(self) -> str:

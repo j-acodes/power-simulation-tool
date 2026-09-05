@@ -272,6 +272,13 @@ export interface TransformerInfo {
   pk_kw: number
   p0_kw: number
   i0_percent: number
+  /** Typed parameters (never computed with) — see CONTEXT.md's "Simulated
+   *  parameter / typed parameter" entry. Unset for every PV transformer and
+   *  for the placeholder BESS station transformers. */
+  model: string | null
+  vector_group: string | null
+  cooling: string | null
+  datasheet_url: string | null
   /** BESS solution key -> containers per station: the solutions this station
    *  transformer is sold with. Always empty for a PV transformer. */
   paired_solutions: Record<string, number>
@@ -299,6 +306,32 @@ export interface BessSolutionInfo {
   datasheet_version: string | null
   preliminary: boolean
   datasheet_url: string | null
+  /** Typed specification (never computed with) — see CONTEXT.md's "Simulated
+   *  parameter / typed parameter" entry. `null` means the datasheet is
+   *  silent on that field, not that the value is zero. */
+  cell_type: string | null
+  dc_v_min: number | null
+  dc_v_max: number | null
+  ac_v_min: number | null
+  ac_v_max: number | null
+  ac_i_a: number | null
+  pf_at_nominal: number | null
+  q_range_percent: number | null
+  f_nominal_hz: string | null
+  thdi_percent: number | null
+  isolation: string | null
+  width_mm: number | null
+  height_mm: number | null
+  depth_mm: number | null
+  weight_kg: number | null
+  ip_rating: string | null
+  corrosion_class: string | null
+  temp_min_c: number | null
+  temp_max_c: number | null
+  humidity_min_pct: number | null
+  humidity_max_pct: number | null
+  altitude_max_m: number | null
+  cooling: string | null
 }
 
 export interface CatalogueDefaults {
