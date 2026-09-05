@@ -278,6 +278,23 @@ def test_the_energy_gate_is_independent_of_the_loading_gate():
     assert fleet["max_loading"] == 1.0
 
 
+def _db_with_bess_aux(p_kw: float, q_kvar: float):
+    """The catalogue, with the Sungrow solution given a non-zero auxiliary draw.
+
+    sungrow-st6900ux-4h publishes no auxiliary figure, so every test that needs
+    a non-zero one has to invent it. Inventing it in one place keeps the tests
+    about auxiliary load rather than about assembling a catalogue.
+    """
+    import dataclasses
+    from powertool.database import ComponentDatabase
+
+    with_aux = dataclasses.replace(db.bess_solutions["sungrow-st6900ux-4h"],
+                                   aux_p_kw=p_kw, aux_q_kvar=q_kvar)
+    return ComponentDatabase(db.cables, db.transformers,
+                             {**db.bess_solutions, "sungrow-st6900ux-4h": with_aux},
+                             db.bess_transformers)
+
+
 def test_bess_aux_is_reported_but_never_sizes_the_pcs():
     """A battery station's PCS is sized for export duty alone.
 
@@ -291,8 +308,6 @@ def test_bess_aux_is_reported_but_never_sizes_the_pcs():
     size_generation_pq. The refined figure is the one that sizes real equipment,
     so it is the one asserted here.
     """
-    import dataclasses
-    from powertool.database import ComponentDatabase
     from backend.solve import solve_diagram
 
     design = _bess_only(duration=4.0)
@@ -303,12 +318,7 @@ def test_bess_aux_is_reported_but_never_sizes_the_pcs():
     # datasheet). Compare it against a hypothetical catalogue entry that draws
     # a non-zero worst-case auxiliary load — every sizing figure must be
     # identical regardless.
-    with_aux_solution = dataclasses.replace(db.bess_solutions["sungrow-st6900ux-4h"],
-                                            aux_p_kw=40.0, aux_q_kvar=10.0)
-    db_with_aux = ComponentDatabase(db.cables, db.transformers,
-                                    {**db.bess_solutions,
-                                     "sungrow-st6900ux-4h": with_aux_solution},
-                                    db.bess_transformers)
+    db_with_aux = _db_with_bess_aux(40.0, 10.0)
 
     with_aux = solve_diagram(design, db_with_aux)
     without = solve_diagram(design, db)
@@ -328,18 +338,11 @@ def test_bess_aux_is_reported_but_never_sizes_the_pcs():
 
 
 def test_bess_aux_is_summed_across_the_fleet():
-    import dataclasses
-    from powertool.database import ComponentDatabase
     from powertool.graph import graph_to_inputs
 
-    # sungrow-st6900ux-4h publishes no auxiliary figure; a non-zero one from
-    # this test's own replacement is what proves it reaches the branch total.
-    with_aux_solution = dataclasses.replace(db.bess_solutions["sungrow-st6900ux-4h"],
-                                            aux_p_kw=40.0, aux_q_kvar=10.0)
-    db_with_aux = ComponentDatabase(db.cables, db.transformers,
-                                    {**db.bess_solutions,
-                                     "sungrow-st6900ux-4h": with_aux_solution},
-                                    db.bess_transformers)
+    # sungrow-st6900ux-4h publishes no auxiliary figure; a non-zero one is what
+    # proves the figure reaches the branch total.
+    db_with_aux = _db_with_bess_aux(40.0, 10.0)
 
     design = _bess_only(duration=4.0)
     branch = graph_to_inputs(design, db_with_aux).branches[0]
