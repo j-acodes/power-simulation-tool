@@ -94,8 +94,9 @@ export interface RuleSettings {
   /** Per-fleet overrides; each falls back to `max_loading` when unset. */
   max_loading_pv?: number
   max_loading_bess?: number
-  /** Discharge duration [h]. Restricted to the durations every selected BESS
-   *  solution tabulates; unset means the energy gate does not apply. */
+  /** Discharge duration [h]. Restricted to the durations available among the
+   *  solutions paired with every drawn BESS station's own station
+   *  transformer; unset means the energy gate does not apply. */
   discharge_hours?: number
 }
 
@@ -148,9 +149,9 @@ export interface StationNodeResult {
    *  sizing physics is identical either way, so this is a label, not an
    *  input. Absent on results produced before the fleet kind was wired. */
   fleet_kind?: FleetKind
-  /** Containers at the design's discharge duration, read from this station's
-   *  own solution table. Absent for a PV station, and absent when no discharge
-   *  duration is set. */
+  /** Containers per station, defaulted from the pairing on this station's own
+   *  chosen station transformer and overridable (`containers_override`).
+   *  Absent for a PV station, and absent when no discharge duration is set. */
   containers?: number
   circuit: number
   position: number
@@ -271,6 +272,9 @@ export interface TransformerInfo {
   pk_kw: number
   p0_kw: number
   i0_percent: number
+  /** BESS solution key -> containers per station: the solutions this station
+   *  transformer is sold with. Always empty for a PV transformer. */
+  paired_solutions: Record<string, number>
 }
 
 export interface CableInfo {
@@ -292,7 +296,6 @@ export interface BessSolutionInfo {
   duration_h: number
   aux_p_kw: number
   aux_q_kvar: number
-  containers_per_station: number
   datasheet_version: string | null
   preliminary: boolean
   datasheet_url: string | null

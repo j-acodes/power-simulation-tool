@@ -78,12 +78,36 @@ def test_catalogue_serves_the_reshaped_bess_solution():
     assert sol["duration_h"] == 4.0
     assert sol["aux_p_kw"] == 0.0
     assert sol["aux_q_kvar"] == 0.0
-    assert sol["containers_per_station"] == 1
     assert sol["preliminary"] is True
     # The reshaped fields are gone from the wire contract entirely.
     assert "containers_by_duration" not in sol
     assert "e_container_kwh" not in sol
     assert "pcs_p_kw" not in sol
+    assert "containers_per_station" not in sol
+
+
+def test_catalogue_serves_the_bess_station_transformer_pairing():
+    # The pairing lives on the station transformer (ticket 02): a BESS
+    # solution key -> containers per station, so the durations and solutions
+    # on offer can be narrowed from the transformer side.
+    resp = client.get("/api/catalogue")
+    assert resp.status_code == 200
+    data = resp.json()
+
+    by_key = {tx["key"]: tx for tx in data["bess_transformers"]}
+    assert by_key["GENERIC_BESS_TX_2750_LV069"]["paired_solutions"] == {
+        "sungrow-st6900ux-4h": 1
+    }
+    assert by_key["GENERIC_BESS_TX_4000_LV069"]["paired_solutions"] == {
+        "sungrow-st6900ux-4h": 2
+    }
+    # Deliberately unpaired — exercises bess_lv_mismatch.
+    assert by_key["GENERIC_BESS_TX_1750_LV100"]["paired_solutions"] == {}
+
+    # A PV transformer carries the same field, always empty: it has no
+    # pairing to carry, but TransformerInfo is shared with the BESS catalogue.
+    pv = data["transformers"][0]
+    assert pv["paired_solutions"] == {}
 
 
 def test_stage1_example_plant_matches_direct_engine_computation():

@@ -17,7 +17,11 @@ export function SettingsPanel() {
   // supplier's table, never interpolated, so a duration nobody sells has no
   // answer. Rendering it as a select is what makes that invalid state
   // unreachable rather than merely rejected.
-  const durations = supportedDurations(diagram, catalogue?.bess_solutions ?? [])
+  const durations = supportedDurations(
+    diagram,
+    catalogue?.bess_transformers ?? [],
+    catalogue?.bess_solutions ?? [],
+  )
 
   return (
     <div className="settings-panel">

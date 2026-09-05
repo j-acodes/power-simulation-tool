@@ -292,7 +292,7 @@ def _db_with_bess_aux(p_kw: float, q_kvar: float):
                                    aux_p_kw=p_kw, aux_q_kvar=q_kvar)
     return ComponentDatabase(db.cables, db.transformers,
                              {**db.bess_solutions, "sungrow-st6900ux-4h": with_aux},
-                             db.bess_transformers)
+                             db.bess_transformers, db.bess_pairings)
 
 
 def test_bess_aux_is_reported_but_never_sizes_the_pcs():

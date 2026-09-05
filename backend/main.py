@@ -82,7 +82,7 @@ def get_session() -> Iterator[Session]:
         session.close()
 
 
-def _transformer_info(key: str, tx) -> TransformerInfo:
+def _transformer_info(key: str, tx, paired_solutions: dict[str, int] | None = None) -> TransformerInfo:
     return TransformerInfo(
         key=key,
         display_name=tx.display_name,
@@ -94,6 +94,7 @@ def _transformer_info(key: str, tx) -> TransformerInfo:
         pk_kw=tx.pk_kw,
         p0_kw=tx.p0_kw,
         i0_percent=tx.i0_percent,
+        paired_solutions=paired_solutions or {},
     )
 
 
@@ -101,7 +102,8 @@ def _transformer_info(key: str, tx) -> TransformerInfo:
 def get_catalogue() -> CatalogueResponse:
     transformers = [_transformer_info(key, tx) for key, tx in db.transformers.items()]
     bess_transformers = [
-        _transformer_info(key, tx) for key, tx in db.bess_transformers.items()
+        _transformer_info(key, tx, db.bess_pairings.get(key))
+        for key, tx in db.bess_transformers.items()
     ]
     bess_solutions = [
         BessSolutionInfo(
@@ -117,7 +119,6 @@ def get_catalogue() -> CatalogueResponse:
             duration_h=sol.duration_h,
             aux_p_kw=sol.aux_p_kw,
             aux_q_kvar=sol.aux_q_kvar,
-            containers_per_station=sol.containers_per_station,
             datasheet_version=sol.datasheet_version,
             preliminary=sol.preliminary,
             datasheet_url=sol.datasheet_url,

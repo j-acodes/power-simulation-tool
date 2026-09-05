@@ -21,14 +21,14 @@
 #   aux_p_kw / aux_q_kvar  : worst-case auxiliary draw (cooling, BMS, HVAC) of
 #                            ONE station; 0.0 means the datasheet publishes no
 #                            figure, not that the station draws nothing
-#   containers_per_station : PROVISIONAL — containers per station transformer.
-#                            Ticket 02 moves this to the pairing between a
-#                            solution and a station transformer, where it
-#                            actually belongs; until then it is read straight
-#                            off this field, unoverridable.
 #   datasheet_version / preliminary / datasheet_url : provenance of the
 #                            transcription; datasheet_url may be empty when
 #                            the source is not publicly linkable.
+#
+# Container count per station is NOT declared here: it lives on the pairing
+# between a solution and a station transformer, in data/bess_transformers.yaml
+# (paired_solutions), because one solution is sold behind many station
+# transformer ratings, each serving a different count.
 #
 bess_solutions:
   sungrow-st6900ux-4h:
@@ -45,7 +45,6 @@ bess_solutions:
                                 # BessSolution's docstring)
     aux_p_kw: 0.0               # not published by this datasheet
     aux_q_kvar: 0.0              # not published by this datasheet
-    containers_per_station: 1   # PROVISIONAL — see header comment above
     datasheet_version: Version 3
     preliminary: true
     datasheet_url: ""

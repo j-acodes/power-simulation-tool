@@ -23,7 +23,7 @@ from powertool import (
     size_architecture,
     size_pv_inverters,
 )
-from powertool.graph import graph_to_inputs, map_results, validate_graph
+from powertool.graph import graph_to_inputs, map_results, supported_durations, validate_graph
 
 client = TestClient(app)
 
@@ -284,6 +284,96 @@ def test_bess_station_lv_mismatch_is_rejected():
     issues = validate_graph(diagram, db)
     assert "bess_lv_mismatch" in _codes(issues)
     assert any(i.node_id == "s1" for i in issues if i.code == "bess_lv_mismatch")
+
+
+# --- ticket 02: the pairing lives on the station transformer ---------------
+
+def _bess_station_props(model="GENERIC_BESS_TX_2750_LV069",
+                        solution="sungrow-st6900ux-4h", **extra):
+    return {"mode": "catalogue", "model": model, "fleet_kind": "bess",
+            "bess_solution": solution, **extra}
+
+
+def test_a_paired_combination_validates_clean():
+    diagram = _minimal()
+    diagram["nodes"][2]["props"] = _bess_station_props()
+    assert "unpaired_bess_solution" not in _codes(validate_graph(diagram, db))
+
+
+def test_an_unpaired_solution_and_station_transformer_is_rejected():
+    # GENERIC_BESS_TX_1750_LV100 carries no paired_solutions at all.
+    diagram = _minimal()
+    diagram["nodes"][2]["props"] = _bess_station_props(model="GENERIC_BESS_TX_1750_LV100")
+    issues = validate_graph(diagram, db)
+    assert "unpaired_bess_solution" in _codes(issues)
+    assert any(i.node_id == "s1" for i in issues if i.code == "unpaired_bess_solution")
+
+
+def test_a_custom_station_transformer_is_exempt_from_the_pairing_check():
+    # A custom, hand-typed transformer corresponds to no catalogue entry, so
+    # there is no supplier pairing to check it against — sizing behaviour for
+    # a custom BESS station does not change in this ticket.
+    diagram = _minimal()
+    diagram["nodes"][2]["props"] = {
+        "mode": "custom", "name": "Custom station", "s_rated_kva": 3000.0,
+        "uk_percent": 6.0, "pk_kw": 30.0, "fleet_kind": "bess",
+        "bess_solution": "sungrow-st6900ux-4h",
+    }
+    assert "unpaired_bess_solution" not in _codes(validate_graph(diagram, db))
+
+
+def test_supported_durations_is_transformer_driven():
+    # GENERIC_BESS_TX_2750_LV069 is paired with sungrow-st6900ux-4h (4 h) only.
+    diagram = _minimal()
+    diagram["nodes"][2]["props"] = _bess_station_props()
+    from powertool.graph import _parse_structure
+    parsed_nodes, _ = _parse_structure(diagram, [])
+    assert supported_durations(parsed_nodes, db) == [4.0]
+
+
+def test_supported_durations_is_empty_for_an_unpaired_transformer():
+    diagram = _minimal()
+    diagram["nodes"][2]["props"] = _bess_station_props(model="GENERIC_BESS_TX_1750_LV100")
+    from powertool.graph import _parse_structure
+    parsed_nodes, _ = _parse_structure(diagram, [])
+    assert supported_durations(parsed_nodes, db) == []
+
+
+def test_container_count_defaults_from_the_pairing():
+    diagram = _minimal()
+    diagram["settings"]["tiers"]["lv_kv"] = 0.69
+    diagram["nodes"][1]["props"]["fleet_kind"] = "bess"
+    diagram["nodes"][2]["props"] = _bess_station_props()
+    diagram["settings"]["rules"]["discharge_hours"] = 4.0
+    assert validate_graph(diagram, db) == []
+    branch = graph_to_inputs(diagram, db).branches[0]
+    assert branch.containers_by_station == {"s1": 1}
+    assert branch.containers == 1
+    assert branch.e_delivered_kwh == 6904.0
+
+
+def test_container_count_override_wins_over_the_pairing_default():
+    diagram = _minimal()
+    diagram["settings"]["tiers"]["lv_kv"] = 0.69
+    diagram["nodes"][1]["props"]["fleet_kind"] = "bess"
+    diagram["nodes"][2]["props"] = _bess_station_props(
+        model="GENERIC_BESS_TX_4000_LV069", containers_override=1)
+    diagram["settings"]["rules"]["discharge_hours"] = 4.0
+    assert validate_graph(diagram, db) == []
+    branch = graph_to_inputs(diagram, db).branches[0]
+    # The pairing default for this station transformer is 2 containers; the
+    # override reads 1 instead, and the delivered energy follows it.
+    assert branch.containers_by_station == {"s1": 1}
+    assert branch.e_delivered_kwh == 6904.0
+
+
+@pytest.mark.parametrize("bad_override", [0, -1, 2.5, "3"])
+def test_a_bad_containers_override_is_rejected(bad_override):
+    diagram = _minimal()
+    diagram["nodes"][2]["props"] = _bess_station_props(containers_override=bad_override)
+    issues = validate_graph(diagram, db)
+    assert "bad_props" in _codes(issues)
+    assert any(i.node_id == "s1" for i in issues if i.code == "bad_props")
 
 
 def test_bess_single_fleet_design_validates_and_solves_like_pv():

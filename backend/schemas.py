@@ -132,6 +132,10 @@ class TransformerInfo(BaseModel):
     pk_kw: float
     p0_kw: float
     i0_percent: float
+    # BESS solution key -> containers per station: the solutions this station
+    # transformer is sold with (data/bess_transformers.yaml's paired_solutions).
+    # Always empty for a PV transformer, which has no pairing to carry.
+    paired_solutions: dict[str, int] = {}
 
 
 class CableInfo(BaseModel):
@@ -153,7 +157,6 @@ class BessSolutionInfo(BaseModel):
     duration_h: float
     aux_p_kw: float
     aux_q_kvar: float
-    containers_per_station: int
     datasheet_version: str | None
     preliminary: bool
     datasheet_url: str | None

@@ -75,7 +75,6 @@ def test_bess_solutions_load(db):
         assert sol.pcs_count >= 1
         assert sol.pcs_lv_kv > 0
         assert sol.duration_h > 0
-        assert sol.containers_per_station >= 1
 
 
 def test_sungrow_powertitan_entry_present_with_published_parameters(db):
@@ -95,7 +94,6 @@ def test_sungrow_powertitan_entry_present_with_published_parameters(db):
     # The datasheet publishes no auxiliary figure: zero, not an estimate.
     assert sol.aux_p_kw == 0.0
     assert sol.aux_q_kvar == 0.0
-    assert sol.containers_per_station == 1
     assert sol.preliminary is True
 
 
@@ -114,3 +112,26 @@ def test_bess_station_transformers_load_and_pair_with_solutions(db):
         assert any(
             tx.lv_kv == pytest.approx(sol.pcs_lv_kv) for tx in db.bess_transformers.values()
         ), f"no BESS station transformer pairs with {sol.name}'s PCS voltage"
+
+
+def test_pairing_lives_on_the_station_transformer(db):
+    # The pairing carries the container count per station, keyed by station
+    # transformer, then solution key — the shorter list to maintain by hand
+    # (one station transformer pairs with few solutions).
+    assert db.bess_pairings["GENERIC_BESS_TX_2750_LV069"] == {"sungrow-st6900ux-4h": 1}
+    assert db.bess_pairings["GENERIC_BESS_TX_4000_LV069"] == {"sungrow-st6900ux-4h": 2}
+
+
+def test_a_station_transformer_may_be_sold_with_nothing(db):
+    # GENERIC_BESS_TX_1750_LV100 exists deliberately unpaired: it exercises
+    # bess_lv_mismatch (its LV disagrees with every solution's PCS voltage),
+    # and it must not silently inherit another transformer's pairing.
+    assert db.bess_pairings.get("GENERIC_BESS_TX_1750_LV100") in (None, {})
+
+
+def test_transformer_stays_bess_agnostic():
+    # paired_solutions is popped out of the YAML entry before the Transformer
+    # is built — Transformer is shared with the PV catalogue and carries no
+    # BESS-specific field.
+    from powertool.components import Transformer
+    assert "paired_solutions" not in Transformer.__dataclass_fields__

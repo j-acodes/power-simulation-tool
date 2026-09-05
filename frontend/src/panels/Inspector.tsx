@@ -91,6 +91,22 @@ function NodeProperties({ node }: { node: DiagramNode }) {
   const patch = (p: Record<string, unknown>) => updateNodeProps(node.id, p)
   const props = node.props
 
+  // Station transformer -> duration -> solution, each narrowing the next
+  // (ticket 02): a custom transformer corresponds to no catalogue entry, so
+  // it carries no pairing to narrow the solution choice with.
+  const bessTransformer = props.mode === 'custom'
+    ? undefined
+    : catalogue?.bess_transformers.find((tx) => tx.key === props.model)
+  const bessPaired = bessTransformer?.paired_solutions ?? {}
+  const dischargeHours = diagram.settings.rules.discharge_hours
+  const bessSolutionOptions = props.mode === 'custom'
+    ? catalogue?.bess_solutions ?? []
+    : (catalogue?.bess_solutions ?? []).filter(
+        (sol) => sol.key in bessPaired
+          && (dischargeHours === undefined || sol.duration_h === dischargeHours),
+      )
+  const pairedContainers = bessPaired[String(props.bess_solution)]
+
   return (
     <div>
       {node.kind === 'poc' && (
@@ -166,17 +182,31 @@ function NodeProperties({ node }: { node: DiagramNode }) {
           )}
           {props.mode === 'custom' && <CustomTransformerFields props={props} onChange={patch} />}
           {props.fleet_kind === 'bess' && (
-            <label className="field">
-              <span>BESS solution</span>
-              <select value={String(props.bess_solution ?? '')} onChange={(e) => patch({ bess_solution: e.target.value })}>
-                <option value="">— select —</option>
-                {catalogue?.bess_solutions.map((sol) => (
-                  <option key={sol.key} value={sol.key}>
-                    {sol.key}
-                  </option>
-                ))}
-              </select>
-            </label>
+            <>
+              <label className="field">
+                <span>BESS solution</span>
+                <select value={String(props.bess_solution ?? '')} onChange={(e) => patch({ bess_solution: e.target.value })}>
+                  <option value="">— select —</option>
+                  {bessSolutionOptions.map((sol) => (
+                    <option key={sol.key} value={sol.key}>
+                      {sol.key}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <NumberField
+                label="Containers"
+                value={Number(props.containers_override ?? pairedContainers ?? 0)}
+                onChange={(v) => patch({ containers_override: v })}
+              />
+              {props.containers_override === undefined && (
+                <p className="panel-hint">
+                  {pairedContainers !== undefined
+                    ? `Defaulted from the pairing (${pairedContainers}). Enter a value to override.`
+                    : 'No pairing default for this transformer/solution — enter a container count.'}
+                </p>
+              )}
+            </>
           )}
         </>
       )}
