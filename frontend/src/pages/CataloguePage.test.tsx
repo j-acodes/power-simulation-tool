@@ -45,16 +45,25 @@ const catalogue: CatalogueResponse = {
   bess_transformers: [bessTransformer],
 }
 
+// The hook is mocked through a mutable holder so a test can vary the catalogue
+// it renders against; renderPage() uses the default fixture.
+let served: CatalogueResponse = catalogue
+
 vi.mock('../hooks/useCatalogue', () => ({
-  useCatalogue: () => catalogue,
+  useCatalogue: () => served,
 }))
 
-function renderPage() {
+function renderWith(c: CatalogueResponse) {
+  served = c
   return render(
     <MemoryRouter>
       <CataloguePage />
     </MemoryRouter>,
   )
+}
+
+function renderPage() {
+  return renderWith(catalogue)
 }
 
 describe('CataloguePage', () => {
@@ -77,6 +86,23 @@ describe('CataloguePage', () => {
     expect(screen.getByText(pvTransformer.display_name)).toBeTruthy()
     expect(screen.getByText('1,000')).toBeTruthy() // s_rated_kva, formatted
     expect(screen.queryByRole('button', { name: pvTransformer.display_name })).toBeNull()
+  })
+
+  it('cites the source datasheet on a PV transformer that has one', () => {
+    // The PV catalogue's numbers were read off published datasheets whose links
+    // used to sit in a loose text file beside the YAML. On the entry, the link
+    // sits next to the numbers it justifies.
+    renderWith({
+      ...catalogue,
+      transformers: [{ ...pvTransformer, datasheet_url: 'https://example.invalid/acme.pdf' }],
+    })
+    const link = screen.getByRole('link', { name: 'View datasheet' })
+    expect(link.getAttribute('href')).toBe('https://example.invalid/acme.pdf')
+  })
+
+  it('shows no source link on a transformer that cites none', () => {
+    renderWith(catalogue)
+    expect(screen.queryByRole('link', { name: 'View datasheet' })).toBeNull()
   })
 
   it('shows a cable\'s existing parameters without a click affordance', () => {
