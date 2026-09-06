@@ -136,3 +136,13 @@ def test_transformer_stays_bess_agnostic():
     # BESS-specific field.
     from powertool.components import Transformer
     assert "paired_solutions" not in Transformer.__dataclass_fields__
+
+
+def test_the_real_sungrow_station_has_no_invented_container_count(db):
+    # SUNGROW_MVS7400_LS is a real, fully transcribed datasheet entry whose
+    # container count nobody has published. Arithmetic suggests 4; arithmetic is
+    # not a source, and CONTEXT.md says a container count is read, never
+    # computed. It stays empty — and therefore unusable — until a supplier says
+    # otherwise. If this test fails because someone added a count, that is fine:
+    # delete the test in the same commit that cites the source.
+    assert db.bess_pairings.get("SUNGROW_MVS7400_LS") in (None, {})
