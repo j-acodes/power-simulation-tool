@@ -20,11 +20,11 @@ consult the BESS station transformer catalogue too.
 
 **Blocked by:** 04 (Read a component's full specification full-screen).
 
-**Status:** ready-for-agent
+**Status:** done
 
-- [ ] Selecting a catalogue-backed station on the canvas offers an expand control that opens its
+- [x] Selecting a catalogue-backed station on the canvas offers an expand control that opens its
       specification full-screen
-- [ ] The expand control is absent — not disabled — for a custom station
-- [ ] Closing the overlay returns to the canvas with its state intact
-- [ ] BESS solutions appear as palette items
-- [ ] Selecting a BESS station transformer in the palette shows its preview instead of "Loading…"
+- [x] The expand control is absent — not disabled — for a custom station
+- [x] Closing the overlay returns to the canvas with its state intact
+- [x] BESS solutions appear as palette items
+- [x] Selecting a BESS station transformer in the palette shows its preview instead of "Loading…"
