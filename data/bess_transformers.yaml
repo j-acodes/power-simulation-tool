@@ -44,17 +44,13 @@ bess_transformers:
     datasheet_version: V2
     datasheet_url: null   # no public URL known; local: DS_20250919_MVS7400-LS_Datasheet_V2_EN.pdf
     paired_solutions:
-      # DELIBERATELY EMPTY — not "sold with nothing", but "nobody has told us
-      # yet". A container count is read from a supplier, never computed: none of
-      # the three PDFs in data/datasheets states one for this station, so there
-      # is no honest number to put here. Arithmetic would give 4 (4 x 1800 kVA
-      # PCS = 7200 kVA under 7400 kVA) — that is exactly the guess this file
-      # must not launder into a figure an engineer would quote.
-      #
-      # Until a supplier confirms it, a station naming this transformer is
-      # rejected with unpaired_bess_solution, which is the correct outcome: the
-      # product is real and its datasheet is transcribed, but it cannot be
-      # designed with. Add the count here and it becomes usable immediately.
+      # 4 containers per station, confirmed by the project owner on 2026-09-06.
+      # NOT from the datasheet — none of the PDFs in data/datasheets states a
+      # container count. The arithmetic happens to agree (4 x 1800 kVA of PCS =
+      # 7200 kVA under this 7400 kVA station), but the agreement is not the
+      # source; the confirmation is. Re-confirm against a quote or array drawing
+      # before this leaves a design review.
+      sungrow-st6900ux-4h: 4
     # Typed specification, transcribed verbatim from the datasheet.
     mv_kv_min: 11.0
     mv_kv_max: 36.0

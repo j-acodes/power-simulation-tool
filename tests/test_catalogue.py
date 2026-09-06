@@ -138,11 +138,8 @@ def test_transformer_stays_bess_agnostic():
     assert "paired_solutions" not in Transformer.__dataclass_fields__
 
 
-def test_the_real_sungrow_station_has_no_invented_container_count(db):
-    # SUNGROW_MVS7400_LS is a real, fully transcribed datasheet entry whose
-    # container count nobody has published. Arithmetic suggests 4; arithmetic is
-    # not a source, and CONTEXT.md says a container count is read, never
-    # computed. It stays empty — and therefore unusable — until a supplier says
-    # otherwise. If this test fails because someone added a count, that is fine:
-    # delete the test in the same commit that cites the source.
-    assert db.bess_pairings.get("SUNGROW_MVS7400_LS") in (None, {})
+def test_the_real_sungrow_station_carries_its_confirmed_container_count(db):
+    # 4 containers, confirmed by the project owner rather than by the datasheet,
+    # which states no count at all. Pinned because the number has no paper
+    # source in the repo: if it changes, it must change against a citation.
+    assert db.bess_pairings["SUNGROW_MVS7400_LS"] == {"sungrow-st6900ux-4h": 4}
