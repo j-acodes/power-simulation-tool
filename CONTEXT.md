@@ -78,6 +78,10 @@ A fixed, worst-case power draw attached to a busbar that is not routed through a
 the substation's own housekeeping load, or a BESS solution's supplier-specified auxiliary
 consumption. It is a lumped figure, not a curve over time, and it enters the plant's power
 balance only below the export step, never inflating the power a station or a PCS is sized for.
+
+A supplier's figure can be **unpublished**, which is not the same as zero: the busbar total is
+then understated by that solution's real draw, and the design says so in a warning rather than
+inventing a number or refusing to solve.
 _Avoid_: parasitic load, house load
 
 **BESS solution**:

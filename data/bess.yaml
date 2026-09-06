@@ -19,8 +19,10 @@
 #                            not derived from energy and power — see
 #                            BessSolution's docstring
 #   aux_p_kw / aux_q_kvar  : worst-case auxiliary draw (cooling, BMS, HVAC) of
-#                            ONE station; 0.0 means the datasheet publishes no
-#                            figure, not that the station draws nothing
+#                            ONE station; null means the datasheet publishes no
+#                            figure — the engine sums it as zero but raises an
+#                            informational notice (see powertool.graph); 0.0
+#                            means the datasheet states the draw as zero
 #   datasheet_version / preliminary / datasheet_url : provenance of the
 #                            transcription; datasheet_url may be empty when
 #                            the source is not publicly linkable.
@@ -48,8 +50,8 @@ bess_solutions:
                                 # (4 x 450 kVA) works out to 3.84 h, but the
                                 # duration is declared, not derived (see
                                 # BessSolution's docstring)
-    aux_p_kw: 0.0               # not published by this datasheet
-    aux_q_kvar: 0.0              # not published by this datasheet
+    aux_p_kw: null               # not published by this datasheet
+    aux_q_kvar: null              # not published by this datasheet
     datasheet_version: Version 3
     preliminary: true
     datasheet_url: ""

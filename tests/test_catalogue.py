@@ -91,9 +91,10 @@ def test_sungrow_powertitan_entry_present_with_published_parameters(db):
     assert sol.pcs_count == 4
     assert sol.pcs_lv_kv == 0.69
     assert sol.duration_h == 4.0
-    # The datasheet publishes no auxiliary figure: zero, not an estimate.
-    assert sol.aux_p_kw == 0.0
-    assert sol.aux_q_kvar == 0.0
+    # The datasheet publishes no auxiliary figure: None, not zero — a real
+    # zero and a datasheet's silence are not the same value (ticket 07).
+    assert sol.aux_p_kw is None
+    assert sol.aux_q_kvar is None
     assert sol.preliminary is True
 
 

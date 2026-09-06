@@ -119,6 +119,17 @@ describe('evaluateCompliance', () => {
     )
     expect(verdict.reasons).toHaveLength(4)
   })
+
+  it('is not affected by a result warning, such as an unpublished auxiliary figure', () => {
+    // ticket 07 of component-datasheets: a gap in a supplier's datasheet is
+    // informational only — it rides on results.warnings, never on issues, so
+    // it must never fail compliance.
+    const withWarning = {
+      ...results(),
+      warnings: [{ code: 'bess_aux_not_published', message: 'x', node_id: 'bus', edge_id: null }],
+    }
+    expect(evaluateCompliance(withWarning, [])).toEqual({ compliant: true, reasons: [] })
+  })
 })
 
 

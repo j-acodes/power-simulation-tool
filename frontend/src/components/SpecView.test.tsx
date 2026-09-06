@@ -8,7 +8,9 @@ function solution(overrides: Partial<BessSolutionInfo> = {}): BessSolutionInfo {
     key: 'sungrow-st6900ux-4h', display_name: 'PowerTitan 3.0 — ST6900UX-4H',
     brand: 'Sungrow', series: 'PowerTitan 3.0', model: 'ST6900UX-4H',
     e_nominal_kwh: 6904, pcs_s_kva: 450, pcs_count: 4, pcs_lv_kv: 0.69, duration_h: 4,
-    aux_p_kw: 0, aux_q_kvar: 0,
+    // Matches the real Sungrow entry: the datasheet publishes no auxiliary
+    // figure (ticket 07 of component-datasheets).
+    aux_p_kw: null, aux_q_kvar: null,
     datasheet_version: 'Version 3', preliminary: true, datasheet_url: null,
     cell_type: null, dc_v_min: null, dc_v_max: null, ac_v_min: null, ac_v_max: null,
     ac_i_a: null, pf_at_nominal: null, q_range_percent: null, f_nominal_hz: null,
@@ -67,6 +69,21 @@ describe('SpecView — BESS solution', () => {
     render(<SpecView target={{ kind: 'bess_solution', item: fullSpecSolution }} solutions={[]} transformers={[]} />)
     expect(screen.getByText('> 0.99')).toBeTruthy()
     expect(screen.getByText('< 1%')).toBeTruthy()
+  })
+
+  it('says "Not published" for an unpublished auxiliary figure, not "0.0 kW"', () => {
+    // fullSpecSolution's aux_p_kw/aux_q_kvar are null — the datasheet publishes
+    // no figure, which is not the same value as a real zero (ticket 07).
+    render(<SpecView target={{ kind: 'bess_solution', item: fullSpecSolution }} solutions={[]} transformers={[]} />)
+    expect(screen.getByText('Not published')).toBeTruthy()
+    expect(screen.queryByText(/kW \/.*kvar/)).toBeNull()
+  })
+
+  it('shows the actual figures when a solution does publish auxiliary consumption', () => {
+    const published = solution({ aux_p_kw: 40, aux_q_kvar: 10 })
+    render(<SpecView target={{ kind: 'bess_solution', item: published }} solutions={[]} transformers={[]} />)
+    expect(screen.getByText('40 kW / 10 kvar')).toBeTruthy()
+    expect(screen.queryByText('Not published')).toBeNull()
   })
 
   it('marks a preliminary datasheet', () => {

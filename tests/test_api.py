@@ -76,8 +76,9 @@ def test_catalogue_serves_the_reshaped_bess_solution():
     assert sol["pcs_count"] == 4
     assert sol["pcs_lv_kv"] == 0.69
     assert sol["duration_h"] == 4.0
-    assert sol["aux_p_kw"] == 0.0
-    assert sol["aux_q_kvar"] == 0.0
+    # Not published: null on the wire, not zero (ticket 07).
+    assert sol["aux_p_kw"] is None
+    assert sol["aux_q_kvar"] is None
     assert sol["preliminary"] is True
     # The reshaped fields are gone from the wire contract entirely.
     assert "containers_by_duration" not in sol

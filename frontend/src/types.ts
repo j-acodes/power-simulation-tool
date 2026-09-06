@@ -301,8 +301,11 @@ export interface BessSolutionInfo {
   pcs_count: number
   pcs_lv_kv: number
   duration_h: number
-  aux_p_kw: number
-  aux_q_kvar: number
+  /** `null` means the datasheet publishes no auxiliary figure — the engine
+   *  sums it as zero but raises an informational notice; `0` means the
+   *  datasheet states the draw as zero. */
+  aux_p_kw: number | null
+  aux_q_kvar: number | null
   datasheet_version: string | null
   preliminary: boolean
   datasheet_url: string | null

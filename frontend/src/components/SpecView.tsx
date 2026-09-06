@@ -92,7 +92,14 @@ function SimulatedBessSolution({ item }: { item: BessSolutionInfo }) {
       <Row label="PCS rating" value={`${fmt(item.pcs_s_kva)} kVA x ${item.pcs_count}`} />
       <Row label="LV voltage" value={`${fmt(item.pcs_lv_kv, 2)} kV`} />
       <Row label="Discharge duration" value={`${fmt(item.duration_h, 2)} h`} />
-      <Row label="Auxiliary draw" value={`${fmt(item.aux_p_kw, 1)} kW / ${fmt(item.aux_q_kvar, 1)} kvar`} />
+      <Row
+        label="Auxiliary draw"
+        value={
+          item.aux_p_kw == null || item.aux_q_kvar == null
+            ? 'Not published'
+            : `${fmt(item.aux_p_kw, 1)} kW / ${fmt(item.aux_q_kvar, 1)} kvar`
+        }
+      />
     </>
   )
 }

@@ -248,8 +248,10 @@ class BessSolution:
     pcs_count: int                           # PCS units per container
     pcs_lv_kv: float
     duration_h: float                        # declared from the model number
-    aux_p_kw: float                          # 0.0 means "not published", not "no draw"
-    aux_q_kvar: float
+    aux_p_kw: float | None = None             # None: the datasheet publishes no figure —
+    aux_q_kvar: float | None = None           # the engine sums it as zero but raises an
+                                               # informational notice (see powertool.graph).
+                                               # 0.0 means the datasheet states zero.
     datasheet_version: str | None = None
     preliminary: bool = False
     datasheet_url: str | None = None

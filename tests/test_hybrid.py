@@ -352,6 +352,43 @@ def test_bess_aux_is_summed_across_the_fleet():
     assert branch.aux_p_kw == 50.0
 
 
+def test_unpublished_aux_raises_an_informational_notice_but_does_not_block():
+    """sungrow-st6900ux-4h publishes no auxiliary figure (ticket 07 of
+    component-datasheets). The design must still solve, still carry zero
+    validation issues, and still pass compliance — the notice is informational,
+    riding on the results as a warning, not a validation issue.
+    """
+    resp = client.post("/api/solve", json=_bess_only(duration=4.0))
+    body = resp.json()
+    assert body["issues"] == []                # not blocked
+    assert body["results"] is not None          # still solves
+    warnings = body["results"]["warnings"]
+    notices = [w for w in warnings if w["code"] == "bess_aux_not_published"]
+    assert len(notices) == 1
+    assert "PowerTitan 3.0 — ST6900UX-4H" in notices[0]["message"]
+    assert notices[0]["node_id"] == "bus"
+
+
+def test_a_published_aux_figure_raises_no_notice():
+    db_with_aux = _db_with_bess_aux(40.0, 10.0)
+    from backend.solve import solve_diagram
+
+    result = solve_diagram(_bess_only(duration=4.0), db_with_aux)
+    assert result["issues"] == []
+    warnings = result["results"]["warnings"]
+    assert [w for w in warnings if w["code"] == "bess_aux_not_published"] == []
+
+
+def test_an_existing_error_severity_issue_still_blocks():
+    # An unknown solution is still an ERROR: it still refuses to solve, unlike
+    # the informational notice above.
+    diagram = _bess_only(duration=4.0, solution="does-not-exist")
+    resp = client.post("/api/solve", json=diagram)
+    body = resp.json()
+    assert body["results"] is None
+    assert "unknown_bess_solution" in {i["code"] for i in body["issues"]}
+
+
 def test_container_count_is_reported_on_each_station():
     solved = client.post("/api/solve", json=_bess_only(duration=4.0)).json()
     assert solved["issues"] == []

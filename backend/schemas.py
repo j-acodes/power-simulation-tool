@@ -162,8 +162,11 @@ class BessSolutionInfo(BaseModel):
     pcs_count: int
     pcs_lv_kv: float
     duration_h: float
-    aux_p_kw: float
-    aux_q_kvar: float
+    # None means the datasheet publishes no auxiliary figure — the engine
+    # sums it as zero but raises an informational notice; 0.0 means the
+    # datasheet states the draw as zero.
+    aux_p_kw: float | None
+    aux_q_kvar: float | None
     datasheet_version: str | None
     preliminary: bool
     datasheet_url: str | None

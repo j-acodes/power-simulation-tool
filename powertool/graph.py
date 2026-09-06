@@ -1015,6 +1015,12 @@ class BranchInputs:
     # apparent power. A battery station's PCS is sized for export duty alone.
     bess_aux_p_kw: float = 0.0
     bess_aux_q_kvar: float = 0.0
+    # Display names of paired solutions whose datasheet publishes no auxiliary
+    # figure (aux_p_kw / aux_q_kvar is None on the BessSolution) — deduplicated,
+    # so a fleet of twenty identical stations names the product once. Drives
+    # the informational notice in map_results; never affects bess_aux_*_kw
+    # above, which already sums an unpublished figure as zero.
+    unpublished_aux_solutions: list[str] = field(default_factory=list)
     # Containers and energy are None when no discharge duration is set — every
     # design saved before this ticket. The energy gate then has nothing to judge.
     containers: int | None = None
@@ -1222,17 +1228,23 @@ def graph_to_inputs(diagram: dict, db) -> GraphInputs:
         # container count — defaulted from the pairing on the station's own
         # chosen station transformer, overridable — feeding delivered energy.
         e_delivered_kwh: float | None = None
+        unpublished_aux_solutions: list[str] = []
         if kind == "bess":
             hours = _rule_opt(diagram, "discharge_hours")
             per_station = [
                 (sid, db.bess_solutions.get(_props(nodes[sid]).get("bess_solution")))
                 for ids in station_ids for sid in ids
             ]
+            seen_unpublished: set[str] = set()
             for _sid, solution in per_station:
                 if solution is None:
                     continue  # unknown solution: already a validation issue
-                bess_aux_p_kw += solution.aux_p_kw
-                bess_aux_q_kvar += solution.aux_q_kvar
+                bess_aux_p_kw += solution.aux_p_kw or 0.0
+                bess_aux_q_kvar += solution.aux_q_kvar or 0.0
+                if solution.aux_p_kw is None or solution.aux_q_kvar is None:
+                    if solution.display_name not in seen_unpublished:
+                        seen_unpublished.add(solution.display_name)
+                        unpublished_aux_solutions.append(solution.display_name)
             if hours is not None and per_station and all(s is not None for _, s in per_station):
                 counts = {
                     sid: _bess_container_count(_props(nodes[sid]), db, solution)
@@ -1265,6 +1277,7 @@ def graph_to_inputs(diagram: dict, db) -> GraphInputs:
             p_poc_target_kw=p_target_kw,
             bess_aux_p_kw=bess_aux_p_kw,
             bess_aux_q_kvar=bess_aux_q_kvar,
+            unpublished_aux_solutions=unpublished_aux_solutions,
             containers=containers,
             containers_by_station=containers_by_station,
             e_delivered_kwh=e_delivered_kwh,
@@ -1467,6 +1480,18 @@ def map_results(inputs: GraphInputs, stage1s: list[SizingResult],
                 f"The drawn stations carry {layout.fleet_loading * 100:.0f} % of their "
                 f"combined rating — the required inverter power exceeds the installed "
                 f"station capacity. Add stations or pick bigger units.",
+                node_id=branch_inputs.busbar_id))
+
+        if branch_inputs.unpublished_aux_solutions:
+            # Informational only: nothing here blocks the design (ticket 07 of
+            # component-datasheets) — a gap in a supplier's datasheet is not
+            # the engineer's error. One notice per fleet, naming every solution
+            # that lacks one, not one per station.
+            names = ", ".join(branch_inputs.unpublished_aux_solutions)
+            warnings.append(GraphIssue(
+                "bess_aux_not_published",
+                f"No auxiliary consumption figure is published for {names} — the "
+                f"busbar auxiliary load is understated by that station's draw.",
                 node_id=branch_inputs.busbar_id))
 
     export = arch.export

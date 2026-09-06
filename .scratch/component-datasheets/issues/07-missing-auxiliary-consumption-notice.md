@@ -19,12 +19,12 @@ the busbar auxiliary load rather than only appearing where it was first read.
 **Blocked by:** 01 (Reshape the BESS solution around a declared discharge duration), 04 (Read a
 component's full specification full-screen).
 
-**Status:** ready-for-agent
+**Status:** done
 
-- [ ] Design validation carries an informational severity, distinct from the existing errors
-- [ ] A design using a solution with no published auxiliary consumption raises an informational
+- [x] Design validation carries an informational severity, distinct from the existing errors
+- [x] A design using a solution with no published auxiliary consumption raises an informational
       notice naming the solution
-- [ ] That design still solves, still passes compliance, and is not blocked in any way
-- [ ] The specification view says when a solution publishes no auxiliary consumption
-- [ ] A solution that does publish auxiliary consumption raises no notice
-- [ ] An existing error-severity issue is still reported as an error and still fails the design
+- [x] That design still solves, still passes compliance, and is not blocked in any way
+- [x] The specification view says when a solution publishes no auxiliary consumption
+- [x] A solution that does publish auxiliary consumption raises no notice
+- [x] An existing error-severity issue is still reported as an error and still fails the design
