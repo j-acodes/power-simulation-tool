@@ -56,8 +56,8 @@ The rated apparent power of a transformer station, which is only meaningful alon
 ambient temperature it was measured at. Suppliers publish a single figure and usually leave
 the temperature implicit; this project makes it explicit, holding a rating per ambient and
 never interpolating between them. A design asking for an ambient the entry does not publish
-is warned and falls back to the nearest published figure at or below it, so the station is
-understated rather than invented.
+is warned and falls back to the figure for the nearest published ambient at or above it — a
+hotter rating is a lower one, so the station is understated rather than invented.
 _Avoid_: rated power, nameplate rating (both drop the temperature, which is the whole point)
 
 **Technology**:

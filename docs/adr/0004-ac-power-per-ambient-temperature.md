@@ -6,7 +6,7 @@ against it, and TBEA publishes two without naming a field for either. The catalo
 holds an explicit rating per ambient — `s_rated_kva_at_40c`, required, and
 `s_rated_kva_at_30c`, nullable and unpopulated today — rather than one rating plus a derating
 rule. A design that asks for an ambient an entry does not publish is warned and falls back to
-the nearest published rating at or below it.
+the rating for the nearest published ambient at or above it.
 
 ## Considered Options
 
@@ -28,9 +28,11 @@ project already takes for discharge duration, where the ST6900UX-4H sells 4 h al
 energy over its PCS rating works out to 3.84 h — the nameplate is what gets procured, so the
 nameplate is what the catalogue records.
 
-**The fallback understates the station, deliberately.** Falling back from an unpublished 30 °C
-to the published 40 °C figure sizes the plant with less power than the station really has at
-30 °C. That direction is safe; the reverse is not.
+**The fallback understates the station, deliberately, which is why it looks upward.** A
+transformer station is rated lower the hotter it gets, so the conservative substitute for a
+missing rating is the one published at a *higher* ambient. Falling back from an unpublished
+30 °C to the published 40 °C figure sizes the plant with less power than the station really
+has at 30 °C. That direction is safe; the reverse is not.
 
 **Every entry in both catalogues gains a temperature it never declared.** The existing PV
 entries in `data/transformers.yaml` are annotated `@40C` in comments, and that comment is the
