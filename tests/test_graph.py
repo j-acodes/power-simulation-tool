@@ -339,6 +339,40 @@ def test_supported_durations_is_empty_for_an_unpaired_transformer():
     assert supported_durations(parsed_nodes, db) == []
 
 
+def test_the_0_5c_and_1c_station_transformers_offer_different_durations():
+    # This is the behaviour the whole 0.5 C distinction exists for: the
+    # MVS7080-LS is paired only with the 2 h solution, the MVS7400-LS only
+    # with the 4 h solution.
+    from powertool.graph import _parse_structure
+
+    diagram = _minimal()
+    diagram["nodes"][2]["props"] = _bess_station_props(
+        model="SUNGROW_MVS7080_LS", solution="sungrow-st6680ux-2h")
+    parsed_nodes, _ = _parse_structure(diagram, [])
+    assert supported_durations(parsed_nodes, db) == [2.0]
+
+    diagram = _minimal()
+    diagram["nodes"][2]["props"] = _bess_station_props(
+        model="SUNGROW_MVS7400_LS", solution="sungrow-st6900ux-4h")
+    parsed_nodes, _ = _parse_structure(diagram, [])
+    assert supported_durations(parsed_nodes, db) == [4.0]
+
+
+def test_mixing_the_0_5c_and_1c_stations_has_no_common_duration():
+    # supported_durations is documented to return empty when two drawn
+    # stations' transformers share no duration in common.
+    from powertool.graph import _parse_structure
+
+    diagram = _minimal()
+    diagram["nodes"][2]["props"] = _bess_station_props(
+        model="SUNGROW_MVS7080_LS", solution="sungrow-st6680ux-2h")
+    diagram["nodes"].append(_node(
+        "s2", "station", mode="catalogue", model="SUNGROW_MVS7400_LS",
+        fleet_kind="bess", bess_solution="sungrow-st6900ux-4h"))
+    parsed_nodes, _ = _parse_structure(diagram, [])
+    assert supported_durations(parsed_nodes, db) == []
+
+
 def test_container_count_defaults_from_the_pairing():
     diagram = _minimal()
     diagram["settings"]["tiers"]["lv_kv"] = 0.69

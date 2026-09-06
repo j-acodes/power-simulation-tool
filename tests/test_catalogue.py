@@ -99,7 +99,7 @@ def test_sungrow_powertitan_entry_present_with_published_parameters(db):
 
 
 def test_no_bess_solution_is_placeholder_data(db):
-    assert set(db.bess_solutions) == {"sungrow-st6900ux-4h"}
+    assert set(db.bess_solutions) == {"sungrow-st6900ux-4h", "sungrow-st6680ux-2h"}
 
 
 def test_bess_station_transformers_load_and_pair_with_solutions(db):
@@ -143,3 +143,10 @@ def test_the_real_sungrow_station_carries_its_confirmed_container_count(db):
     # which states no count at all. Pinned because the number has no paper
     # source in the repo: if it changes, it must change against a citation.
     assert db.bess_pairings["SUNGROW_MVS7400_LS"] == {"sungrow-st6900ux-4h": 4}
+
+
+def test_the_0_5c_sungrow_station_carries_its_confirmed_container_count(db):
+    # 2 containers, confirmed by the project owner rather than by the
+    # datasheet, which states no count at all — same standing as the
+    # SUNGROW_MVS7400_LS pairing above.
+    assert db.bess_pairings["SUNGROW_MVS7080_LS"] == {"sungrow-st6680ux-2h": 2}

@@ -5,9 +5,12 @@
 # solution's PCS voltage (see data/bess.yaml), which has no reason to equal
 # the PV LV bus, so mixing the two catalogues would only invite mismatches.
 #
-# SUNGROW_MVS7400_LS below is a real datasheet entry (see data/datasheets).
-# The GENERIC_* entries that follow it are still placeholder data — no other
-# real BESS station transformer has been selected for this project yet.
+# SUNGROW_MVS7400_LS and SUNGROW_MVS7080_LS below are real datasheet entries
+# (see data/datasheets) — identical in every respect except rated power: same
+# dimensions, weight, impedance, MV/LV range, RMU, control cabinet, UPS,
+# envelope and standards. The GENERIC_* entries that follow them are still
+# placeholder data — no other real BESS station transformer has been selected
+# for this project yet.
 # Their ratings follow placeholder assumptions matching the PV catalogue
 # above (see transformers.yaml) pending real datasheets:
 #   uk_percent = 8.0   (uniform placeholder)
@@ -52,6 +55,70 @@ bess_transformers:
       # before this leaves a design review.
       sungrow-st6900ux-4h: 4
     # Typed specification, transcribed verbatim from the datasheet.
+    mv_kv_min: 11.0
+    mv_kv_max: 36.0
+    lv_winding_count: 2
+    insulation_level: A
+    f_nominal: "50 Hz / 60 Hz"
+    uk_tolerance_pct: 10.0
+    winding_material_mv: Aluminum
+    winding_material_lv: Aluminum
+    ip_rating_transformer: IP68
+    ip_rating_enclosure: IP55
+    rmu_kv_min: 24.0
+    rmu_kv_max: 40.5
+    rmu_rated_current_a: 630.0
+    rmu_units: "DCV / CCV / CV / DV"
+    rmu_relay_protection: "ANSI 50, 50N, 51, 51N"
+    rmu_short_time_withstand: "20 kA / 3 s or 25 kA / 1 s"
+    cabinet_protection: Fuse+Disconnector
+    surge_protection: Type I+II
+    ac_insulation_detection: Optional
+    cabinet_temp_control: Air cooling and HVAC
+    ups: "2 h (default); 15 min / 3 / 4 h (optional)"
+    width_mm: 6058
+    height_mm: 2896
+    depth_mm: 2438
+    weight_kg: 26500
+    cable_entry: Bottom entry
+    corrosion_class: C4
+    temp_min_c: -30.0
+    temp_max_c: 45.0
+    humidity_min_pct: 0.0
+    humidity_max_pct: 100.0
+    altitude_max_m: 4000.0
+    communication: "Ethernet, Optical fiber, RS485"
+    standards: "IEC 62271-202, IEC 61439"
+
+  SUNGROW_MVS7080_LS:     # MVS7080-LS, real datasheet — DS_20250911_MVS7080-LS_Datasheet_V3_EN only for 0.5C projects.pdf
+    s_rated_kva_at_40c: 7080
+    s_rated_kva_at_30c: null      # not published
+    uk_percent: 7.0                # the ONLY datasheet-backed electrical figure on this entry
+    pk_kw: 70.8                    # placeholder formula (1.0% of rating), same as the GENERIC_* entries below
+    p0_kw: 7.08                    # placeholder formula (0.1% of rating)
+    i0_percent: 0.0                # placeholder, same as the GENERIC_* entries below
+    hv_kv: null
+    lv_kv: 0.69
+    brand: Sungrow
+    model: MVS7080-LS
+    vector_group: Dy11y11          # datasheet prints it spaced, "Dy 11 y 11"
+    cooling: ONAN
+    preliminary: true
+    datasheet_version: V3
+    datasheet_url: null   # no public URL known; local: DS_20250911_MVS7080-LS_Datasheet_V3_EN only for 0.5C projects.pdf
+    paired_solutions:
+      # 2 containers per station, confirmed by the project owner on 2026-09-06.
+      # NOT from the datasheet — none of the PDFs in data/datasheets states a
+      # container count, same standing as the SUNGROW_MVS7400_LS pairing above.
+      # The arithmetic happens to agree (2 x 3440 kVA of PCS = 6880 kVA under
+      # this 7080 kVA station, 97 % loaded — matching the 7400/4-container
+      # pairing's 97 %), but the agreement is not the source; the confirmation
+      # is. Re-confirm against a quote or array drawing before this leaves a
+      # design review.
+      sungrow-st6680ux-2h: 2
+    # Typed specification, transcribed verbatim from the datasheet — identical
+    # to SUNGROW_MVS7400_LS's typed block; only rated power differs between
+    # the two datasheets.
     mv_kv_min: 11.0
     mv_kv_max: 36.0
     lv_winding_count: 2

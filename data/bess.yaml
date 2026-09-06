@@ -79,3 +79,48 @@ bess_solutions:
     humidity_max_pct: 100.0
     altitude_max_m: 4000.0
     cooling: Intelligent Liquid Cooling
+
+  sungrow-st6680ux-2h:
+    brand: Sungrow
+    series: PowerTitan 3.0
+    model: ST6680UX-2H
+    e_nominal_kwh: 6684.0
+    pcs_s_kva: 430.0
+    pcs_count: 8                # NOTE: 8 PCS units, where the 4H sibling has 4
+    pcs_lv_kv: 0.69
+    duration_h: 2.0             # declared by the "2H" in the model number; 6684 kWh /
+                                 # (8 x 430 kVA) works out to 1.94 h. Declared, not
+                                 # derived (see BessSolution's docstring)
+    aux_p_kw: null               # not published by this datasheet
+    aux_q_kvar: null              # not published by this datasheet
+    datasheet_version: Version 2
+    preliminary: false           # this datasheet is NOT marked Preliminary, unlike the 4H
+    datasheet_url: ""
+    # This is the container that makes 0.5 C projects possible: 3440 kVA of
+    # PCS (8 x 430 kVA) over 6684 kWh works out to 0.51 C, where the 4H
+    # sibling's 1800 kVA over 6904 kWh is only 0.26 C.
+    #
+    # Typed specification, transcribed by hand from the datasheet.
+    cell_type: LFP
+    dc_v_min: 1101.6
+    dc_v_max: 1489.2
+    ac_v_min: 621.0
+    ac_v_max: 759.0
+    ac_i_a: 396.0                # per PCS unit
+    pf_at_nominal: 0.99          # datasheet says "> 0.99"
+    q_range_percent: 100.0       # datasheet says "-100 % ~ 100 %" (symmetric)
+    f_nominal_hz: "50 / 60"      # string: the product supports both
+    thdi_percent: 1.0            # datasheet says "< 1 %"
+    isolation: Transformerless
+    width_mm: 6058
+    height_mm: 4223              # much taller than the 4H's 2896
+    depth_mm: 2438
+    weight_kg: 59100
+    ip_rating: IP55
+    corrosion_class: C4
+    temp_min_c: -30.0
+    temp_max_c: 45.0
+    humidity_min_pct: 0.0
+    humidity_max_pct: 100.0
+    altitude_max_m: 4000.0
+    cooling: Intelligent Liquid Cooling

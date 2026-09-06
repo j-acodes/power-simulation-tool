@@ -64,7 +64,7 @@ def test_catalogue_serves_the_reshaped_bess_solution():
     assert resp.status_code == 200
     data = resp.json()
 
-    assert len(data["bess_solutions"]) == 1
+    assert len(data["bess_solutions"]) == 2
     sol = data["bess_solutions"][0]
     assert sol["key"] == "sungrow-st6900ux-4h"
     assert sol["display_name"] == "PowerTitan 3.0 — ST6900UX-4H"
