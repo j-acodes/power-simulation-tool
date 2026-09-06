@@ -23,7 +23,14 @@ function backend(): Plugin {
         const startedAt = Date.now()
         proc = spawn(
           `${repoRoot}.venv/bin/uvicorn`,
-          ['backend.main:app', '--port', '8000', '--reload', '--reload-dir', 'backend', '--reload-dir', 'powertool'],
+          // data/ is watched too, with *.yaml included alongside uvicorn's
+          // default *.py: the component catalogue is YAML loaded once at
+          // import, so without this a catalogue edit is invisible until a
+          // manual restart -- and the app quietly serves a stale catalogue
+          // while every test passes against the new one.
+          ['backend.main:app', '--port', '8000', '--reload',
+           '--reload-dir', 'backend', '--reload-dir', 'powertool', '--reload-dir', 'data',
+           '--reload-include', '*.py', '--reload-include', '*.yaml'],
           { cwd: repoRoot, stdio: 'inherit' },
         )
         proc.on('error', (e) => server.config.logger.error(`backend failed to start: ${e.message}`))
