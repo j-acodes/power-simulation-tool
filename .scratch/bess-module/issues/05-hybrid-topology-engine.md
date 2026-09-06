@@ -139,7 +139,7 @@ all, so the design collapses to single-fleet and the comparison passes for free.
 therefore split into the two independent failures it was actually written to catch:
 
 1. **Physics gate — golden snapshot diff.** The 8 designs in
-   `.scratch/bess-module/golden_snapshot.py`, run through the new branch-shaped solve
+   `tests/golden_snapshot.py` (then a manual script here), run through the new branch-shaped solve
    order, must reproduce the pre-refactor snapshot byte-for-byte. This is what catches a
    wrong export-chain / collection-chain split, which is the real risk: composing the
    backward cascade in two hops is only identical to one hop if the split is right, and
