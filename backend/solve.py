@@ -312,6 +312,7 @@ def solve_architecture(inputs: GraphInputs, db: ComponentDatabase):
             v_mv_kv=inputs.v_mv_kv,
             max_loading=branch.max_loading,
             kind=branch.kind,
+            ambient_c=inputs.ambient_c,
         )
         branch_arch = size_branch(
             layout, db.cables_for_voltage(inputs.v_mv_kv),
@@ -406,4 +407,5 @@ def report_pdf(diagram: dict, db: ComponentDatabase, plant_name: str) -> bytes:
     # what lifts ticket 07's refusal: the report can now describe every fleet
     # rather than the first one with the others silently missing.
     fleets = branches_summary(inputs, arch, stage1s)
-    return build_pdf_report(stage1s, arch, fleets=fleets, plant_name=plant_name)
+    return build_pdf_report(stage1s, arch, fleets=fleets, plant_name=plant_name,
+                            ambient_c=inputs.ambient_c)

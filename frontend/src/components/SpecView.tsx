@@ -1,4 +1,4 @@
-import { fmt } from '../format'
+import { fmt, ratingAtAmbients } from '../format'
 import { Row, SectionTitle } from './DetailRows'
 import type { BessSolutionInfo, TransformerInfo } from '../types'
 
@@ -108,7 +108,7 @@ function SimulatedBessTransformer({ item }: { item: TransformerInfo }) {
   return (
     <>
       {item.brand && <Row label="Brand" value={item.brand} />}
-      <Row label="Rated power" value={`${fmt(item.s_rated_kva_at_40c)} kVA`} />
+      <Row label="Rated power" value={ratingAtAmbients(item)} />
       <Row label="uk%" value={fmt(item.uk_percent, 2)} />
       <Row label="Pk" value={`${fmt(item.pk_kw, 2)} kW`} />
       <Row label="P0" value={`${fmt(item.p0_kw, 2)} kW`} />
@@ -202,18 +202,93 @@ function BessSolutionSpec({ item }: { item: BessSolutionInfo }) {
 }
 
 function BessTransformerSpec({ item }: { item: TransformerInfo }) {
-  const rows = [
+  const transformerRows = [
     optionalRow('Model', item.model),
     optionalRow('Vector group', item.vector_group),
-    optionalRow('Cooling', item.cooling),
+    item.mv_kv_min != null || item.mv_kv_max != null
+      ? optionalRow('MV voltage range', `${fmt(item.mv_kv_min, 2)} – ${fmt(item.mv_kv_max, 2)} kV`)
+      : null,
+    optionalRow('LV winding count', String(item.lv_winding_count)),
+    optionalRow('Insulation level', item.insulation_level),
+    optionalRow('Nominal frequency', item.f_nominal != null ? `${item.f_nominal} Hz` : null),
+    optionalRow('uk% tolerance', item.uk_tolerance_pct != null ? `±${fmt(item.uk_tolerance_pct, 1)}%` : null),
+    optionalRow('MV winding material', item.winding_material_mv),
+    optionalRow('LV winding material', item.winding_material_lv),
+    optionalRow('IP rating (transformer)', item.ip_rating_transformer),
+    optionalRow('IP rating (enclosure)', item.ip_rating_enclosure),
   ].filter(Boolean)
 
-  if (rows.length === 0) return null
+  const hasRmuRange = item.rmu_kv_min != null || item.rmu_kv_max != null
+  const rmuRows = [
+    hasRmuRange
+      ? optionalRow('RMU voltage range', `${fmt(item.rmu_kv_min, 2)} – ${fmt(item.rmu_kv_max, 2)} kV`)
+      : null,
+    optionalRow('RMU rated current', item.rmu_rated_current_a != null ? `${fmt(item.rmu_rated_current_a, 0)} A` : null),
+    optionalRow('RMU units', item.rmu_units),
+    optionalRow('RMU relay protection', item.rmu_relay_protection),
+    optionalRow('RMU short-time withstand', item.rmu_short_time_withstand),
+  ].filter(Boolean)
+
+  const cabinetRows = [
+    optionalRow('Cabinet protection', item.cabinet_protection),
+    optionalRow('Surge protection', item.surge_protection),
+    optionalRow('AC insulation detection', item.ac_insulation_detection),
+    optionalRow('Cabinet temperature control', item.cabinet_temp_control),
+    optionalRow('UPS', item.ups),
+  ].filter(Boolean)
+
+  const hasDimensions = item.width_mm != null || item.height_mm != null || item.depth_mm != null
+  const hasTemp = item.temp_min_c != null || item.temp_max_c != null
+  const hasHumidity = item.humidity_min_pct != null || item.humidity_max_pct != null
+  const generalRows = [
+    optionalRow('Cooling', item.cooling),
+    hasDimensions
+      ? optionalRow(
+          'Dimensions (W x H x D)',
+          `${fmt(item.width_mm)} x ${fmt(item.height_mm)} x ${fmt(item.depth_mm)} mm`,
+        )
+      : null,
+    optionalRow('Weight', item.weight_kg != null ? `${fmt(item.weight_kg)} kg` : null),
+    optionalRow('Cable entry', item.cable_entry),
+    optionalRow('Corrosion class', item.corrosion_class),
+    hasTemp
+      ? optionalRow('Operating temperature', `${fmt(item.temp_min_c, 1)} – ${fmt(item.temp_max_c, 1)} °C`)
+      : null,
+    hasHumidity
+      ? optionalRow('Operating humidity', `${fmt(item.humidity_min_pct, 0)} – ${fmt(item.humidity_max_pct, 0)}%`)
+      : null,
+    optionalRow('Maximum altitude', item.altitude_max_m != null ? `${fmt(item.altitude_max_m)} m` : null),
+    optionalRow('Communication', item.communication),
+    optionalRow('Standards', item.standards),
+    item.preliminary ? optionalRow('Preliminary', 'Yes') : null,
+  ].filter(Boolean)
 
   return (
     <>
-      <SectionTitle>Specification</SectionTitle>
-      {rows}
+      {transformerRows.length > 0 && (
+        <>
+          <SectionTitle>Transformer</SectionTitle>
+          {transformerRows}
+        </>
+      )}
+      {rmuRows.length > 0 && (
+        <>
+          <SectionTitle>RMU</SectionTitle>
+          {rmuRows}
+        </>
+      )}
+      {cabinetRows.length > 0 && (
+        <>
+          <SectionTitle>Control cabinet</SectionTitle>
+          {cabinetRows}
+        </>
+      )}
+      {generalRows.length > 0 && (
+        <>
+          <SectionTitle>General data</SectionTitle>
+          {generalRows}
+        </>
+      )}
     </>
   )
 }

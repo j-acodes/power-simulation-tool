@@ -104,6 +104,23 @@ export function SettingsPanel() {
         />
       </label>
       <label className="field inline">
+        {/* Fixed choice, not a free number — a transformer station only ever
+         *  publishes a rating at 30 or 40 °C (see ADR-0004), never anything
+         *  interpolated between them. */}
+        <span>Ambient temperature</span>
+        <select
+          value={rules.ambient_temp_c ?? 40}
+          onChange={(e) =>
+            updateSettings({
+              rules: { ...rules, ambient_temp_c: Number(e.target.value) as 30 | 40 },
+            })
+          }
+        >
+          <option value={40}>40 °C</option>
+          <option value={30}>30 °C</option>
+        </select>
+      </label>
+      <label className="field inline">
         <span>Max fleet loading</span>
         <input
           type="number"

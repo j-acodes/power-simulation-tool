@@ -76,6 +76,12 @@ DEFAULT_RULES = {
     "export_loss_pct_per_km": 0.10,
     "max_circuit_current_a": 400.0,
     "max_loading": 1.0,
+    # The ambient a design sizes its transformer stations against — see
+    # ADR-0004 and CONTEXT.md's "AC power at ambient" entry. A design saved
+    # before this setting existed has no entry here and must behave exactly
+    # as it always has, which is why the fallback is the same constant the
+    # engine used to hard-code (powertool.components.DEFAULT_AMBIENT_C).
+    "ambient_temp_c": DEFAULT_AMBIENT_C,
 }
 DEFAULT_TIERS = {"lv_kv": 0.8, "mv_kv": 20.0, "hv_kv": None}
 
@@ -1086,6 +1092,10 @@ class GraphInputs:
     collection_loss_pct: float
     export_loss_pct_per_km: float
     max_circuit_current_a: float
+    # The design's ambient — see ADR-0004. Read once here and threaded
+    # explicitly down to the architecture layer, rather than every sizing
+    # call site reaching back into the diagram or a global constant.
+    ambient_c: float
     # export step
     hv_mode: str  # "none" | "auto" | "model" | "custom"
     hv_transformer: Transformer | None  # None for "none" and "auto"
@@ -1305,6 +1315,7 @@ def graph_to_inputs(diagram: dict, db) -> GraphInputs:
         collection_loss_pct=_rule(diagram, "collection_loss_pct"),
         export_loss_pct_per_km=_rule(diagram, "export_loss_pct_per_km"),
         max_circuit_current_a=_rule(diagram, "max_circuit_current_a"),
+        ambient_c=_rule(diagram, "ambient_temp_c"),
         hv_mode=hv_mode,
         hv_transformer=hv_transformer,
         hv_n_parallel=hv_n_parallel,
@@ -1505,7 +1516,7 @@ def map_results(inputs: GraphInputs, stage1s: list[SizingResult],
             "kind": "hv_tx",
             "mode": inputs.hv_mode,
             "name": hv.name if hv else None,
-            "s_rated_kva": hv.rating_at(DEFAULT_AMBIENT_C) if hv else None,
+            "s_rated_kva": hv.rating_at(inputs.ambient_c) if hv else None,
             "n_parallel": export.hv_n_parallel,
             "s_through_kva": export.s_tx_through_kva,
             "dp_kw": export.dp_tx_kw,
@@ -1548,6 +1559,30 @@ def map_results(inputs: GraphInputs, stage1s: list[SizingResult],
             "The catalogue has no cables at the export voltage — the export span "
             "is shown but not sized (zero losses assumed).",
             edge_id=inputs.export_edge_id))
+
+    if math.isclose(inputs.ambient_c, 30.0, rel_tol=1e-9, abs_tol=1e-9):
+        # A design asking for 30 °C silently reads a station's 40 °C figure
+        # when 30 °C is unpublished (Transformer.rating_at falls back upward
+        # — see ADR-0004). One notice for the whole design, naming every
+        # affected model once, mirrors the unpublished-BESS-aux-draw notice
+        # above: informational, never blocks the solve.
+        seen_unpublished_ambient: set[str] = set()
+        unpublished_ambient: list[str] = []
+        for branch in arch.branches:
+            for tx, _n in branch.layout.fleet:
+                if tx.s_rated_kva_at_30c is None and tx.display_name not in seen_unpublished_ambient:
+                    seen_unpublished_ambient.add(tx.display_name)
+                    unpublished_ambient.append(tx.display_name)
+        if export is not None and export.hv_transformer is not None:
+            hv_tx = export.hv_transformer
+            if hv_tx.s_rated_kva_at_30c is None and hv_tx.display_name not in seen_unpublished_ambient:
+                unpublished_ambient.append(hv_tx.display_name)
+        if unpublished_ambient:
+            names = ", ".join(unpublished_ambient)
+            warnings.append(GraphIssue(
+                "ambient_rating_not_published",
+                f"No 30 °C rating is published for {names} — using the nearest "
+                f"published ambient at or above it (40 °C) for those units."))
 
     if len(arch.branches) == 1:
         # Exactly the pre-branch computation, unchanged — the golden-snapshot

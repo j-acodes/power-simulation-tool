@@ -297,11 +297,45 @@ class ProjectDetail(BaseModel):
     designs: list[DesignSummary]
 
 
+class RuleSettings(BaseModel):
+    """The one rule setting with a genuinely closed set of legal values in a
+    design's ``settings.rules`` — see ADR-0004 and CONTEXT.md's "AC power at
+    ambient" entry. Every other rule is a free number the frontend renders
+    with a plain number input; a value outside {30, 40} is never something
+    the sizing engine's transformer catalogue could honor, so it is rejected
+    here rather than accepted and silently mishandled downstream.
+
+    Not a model of the whole ``rules`` dict — every other field stays
+    untyped JSON on ``payload``, exactly as before this setting existed.
+    """
+
+    ambient_temp_c: Literal[30.0, 40.0] = 40.0
+
+
+def _validate_rule_settings(payload: dict) -> None:
+    """Raise (a Pydantic ``ValidationError``) if a design payload's
+    ``settings.rules.ambient_temp_c`` is set to anything but 30 or 40.
+
+    A payload silent on the field, or shaped unexpectedly (not yet a valid
+    diagram at all), is left alone here — that is the engine's own
+    ``validate_graph`` job, not this one's.
+    """
+    settings = payload.get("settings") if isinstance(payload, dict) else None
+    rules = settings.get("rules") if isinstance(settings, dict) else None
+    if isinstance(rules, dict) and "ambient_temp_c" in rules:
+        RuleSettings(ambient_temp_c=rules["ambient_temp_c"])
+
+
 class DesignCreate(BaseModel):
     name: str
     technology: Technology
     payload: dict
     last_edited_by: str
+
+    @model_validator(mode="after")
+    def _ambient_temp_c_is_legal(self) -> "DesignCreate":
+        _validate_rule_settings(self.payload)
+        return self
 
 
 class DesignFull(BaseModel):
@@ -327,3 +361,8 @@ class DesignUpdate(BaseModel):
     payload: dict
     version: int
     last_edited_by: str
+
+    @model_validator(mode="after")
+    def _ambient_temp_c_is_legal(self) -> "DesignUpdate":
+        _validate_rule_settings(self.payload)
+        return self

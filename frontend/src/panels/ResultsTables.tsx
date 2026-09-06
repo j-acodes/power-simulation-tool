@@ -183,6 +183,10 @@ function PlantSummary({ results }: { results: SolveResults }) {
 }
 
 function Stations({ diagram, results }: { diagram: Diagram; results: SolveResults }) {
+  // The design's ambient (ADR-0004) — a resolved rating is meaningless
+  // without it, so every rating cell below carries it as a plain suffix.
+  const ambientC = diagram.settings.rules.ambient_temp_c ?? 40
+
   const rows = diagram.nodes
     .map((node) => ({ node, result: results.nodes[node.id] }))
     .filter((r) => r.result?.kind === 'station')
@@ -221,7 +225,7 @@ function Stations({ diagram, results }: { diagram: Diagram; results: SolveResult
                 <td>
                   C{result.circuit}·{result.position}
                 </td>
-                <td className="num">{fmt(result.s_rated_kva, 0)}</td>
+                <td className="num">{fmt(result.s_rated_kva, 0)} @ {ambientC} °C</td>
                 <td className="num">{pct(result.loading)}</td>
                 <td className="num">{fmt(result.s_lv_kva, 1)}</td>
                 <td className="num">{fmt(result.dp_tx_kw, 2)}</td>
@@ -238,7 +242,7 @@ function Stations({ diagram, results }: { diagram: Diagram; results: SolveResult
                 </td>
                 <td>MV/HV</td>
                 <td className="num">
-                  {fmt(result.s_rated_kva, 0)}
+                  {fmt(result.s_rated_kva, 0)} @ {ambientC} °C
                   {result.n_parallel > 1 ? ` ×${result.n_parallel}` : ''}
                 </td>
                 <td className="num">

@@ -511,6 +511,42 @@ def test_map_results_keys_every_drawn_element():
     assert any(w["code"] == "hv_cable_not_sized" for w in results["warnings"])
 
 
+def test_absent_ambient_setting_behaves_as_40c():
+    # No settings.rules.ambient_temp_c at all — every design saved before this
+    # setting existed — must resolve exactly the 40C figure it always did.
+    diagram = _minimal()
+    assert "ambient_temp_c" not in diagram["settings"]["rules"]
+    inputs = graph_to_inputs(diagram, db)
+    assert inputs.ambient_c == 40.0
+
+    from backend.solve import solve_diagram
+    result = solve_diagram(diagram, db)
+    assert result["issues"] == []
+    assert not any(w["code"] == "ambient_rating_not_published" for w in result["results"]["warnings"])
+    tx = db.transformer("HUAWEI_JUPITER3000")
+    assert result["results"]["nodes"]["s1"]["s_rated_kva"] == tx.s_rated_kva_at_40c
+
+
+def test_ambient_30_falls_back_to_40_with_a_warning_and_still_solves():
+    # HUAWEI_JUPITER3000 (the station _minimal() draws) publishes no 30C
+    # figure — a design asking for 30C must still solve, using the nearest
+    # published ambient at or above it (40C), with a warning naming the gap.
+    diagram = _minimal()
+    diagram["settings"]["rules"]["ambient_temp_c"] = 30
+    assert validate_graph(diagram, db) == []  # a warning, not a blocking issue
+    inputs = graph_to_inputs(diagram, db)
+    assert inputs.ambient_c == 30.0
+
+    from backend.solve import solve_diagram
+    result = solve_diagram(diagram, db)
+    assert result["issues"] == []
+    warnings = result["results"]["warnings"]
+    assert any(w["code"] == "ambient_rating_not_published" for w in warnings)
+    tx = db.transformer("HUAWEI_JUPITER3000")
+    assert tx.s_rated_kva_at_30c is None  # the entry this fallback exercises
+    assert result["results"]["nodes"]["s1"]["s_rated_kva"] == tx.s_rated_kva_at_40c
+
+
 def test_mv_interconnection_sizes_the_drawn_export_run():
     # No MV/HV transformer: the POC -> busbar cable IS the export run, sized at
     # the MV voltage with its drawn length and the export %/km budget.

@@ -121,7 +121,7 @@ def _fleet_kind(fleet: dict | None) -> str:
 
 
 def _summary(stage1s: list[SizingResult], arch: PlantArchitecture,
-             fleets: list[dict] | None) -> list:
+             fleets: list[dict] | None, ambient_c: float) -> list:
     export = arch.export
     v_mv = arch.branches[0].layout.v_mv_kv
     if export is None:
@@ -129,7 +129,7 @@ def _summary(stage1s: list[SizingResult], arch: PlantArchitecture,
     else:
         hv = export.hv_transformer
         interconn = (f"HV, at {export.v_hv_kv:g} kV"
-                     + (f" via {hv.rating_at(DEFAULT_AMBIENT_C) / 1000:g} MVA auto-sized MV/HV transformer"
+                     + (f" via {hv.rating_at(ambient_c) / 1000:g} MVA auto-sized MV/HV transformer"
                         if hv is not None else ""))
     target = sum(r.p_poc_target_kw or 0.0 for r in arch.branch_refinements)
     rows = [
@@ -282,7 +282,7 @@ def _stage1(stage1: SizingResult, fleet: dict | None, n_fleets: int) -> list:
 
 
 def _transformer_rows(branch, export, p_inv: float, include_export: bool,
-                      shared: bool):
+                      shared: bool, ambient_c: float):
     agg: dict[str, dict] = {}
     for circuit in branch.circuits:
         for st in circuit.stations:
@@ -308,10 +308,10 @@ def _transformer_rows(branch, export, p_inv: float, include_export: bool,
     # than the column.
     if include_export and export is not None and export.hv_transformer is not None:
         hv = export.hv_transformer
-        loading = export.s_tx_through_kva / (hv.rating_at(DEFAULT_AMBIENT_C) * export.hv_n_parallel)
+        loading = export.s_tx_through_kva / (hv.rating_at(ambient_c) * export.hv_n_parallel)
         rows.append([
             f"{hv.name} (MV/HV{', shared' if shared else ''})",
-            str(export.hv_n_parallel), _fmt(hv.rating_at(DEFAULT_AMBIENT_C), 0),
+            str(export.hv_n_parallel), _fmt(hv.rating_at(ambient_c), 0),
             f"{loading * 100:.0f}%", _fmt(export.s_tx_through_kva, 1),
             f"{(export.dp_tx_kw / export.hv_n_parallel) / p_inv * 100:.3f}%",
             f"{export.dp_tx_kw / p_inv * 100:.3f}%", _fmt(export.dq_tx_kvar),
@@ -377,7 +377,7 @@ def _energy_rows(fleet: dict) -> list[list[str]]:
 
 
 def _stage2(stage1s: list[SizingResult], arch: PlantArchitecture,
-            fleets: list[dict] | None) -> list:
+            fleets: list[dict] | None, ambient_c: float) -> list:
     # Loss percentages are quoted against the whole plant's refined conversion
     # power, so the columns of a hybrid's two fleet tables share one base and
     # can be read against each other.
@@ -450,7 +450,7 @@ def _stage2(stage1s: list[SizingResult], arch: PlantArchitecture,
         f.append(_table(
             ["Transformer", "Units", "Rating [kVA]", "Loading", "S/unit [kVA]",
              "ΔP/unit [% P_inv]", "ΔP total [% P_inv]", "ΔQ total [kvar]"],
-            _transformer_rows(branch, arch.export, p_inv, last, n > 1),
+            _transformer_rows(branch, arch.export, p_inv, last, n > 1, ambient_c),
             [1.8, 0.7, 1.0, 0.8, 1.0, 1.0, 1.0, 1.0]))
 
         f.append(Paragraph("Cable-run losses", _H3))
@@ -493,6 +493,7 @@ def report_story(
     fleets: list[dict] | None = None,
     plant_name: str = "Plant",
     when: str = "",
+    ambient_c: float = DEFAULT_AMBIENT_C,
 ) -> list:
     """The report as a list of ReportLab flowables, before it becomes a PDF.
 
@@ -515,11 +516,11 @@ def report_story(
         HRFlowable(width="100%", thickness=2, color=_GREEN, spaceBefore=4,
                    spaceAfter=10),
     ]
-    story += _summary(stage1s, arch, fleets)
+    story += _summary(stage1s, arch, fleets, ambient_c)
     story += _methodology()
     for i, stage1 in enumerate(stage1s):
         story += _stage1(stage1, fleets[i] if fleets else None, len(stage1s))
-    story += _stage2(stage1s, arch, fleets)
+    story += _stage2(stage1s, arch, fleets, ambient_c)
     story += [
         Spacer(1, 8),
         HRFlowable(width="100%", thickness=0.5, color=_LINE, spaceAfter=6),
@@ -539,6 +540,7 @@ def build_pdf_report(
     fleets: list[dict] | None = None,
     plant_name: str = "Plant",
     generated_at: datetime | None = None,
+    ambient_c: float = DEFAULT_AMBIENT_C,
 ) -> bytes:
     """Full PDF sizing report: methodology + detailed loss tables. Returns bytes."""
     when = (generated_at or datetime.now()).strftime("%Y-%m-%d %H:%M")
@@ -547,5 +549,6 @@ def build_pdf_report(
         buf, pagesize=A4, title=f"{plant_name} — Sizing Report",
         leftMargin=_MARGIN, rightMargin=_MARGIN,
         topMargin=14 * mm, bottomMargin=14 * mm)
-    doc.build(report_story(stage1s, arch, fleets=fleets, plant_name=plant_name, when=when))
+    doc.build(report_story(stage1s, arch, fleets=fleets, plant_name=plant_name, when=when,
+                           ambient_c=ambient_c))
     return buf.getvalue()

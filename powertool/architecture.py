@@ -75,6 +75,10 @@ class PlantLayout:
     v_mv_kv: float
     fleet_loading: float  # S_inv / fleet rating (uniform per-unit loading)
     loading_ok: bool  # fleet_loading <= the requested max loading
+    # The ambient every station's rating in this layout was resolved against
+    # — see ADR-0004. Threaded in from the diagram's setting by the caller
+    # rather than read from a global constant.
+    ambient_c: float = DEFAULT_AMBIENT_C
 
     @property
     def n_transformers(self) -> int:
@@ -82,7 +86,7 @@ class PlantLayout:
 
     @property
     def s_fleet_kva(self) -> float:
-        return sum(tx.rating_at(DEFAULT_AMBIENT_C) * n for tx, n in self.fleet)
+        return sum(tx.rating_at(self.ambient_c) * n for tx, n in self.fleet)
 
     @property
     def circuit_sizes(self) -> list[int]:
@@ -173,6 +177,7 @@ def arrange_plant(
     v_mv_kv: float,
     max_loading: float = 1.0,
     kind: str = "pv",
+    ambient_c: float = DEFAULT_AMBIENT_C,
 ) -> PlantLayout:
     """Arrange the Stage-1 station fleet into MV circuits.
 
@@ -192,12 +197,12 @@ def arrange_plant(
     if not fleet:
         raise ValueError("The fleet needs at least one transformer model")
 
-    s_fleet = sum(tx.rating_at(DEFAULT_AMBIENT_C) * n for tx, n in fleet)
+    s_fleet = sum(tx.rating_at(ambient_c) * n for tx, n in fleet)
     loading = stage1.s_inv_kva / s_fleet
 
     plans: list[StationPlan] = []
     for tx, count in fleet:
-        share = tx.rating_at(DEFAULT_AMBIENT_C) / s_fleet
+        share = tx.rating_at(ambient_c) / s_fleet
         p_lv = stage1.p_inv_kw * share
         q_lv = stage1.q_inv_kvar * share
         p_mv, q_mv = station_mv_output(p_lv, q_lv, tx)
@@ -219,7 +224,7 @@ def arrange_plant(
 
     bins = assign_circuits([p.i_a for p in plans], max_circuit_current_a)
     circuit_plans = [
-        sorted((plans[i] for i in b), key=lambda p: -p.transformer.rating_at(DEFAULT_AMBIENT_C))
+        sorted((plans[i] for i in b), key=lambda p: -p.transformer.rating_at(ambient_c))
         for b in bins
     ]
     # Deterministic display order: heaviest circuit first.
@@ -234,6 +239,7 @@ def arrange_plant(
         v_mv_kv=v_mv_kv,
         fleet_loading=loading,
         loading_ok=loading <= max_loading + 1e-9,
+        ambient_c=ambient_c,
     )
 
 
@@ -245,6 +251,7 @@ def arrange_plant_manual(
     v_mv_kv: float,
     max_loading: float = 1.0,
     kind: str = "pv",
+    ambient_c: float = DEFAULT_AMBIENT_C,
 ) -> PlantLayout:
     """Arrange the plant from a DRAWN circuit layout — the given order is kept.
 
@@ -285,7 +292,7 @@ def arrange_plant_manual(
                              f"needs at least one MV/LV station")
 
     stations = [tx for circuit in circuits for tx in circuit]
-    s_fleet = sum(tx.rating_at(DEFAULT_AMBIENT_C) for tx in stations)
+    s_fleet = sum(tx.rating_at(ambient_c) for tx in stations)
     loading = stage1.s_inv_kva / s_fleet
 
     # Fleet = (model, count) aggregated over the drawn stations, in order of
@@ -300,7 +307,7 @@ def arrange_plant_manual(
             fleet.append((tx, 1))
 
     def _plan(tx: Transformer) -> StationPlan:
-        share = tx.rating_at(DEFAULT_AMBIENT_C) / s_fleet
+        share = tx.rating_at(ambient_c) / s_fleet
         p_lv = stage1.p_inv_kw * share
         q_lv = stage1.q_inv_kvar * share
         p_mv, q_mv = station_mv_output(p_lv, q_lv, tx)
@@ -328,6 +335,7 @@ def arrange_plant_manual(
         v_mv_kv=v_mv_kv,
         fleet_loading=loading,
         loading_ok=loading <= max_loading + 1e-9,
+        ambient_c=ambient_c,
     )
 
 
@@ -462,7 +470,7 @@ def size_circuits(
                 q_mv_kvar=plan.q_mv_kvar,
                 s_mv_kva=plan.s_mv_kva,
                 loading=plan.loading,
-                s_rated_kva=plan.transformer.rating_at(DEFAULT_AMBIENT_C),
+                s_rated_kva=plan.transformer.rating_at(layout.ambient_c),
                 model=plan.transformer.display_name,
                 v_lv_kv=plan.v_lv_kv,
                 kind=plan.kind,

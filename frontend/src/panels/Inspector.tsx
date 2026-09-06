@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { fmt, kvGroupKey, pct, powerFactor } from '../format'
+import { fmt, kvGroupKey, pct, powerFactor, ratingAtAmbients } from '../format'
 import { CollapsiblePanel } from './CollapsiblePanel'
 import { LABEL } from '../labels'
 import { useCatalogue } from '../hooks/useCatalogue'
@@ -69,7 +69,7 @@ function TransformerPreview({ tx }: { tx: TransformerInfo }) {
       <h3>{tx.display_name}</h3>
       <Row label={LABEL.catalogueKey} value={tx.key} />
       <Row label={LABEL.brand} value={tx.brand ?? '—'} />
-      <Row label={LABEL.sRatedKva} value={fmt(tx.s_rated_kva_at_40c)} />
+      <Row label={LABEL.sRatedKva} value={ratingAtAmbients(tx)} />
       <Row label={LABEL.ukPercent} value={fmt(tx.uk_percent, 2)} />
       <Row label={LABEL.pkKw} value={fmt(tx.pk_kw, 2)} />
       <Row label={LABEL.p0Kw} value={fmt(tx.p0_kw, 2)} />
@@ -278,6 +278,9 @@ function NodeProperties({ node }: { node: DiagramNode }) {
 /** Read-only computed results for one node, keyed by its id in the last solve
  * — exactly the figures map_results already provides for that kind. */
 function NodeResults({ result }: { result?: NodeResult }) {
+  // The design's ambient (ADR-0004) — the resolved rating shown below (hv_tx
+  // case) is meaningless without it.
+  const ambientC = useStore((s) => s.diagram.settings.rules.ambient_temp_c ?? 40)
   if (!result) return <p className="panel-hint">Not yet solved.</p>
 
   switch (result.kind) {
@@ -311,7 +314,10 @@ function NodeResults({ result }: { result?: NodeResult }) {
       return (
         <>
           <Row label="Model" value={result.name ?? '—'} />
-          <Row label={LABEL.sRatedKva} value={result.s_rated_kva != null ? fmt(result.s_rated_kva) : '—'} />
+          <Row
+            label={LABEL.sRatedKva}
+            value={result.s_rated_kva != null ? `${fmt(result.s_rated_kva)} @ ${ambientC} °C` : '—'}
+          />
           <Row label="Parallel units" value={String(result.n_parallel)} />
           <Row label="Load loss ΔP (kW)" value={fmt(result.dp_kw, 2)} />
           <Row label="Reactive loss ΔQ (kvar)" value={fmt(result.dq_kvar, 2)} />

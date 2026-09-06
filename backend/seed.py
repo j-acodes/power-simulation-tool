@@ -119,6 +119,11 @@ def seed_diagram(params: dict, db: ComponentDatabase) -> dict:
         spacing_km=params["spacing_m"] / 1000.0,
         v_mv_kv=v_mv_kv,
         max_loading=max_loading,
+        # The seed wizard builds a brand-new diagram with no ambient setting
+        # of its own yet (see ADR-0004) — explicit rather than relying on
+        # arrange_plant's own default, since the produced diagram's default
+        # ambient is this same constant.
+        ambient_c=DEFAULT_AMBIENT_C,
     )
 
     return _layout_to_diagram(layout, params, v_export_kv)
