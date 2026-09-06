@@ -69,11 +69,37 @@ def test_only_branded_pv_stations(db):
 def test_bess_solutions_load(db):
     assert db.bess_solutions
     for sol in db.bess_solutions.values():
-        assert sol.e_container_kwh > 0
-        assert sol.pcs_p_kw > 0
+        assert sol.brand and sol.series and sol.model
+        assert sol.e_nominal_kwh > 0
+        assert sol.pcs_s_kva > 0
+        assert sol.pcs_count >= 1
         assert sol.pcs_lv_kv > 0
-        assert sol.containers_by_duration
-        assert all(count >= 1 for count in sol.containers_by_duration.values())
+        assert sol.duration_h > 0
+
+
+def test_sungrow_powertitan_entry_present_with_published_parameters(db):
+    # The only entry in the catalogue: the invented placeholders are gone, and
+    # this one carries the real datasheet figures, keyed by a slug of brand
+    # and model.
+    sol = db.bess_solutions["sungrow-st6900ux-4h"]
+    assert sol.brand == "Sungrow"
+    assert sol.series == "PowerTitan 3.0"
+    assert sol.model == "ST6900UX-4H"
+    assert sol.display_name == "PowerTitan 3.0 — ST6900UX-4H"
+    assert sol.e_nominal_kwh == 6904.0
+    assert sol.pcs_s_kva == 450.0
+    assert sol.pcs_count == 4
+    assert sol.pcs_lv_kv == 0.69
+    assert sol.duration_h == 4.0
+    # The datasheet publishes no auxiliary figure: None, not zero — a real
+    # zero and a datasheet's silence are not the same value (ticket 07).
+    assert sol.aux_p_kw is None
+    assert sol.aux_q_kvar is None
+    assert sol.preliminary is True
+
+
+def test_no_bess_solution_is_placeholder_data(db):
+    assert set(db.bess_solutions) == {"sungrow-st6900ux-4h"}
 
 
 def test_bess_station_transformers_load_and_pair_with_solutions(db):
@@ -87,3 +113,26 @@ def test_bess_station_transformers_load_and_pair_with_solutions(db):
         assert any(
             tx.lv_kv == pytest.approx(sol.pcs_lv_kv) for tx in db.bess_transformers.values()
         ), f"no BESS station transformer pairs with {sol.name}'s PCS voltage"
+
+
+def test_pairing_lives_on_the_station_transformer(db):
+    # The pairing carries the container count per station, keyed by station
+    # transformer, then solution key — the shorter list to maintain by hand
+    # (one station transformer pairs with few solutions).
+    assert db.bess_pairings["GENERIC_BESS_TX_2750_LV069"] == {"sungrow-st6900ux-4h": 1}
+    assert db.bess_pairings["GENERIC_BESS_TX_4000_LV069"] == {"sungrow-st6900ux-4h": 2}
+
+
+def test_a_station_transformer_may_be_sold_with_nothing(db):
+    # GENERIC_BESS_TX_1750_LV100 exists deliberately unpaired: it exercises
+    # bess_lv_mismatch (its LV disagrees with every solution's PCS voltage),
+    # and it must not silently inherit another transformer's pairing.
+    assert db.bess_pairings.get("GENERIC_BESS_TX_1750_LV100") in (None, {})
+
+
+def test_transformer_stays_bess_agnostic():
+    # paired_solutions is popped out of the YAML entry before the Transformer
+    # is built — Transformer is shared with the PV catalogue and carries no
+    # BESS-specific field.
+    from powertool.components import Transformer
+    assert "paired_solutions" not in Transformer.__dataclass_fields__

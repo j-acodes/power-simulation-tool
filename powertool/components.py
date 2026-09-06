@@ -93,6 +93,10 @@ class Transformer:
     hv_kv: float | None = None
     lv_kv: float | None = None
     brand: str | None = None  # manufacturer, for catalogue display
+    model: str | None = None  # typed parameter — never computed with
+    vector_group: str | None = None  # typed parameter — never computed with
+    cooling: str | None = None  # typed parameter — never computed with
+    datasheet_url: str | None = None  # typed parameter — never computed with
 
     @property
     def display_name(self) -> str:
@@ -218,47 +222,74 @@ def conversion_label(fleet_kind: str) -> str:
 class BessSolution:
     """A named BESS supplier product, selected from a catalogue.
 
+    Identified the way a supplier quote is: a brand, a series and a model
+    number. The model number already encodes the discharge duration — Sungrow's
+    ``ST6900UX-4H`` sells 4 h — so ``duration_h`` is DECLARED from the
+    nameplate, not derived from energy and power (6904 kWh / 4 x 450 kVA works
+    out to 3.84 h; the nameplate still says 4H). This is the same "declared,
+    not derived" stance ADR-0002 takes for technology.
+
     Choosing a solution fixes everything the sizing of a BESS station depends
-    on: the energy in one container, the power and LV voltage of one PCS, the
-    worst-case auxiliary draw, and the container count the supplier offers at
-    each discharge duration. ``containers_by_duration`` is READ, never
-    interpolated, derived or rounded — a duration the solution does not sell
-    cannot be requested.
+    on: the nominal energy, the PCS rating (apparent power per unit and a unit
+    count) and LV voltage, and the worst-case auxiliary draw. The container
+    count per station is NOT a property of the solution — it is a property of
+    the pairing between a solution and a station transformer (one solution is
+    sold behind many station transformer ratings, each serving a different
+    count), read from ``ComponentDatabase.bess_pairings``. See
+    :func:`powertool.graph.supported_durations` and ``data/bess_transformers.yaml``.
     """
 
     name: str
-    e_container_kwh: float
-    pcs_p_kw: float
+    brand: str
+    series: str
+    model: str
+    e_nominal_kwh: float
+    pcs_s_kva: float                         # apparent power, ONE PCS unit
+    pcs_count: int                           # PCS units per container
     pcs_lv_kv: float
-    aux_p_kw: float                          # worst case, from the spec sheet
-    aux_q_kvar: float
-    containers_by_duration: dict[float, int]  # discharge hours -> containers per station
+    duration_h: float                        # declared from the model number
+    aux_p_kw: float | None = None             # None: the datasheet publishes no figure —
+    aux_q_kvar: float | None = None           # the engine sums it as zero but raises an
+                                               # informational notice (see powertool.graph).
+                                               # 0.0 means the datasheet states zero.
+    datasheet_version: str | None = None
+    preliminary: bool = False
+    datasheet_url: str | None = None
+
+    # --- Typed parameters ------------------------------------------------
+    # Structured, stored, displayed — never read by the sizing engine. See
+    # CONTEXT.md's "Simulated parameter / typed parameter" entry. All optional:
+    # ``None`` means the datasheet is silent, not zero. Where the datasheet
+    # states an inequality (e.g. "> 0.99", "< 1 %"), the bound is stored here
+    # and the comparator belongs in the view, not the data.
+    cell_type: str | None = None
+    dc_v_min: float | None = None
+    dc_v_max: float | None = None
+    ac_v_min: float | None = None
+    ac_v_max: float | None = None
+    ac_i_a: float | None = None                 # per PCS unit
+    pf_at_nominal: float | None = None
+    q_range_percent: float | None = None        # symmetric bound, e.g. 100.0 == "-100% ~ 100%"
+    f_nominal_hz: str | None = None             # string: some products support two frequencies
+    thdi_percent: float | None = None
+    isolation: str | None = None
+    width_mm: float | None = None
+    height_mm: float | None = None
+    depth_mm: float | None = None
+    weight_kg: float | None = None
+    ip_rating: str | None = None
+    corrosion_class: str | None = None
+    temp_min_c: float | None = None
+    temp_max_c: float | None = None
+    humidity_min_pct: float | None = None
+    humidity_max_pct: float | None = None
+    altitude_max_m: float | None = None
+    cooling: str | None = None
 
     @property
-    def supported_durations(self) -> list[float]:
-        """The discharge durations this solution sells, ascending."""
-        return sorted(self.containers_by_duration)
-
-    def containers_at(self, hours: float) -> int:
-        """Containers per station at ``hours`` of discharge, read verbatim.
-
-        Raises ``KeyError`` for a duration the solution does not tabulate. That
-        refusal is the point: 3 h sits between the 2 h and 4 h entries, and any
-        interpolating or rounding rule would cheerfully invent a container count
-        that no supplier has quoted and that would not survive a design review.
-        There is no figure, so there is no answer to give — callers are expected
-        to have restricted the choice to :attr:`supported_durations` first.
-
-        Matching is tolerant of float representation only: the same duration
-        reaches us from YAML and from a JSON payload as 2, 2.0 or 2.0000000001,
-        which an exact dict lookup would miss. That is not interpolation — it
-        still resolves to a duration the table actually contains.
-        """
-        for tabulated, count in self.containers_by_duration.items():
-            if math.isclose(tabulated, hours, rel_tol=1e-9, abs_tol=1e-9):
-                return count
-        raise KeyError(
-            f"{self.name} does not sell a {hours:g} h discharge — it tabulates "
-            f"{', '.join(f'{h:g} h' for h in self.supported_durations)}. Container "
-            f"counts are read from the supplier's table, never interpolated."
-        )
+    def display_name(self) -> str:
+        """Catalogue label: series first, model number qualifies it —
+        ``"PowerTitan 3.0 — ST6900UX-4H"`` — because the series is how the
+        product is recognised and the model number is what distinguishes two
+        durations of it."""
+        return f"{self.series} — {self.model}"

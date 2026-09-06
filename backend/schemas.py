@@ -132,6 +132,17 @@ class TransformerInfo(BaseModel):
     pk_kw: float
     p0_kw: float
     i0_percent: float
+    # Typed parameters (never computed with) — see CONTEXT.md's "Simulated
+    # parameter / typed parameter" entry. Unset for every PV transformer and
+    # for the placeholder BESS station transformers.
+    model: str | None = None
+    vector_group: str | None = None
+    cooling: str | None = None
+    datasheet_url: str | None = None
+    # BESS solution key -> containers per station: the solutions this station
+    # transformer is sold with (data/bess_transformers.yaml's paired_solutions).
+    # Always empty for a PV transformer, which has no pairing to carry.
+    paired_solutions: dict[str, int] = {}
 
 
 class CableInfo(BaseModel):
@@ -142,12 +153,49 @@ class CableInfo(BaseModel):
 
 class BessSolutionInfo(BaseModel):
     key: str
-    e_container_kwh: float
-    pcs_p_kw: float
+    display_name: str
+    brand: str
+    series: str
+    model: str
+    e_nominal_kwh: float
+    pcs_s_kva: float
+    pcs_count: int
     pcs_lv_kv: float
-    aux_p_kw: float
-    aux_q_kvar: float
-    containers_by_duration: dict[float, int]
+    duration_h: float
+    # None means the datasheet publishes no auxiliary figure — the engine
+    # sums it as zero but raises an informational notice; 0.0 means the
+    # datasheet states the draw as zero.
+    aux_p_kw: float | None
+    aux_q_kvar: float | None
+    datasheet_version: str | None
+    preliminary: bool
+    datasheet_url: str | None
+    # Typed specification (never computed with) — see CONTEXT.md's "Simulated
+    # parameter / typed parameter" entry. All optional: None means the
+    # datasheet is silent on that field, not that the value is zero.
+    cell_type: str | None = None
+    dc_v_min: float | None = None
+    dc_v_max: float | None = None
+    ac_v_min: float | None = None
+    ac_v_max: float | None = None
+    ac_i_a: float | None = None
+    pf_at_nominal: float | None = None
+    q_range_percent: float | None = None
+    f_nominal_hz: str | None = None
+    thdi_percent: float | None = None
+    isolation: str | None = None
+    width_mm: float | None = None
+    height_mm: float | None = None
+    depth_mm: float | None = None
+    weight_kg: float | None = None
+    ip_rating: str | None = None
+    corrosion_class: str | None = None
+    temp_min_c: float | None = None
+    temp_max_c: float | None = None
+    humidity_min_pct: float | None = None
+    humidity_max_pct: float | None = None
+    altitude_max_m: float | None = None
+    cooling: str | None = None
 
 
 class TiersDefaults(BaseModel):

@@ -37,27 +37,36 @@ def load_bess_solutions(path: str | Path | None = None) -> dict[str, BessSolutio
     """Load BESS supplier solutions from a YAML file, keyed by name."""
     path = Path(path) if path else DATA_DIR / "bess.yaml"
     raw = yaml.safe_load(path.read_text()) or {}
-    solutions: dict[str, BessSolution] = {}
-    for name, params in (raw.get("bess_solutions") or {}).items():
-        params = dict(params)
-        durations = params.pop("containers_by_duration", None) or {}
-        params["containers_by_duration"] = {float(k): int(v) for k, v in durations.items()}
-        solutions[name] = BessSolution(name=name, **params)
-    return solutions
+    return {
+        name: BessSolution(name=name, **params)
+        for name, params in (raw.get("bess_solutions") or {}).items()
+    }
 
 
-def load_bess_transformers(path: str | Path | None = None) -> dict[str, Transformer]:
+def load_bess_transformers(
+    path: str | Path | None = None,
+) -> tuple[dict[str, Transformer], dict[str, dict[str, int]]]:
     """Load BESS station transformer types from a YAML file, keyed by name.
 
     A separate catalogue from :func:`load_transformers` (the PV string-inverter
     stations) — deliberately not a category field on the same one.
+
+    Each entry may nest a ``paired_solutions`` mapping (BESS solution key ->
+    containers per station) — the solutions this station transformer is sold
+    with. It is popped out of the params before building the ``Transformer``
+    (which stays BESS-agnostic, shared with the PV catalogue) and returned
+    separately, keyed by the same station transformer name, for
+    ``ComponentDatabase.bess_pairings``.
     """
     path = Path(path) if path else DATA_DIR / "bess_transformers.yaml"
     raw = yaml.safe_load(path.read_text()) or {}
-    return {
-        name: Transformer(name=name, **params)
-        for name, params in (raw.get("bess_transformers") or {}).items()
-    }
+    transformers: dict[str, Transformer] = {}
+    pairings: dict[str, dict[str, int]] = {}
+    for name, params in (raw.get("bess_transformers") or {}).items():
+        params = dict(params)
+        pairings[name] = dict(params.pop("paired_solutions", None) or {})
+        transformers[name] = Transformer(name=name, **params)
+    return transformers, pairings
 
 
 class ComponentDatabase:
@@ -69,24 +78,33 @@ class ComponentDatabase:
         transformers: dict[str, Transformer] | None = None,
         bess_solutions: dict[str, BessSolution] | None = None,
         bess_transformers: dict[str, Transformer] | None = None,
+        bess_pairings: dict[str, dict[str, int]] | None = None,
     ) -> None:
         self.cables = cables or {}
         self.transformers = transformers or {}
         self.bess_solutions = bess_solutions or {}
         self.bess_transformers = bess_transformers or {}
+        # Station-transformer key -> solution key -> containers per station.
+        # The solutions each BESS station transformer is sold with (see
+        # data/bess_transformers.yaml's ``paired_solutions``).
+        self.bess_pairings = bess_pairings or {}
 
     @classmethod
     def load(cls, data_dir: str | Path | None = None) -> "ComponentDatabase":
         """Load the full catalogue from a data directory (defaults to ``data/``)."""
         if data_dir is None:
+            bess_transformers, bess_pairings = load_bess_transformers()
             return cls(load_cables(), load_transformers(), load_bess_solutions(),
-                       load_bess_transformers())
+                       bess_transformers, bess_pairings)
         data_dir = Path(data_dir)
+        bess_transformers, bess_pairings = load_bess_transformers(
+            data_dir / "bess_transformers.yaml")
         return cls(
             load_cables(data_dir / "cables.yaml"),
             load_transformers(data_dir / "transformers.yaml"),
             load_bess_solutions(data_dir / "bess.yaml"),
-            load_bess_transformers(data_dir / "bess_transformers.yaml"),
+            bess_transformers,
+            bess_pairings,
         )
 
     def cable(self, name: str) -> Cable:

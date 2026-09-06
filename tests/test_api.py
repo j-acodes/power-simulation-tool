@@ -59,6 +59,117 @@ def test_catalogue_returns_transformers_cables_and_defaults():
     assert data["defaults"]["rules"]["max_utilization"] == 0.80
 
 
+def test_catalogue_serves_the_reshaped_bess_solution():
+    resp = client.get("/api/catalogue")
+    assert resp.status_code == 200
+    data = resp.json()
+
+    assert len(data["bess_solutions"]) == 1
+    sol = data["bess_solutions"][0]
+    assert sol["key"] == "sungrow-st6900ux-4h"
+    assert sol["display_name"] == "PowerTitan 3.0 — ST6900UX-4H"
+    assert sol["brand"] == "Sungrow"
+    assert sol["series"] == "PowerTitan 3.0"
+    assert sol["model"] == "ST6900UX-4H"
+    assert sol["e_nominal_kwh"] == 6904.0
+    assert sol["pcs_s_kva"] == 450.0
+    assert sol["pcs_count"] == 4
+    assert sol["pcs_lv_kv"] == 0.69
+    assert sol["duration_h"] == 4.0
+    # Not published: null on the wire, not zero (ticket 07).
+    assert sol["aux_p_kw"] is None
+    assert sol["aux_q_kvar"] is None
+    assert sol["preliminary"] is True
+    # The reshaped fields are gone from the wire contract entirely.
+    assert "containers_by_duration" not in sol
+    assert "e_container_kwh" not in sol
+    assert "pcs_p_kw" not in sol
+    assert "containers_per_station" not in sol
+
+
+def test_catalogue_serves_the_bess_solution_typed_specification():
+    # The typed tier (ticket 04): structured, stored, displayed, never
+    # computed with — see CONTEXT.md's "Simulated parameter / typed
+    # parameter" entry. Transcribed from the Sungrow ST6900UX-4H datasheet.
+    resp = client.get("/api/catalogue")
+    assert resp.status_code == 200
+    data = resp.json()
+
+    sol = data["bess_solutions"][0]
+    assert sol["cell_type"] == "LFP"
+    assert sol["dc_v_min"] == 1101.6
+    assert sol["dc_v_max"] == 1489.2
+    assert sol["ac_v_min"] == 621.0
+    assert sol["ac_v_max"] == 759.0
+    assert sol["ac_i_a"] == 414.0
+    assert sol["pf_at_nominal"] == 0.99
+    assert sol["q_range_percent"] == 100.0
+    assert sol["f_nominal_hz"] == "50 / 60"
+    assert sol["thdi_percent"] == 1.0
+    assert sol["isolation"] == "Transformerless"
+    assert sol["width_mm"] == 6058
+    assert sol["height_mm"] == 2896
+    assert sol["depth_mm"] == 2438
+    assert sol["weight_kg"] == 55000
+    assert sol["ip_rating"] == "IP55"
+    assert sol["corrosion_class"] == "C4"
+    assert sol["temp_min_c"] == -30.0
+    assert sol["temp_max_c"] == 45.0
+    assert sol["humidity_min_pct"] == 0.0
+    assert sol["humidity_max_pct"] == 100.0
+    assert sol["altitude_max_m"] == 4000.0
+    assert sol["cooling"] == "Intelligent Liquid Cooling"
+    # There is no free-form/untyped tier: every field is a named, typed key.
+    assert "spec" not in sol
+    assert "specifications" not in sol
+
+
+def test_catalogue_serves_bess_transformer_typed_fields():
+    # A BESS station transformer's typed tier (ticket 04): model, vector
+    # group, cooling, datasheet URL. Placeholder data leaves them unset.
+    resp = client.get("/api/catalogue")
+    assert resp.status_code == 200
+    data = resp.json()
+
+    by_key = {tx["key"]: tx for tx in data["bess_transformers"]}
+    tx = by_key["GENERIC_BESS_TX_2750_LV069"]
+    assert tx["model"] is None
+    assert tx["vector_group"] is None
+    assert tx["cooling"] is None
+    assert tx["datasheet_url"] is None
+
+    # A PV transformer carries the same fields, shared type, also unset.
+    pv = data["transformers"][0]
+    assert pv["model"] is None
+    assert pv["vector_group"] is None
+    assert pv["cooling"] is None
+    assert pv["datasheet_url"] is None
+
+
+def test_catalogue_serves_the_bess_station_transformer_pairing():
+    # The pairing lives on the station transformer (ticket 02): a BESS
+    # solution key -> containers per station, so the durations and solutions
+    # on offer can be narrowed from the transformer side.
+    resp = client.get("/api/catalogue")
+    assert resp.status_code == 200
+    data = resp.json()
+
+    by_key = {tx["key"]: tx for tx in data["bess_transformers"]}
+    assert by_key["GENERIC_BESS_TX_2750_LV069"]["paired_solutions"] == {
+        "sungrow-st6900ux-4h": 1
+    }
+    assert by_key["GENERIC_BESS_TX_4000_LV069"]["paired_solutions"] == {
+        "sungrow-st6900ux-4h": 2
+    }
+    # Deliberately unpaired — exercises bess_lv_mismatch.
+    assert by_key["GENERIC_BESS_TX_1750_LV100"]["paired_solutions"] == {}
+
+    # A PV transformer carries the same field, always empty: it has no
+    # pairing to carry, but TransformerInfo is shared with the BESS catalogue.
+    pv = data["transformers"][0]
+    assert pv["paired_solutions"] == {}
+
+
 def test_stage1_example_plant_matches_direct_engine_computation():
     resp = client.post("/api/stage1", json=EXAMPLE_PAYLOAD)
     assert resp.status_code == 200

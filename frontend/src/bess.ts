@@ -1,38 +1,52 @@
-import type { BessSolutionInfo, Diagram } from './types'
+import type { BessSolutionInfo, Diagram, TransformerInfo } from './types'
 
 /**
- * The discharge durations every BESS solution in this design tabulates, ascending.
+ * The discharge durations on offer across every drawn BESS station, ascending,
+ * or an empty list when the design cannot run at any single duration.
  *
- * Mirrors `powertool.graph.supported_durations`. The duration is ONE
- * design-level choice, so it has to be one that every selected solution sells:
- * a design mixing two products can only run where their tables overlap. An
- * empty result means either no BESS station is drawn, or the selected products
- * share no duration at all — in which case the design has to change product,
- * not duration.
+ * Mirrors `powertool.graph.supported_durations`. Each station transformer is
+ * sold with a fixed handful of solutions (`TransformerInfo.paired_solutions`,
+ * see ticket 02), each declaring its own single discharge duration
+ * (`BessSolutionInfo.duration_h`). The durations a design can run at are the
+ * intersection, across every BESS station drawn, of the durations its OWN
+ * chosen station transformer is paired to sell — CHANGE PRODUCT (or station
+ * transformer), not duration.
  *
  * Rendering this as a select is what lets the container count stay a plain
- * table lookup with no rounding or interpolation rule anywhere: the invalid
- * state is unreachable through the interface. The server checks it too, for
- * payloads that did not come through the interface.
+ * read with no rounding or interpolation rule anywhere: the invalid state is
+ * unreachable through the interface. The server checks it too, for payloads
+ * that did not come through the interface.
  */
-export function supportedDurations(diagram: Diagram, solutions: BessSolutionInfo[]): number[] {
-  const byKey = new Map(solutions.map((s) => [s.key, s]))
-  const selected: BessSolutionInfo[] = []
+export function supportedDurations(
+  diagram: Diagram,
+  transformers: TransformerInfo[],
+  solutions: BessSolutionInfo[],
+): number[] {
+  const txByKey = new Map(transformers.map((t) => [t.key, t]))
+  const solByKey = new Map(solutions.map((s) => [s.key, s]))
+  const sets: Set<number>[] = []
+
   for (const node of diagram.nodes) {
     if (node.kind !== 'station' || node.props.fleet_kind !== 'bess') continue
-    // A station naming a solution the catalogue does not have is already
-    // reported as unknown_bess_solution; skipping it here keeps it from
-    // emptying the list and making every duration look unavailable.
-    const solution = byKey.get(String(node.props.bess_solution))
-    if (solution && !selected.includes(solution)) selected.push(solution)
+    // A station whose transformer is not (yet) a resolvable, paired
+    // catalogue key contributes no restriction — it is not yet a data point
+    // to intersect against, the same "skip, don't force empty" stance always
+    // taken for a station with nothing chosen yet.
+    const tx = txByKey.get(String(node.props.model))
+    const paired = tx?.paired_solutions
+    if (!paired) continue
+    const durations = new Set<number>()
+    for (const solutionKey of Object.keys(paired)) {
+      const sol = solByKey.get(solutionKey)
+      if (sol) durations.add(sol.duration_h)
+    }
+    if (durations.size > 0) sets.push(durations)
   }
-  if (selected.length === 0) return []
+  if (sets.length === 0) return []
 
-  const durations = (s: BessSolutionInfo) => Object.keys(s.containers_by_duration).map(Number)
-  let common = new Set(durations(selected[0]))
-  for (const solution of selected.slice(1)) {
-    const next = new Set(durations(solution))
-    common = new Set([...common].filter((h) => next.has(h)))
+  let common = sets[0]
+  for (const set of sets.slice(1)) {
+    common = new Set([...common].filter((d) => set.has(d)))
   }
   return [...common].sort((a, b) => a - b)
 }

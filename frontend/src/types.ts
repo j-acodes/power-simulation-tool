@@ -94,8 +94,9 @@ export interface RuleSettings {
   /** Per-fleet overrides; each falls back to `max_loading` when unset. */
   max_loading_pv?: number
   max_loading_bess?: number
-  /** Discharge duration [h]. Restricted to the durations every selected BESS
-   *  solution tabulates; unset means the energy gate does not apply. */
+  /** Discharge duration [h]. Restricted to the durations available among the
+   *  solutions paired with every drawn BESS station's own station
+   *  transformer; unset means the energy gate does not apply. */
   discharge_hours?: number
 }
 
@@ -148,9 +149,9 @@ export interface StationNodeResult {
    *  sizing physics is identical either way, so this is a label, not an
    *  input. Absent on results produced before the fleet kind was wired. */
   fleet_kind?: FleetKind
-  /** Containers at the design's discharge duration, read from this station's
-   *  own solution table. Absent for a PV station, and absent when no discharge
-   *  duration is set. */
+  /** Containers per station, defaulted from the pairing on this station's own
+   *  chosen station transformer and overridable (`containers_override`).
+   *  Absent for a PV station, and absent when no discharge duration is set. */
   containers?: number
   circuit: number
   position: number
@@ -271,6 +272,16 @@ export interface TransformerInfo {
   pk_kw: number
   p0_kw: number
   i0_percent: number
+  /** Typed parameters (never computed with) — see CONTEXT.md's "Simulated
+   *  parameter / typed parameter" entry. Unset for every PV transformer and
+   *  for the placeholder BESS station transformers. */
+  model: string | null
+  vector_group: string | null
+  cooling: string | null
+  datasheet_url: string | null
+  /** BESS solution key -> containers per station: the solutions this station
+   *  transformer is sold with. Always empty for a PV transformer. */
+  paired_solutions: Record<string, number>
 }
 
 export interface CableInfo {
@@ -281,12 +292,49 @@ export interface CableInfo {
 
 export interface BessSolutionInfo {
   key: string
-  e_container_kwh: number
-  pcs_p_kw: number
+  display_name: string
+  brand: string
+  series: string
+  model: string
+  e_nominal_kwh: number
+  pcs_s_kva: number
+  pcs_count: number
   pcs_lv_kv: number
-  aux_p_kw: number
-  aux_q_kvar: number
-  containers_by_duration: Record<string, number> // discharge hours -> containers per station
+  duration_h: number
+  /** `null` means the datasheet publishes no auxiliary figure — the engine
+   *  sums it as zero but raises an informational notice; `0` means the
+   *  datasheet states the draw as zero. */
+  aux_p_kw: number | null
+  aux_q_kvar: number | null
+  datasheet_version: string | null
+  preliminary: boolean
+  datasheet_url: string | null
+  /** Typed specification (never computed with) — see CONTEXT.md's "Simulated
+   *  parameter / typed parameter" entry. `null` means the datasheet is
+   *  silent on that field, not that the value is zero. */
+  cell_type: string | null
+  dc_v_min: number | null
+  dc_v_max: number | null
+  ac_v_min: number | null
+  ac_v_max: number | null
+  ac_i_a: number | null
+  pf_at_nominal: number | null
+  q_range_percent: number | null
+  f_nominal_hz: string | null
+  thdi_percent: number | null
+  isolation: string | null
+  width_mm: number | null
+  height_mm: number | null
+  depth_mm: number | null
+  weight_kg: number | null
+  ip_rating: string | null
+  corrosion_class: string | null
+  temp_min_c: number | null
+  temp_max_c: number | null
+  humidity_min_pct: number | null
+  humidity_max_pct: number | null
+  altitude_max_m: number | null
+  cooling: string | null
 }
 
 export interface CatalogueDefaults {

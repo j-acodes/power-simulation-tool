@@ -275,6 +275,9 @@ export function ProjectsPage() {
       <header className="app-header">
         <h1>Projects</h1>
         <div className="app-header-actions">
+          <Link to="/catalogue" className="header-link">
+            Catalogue
+          </Link>
           <Link to="/scratch" className="header-link">
             Scratchpad
           </Link>

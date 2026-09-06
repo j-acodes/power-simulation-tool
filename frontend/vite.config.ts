@@ -1,7 +1,8 @@
 import { spawn } from 'node:child_process'
 import { fileURLToPath } from 'node:url'
 import react from '@vitejs/plugin-react'
-import { defineConfig, type Plugin } from 'vite'
+import type { Plugin } from 'vite'
+import { defineConfig } from 'vitest/config'
 
 const repoRoot = fileURLToPath(new URL('..', import.meta.url))
 
@@ -22,7 +23,14 @@ function backend(): Plugin {
         const startedAt = Date.now()
         proc = spawn(
           `${repoRoot}.venv/bin/uvicorn`,
-          ['backend.main:app', '--port', '8000', '--reload', '--reload-dir', 'backend', '--reload-dir', 'powertool'],
+          // data/ is watched too, with *.yaml included alongside uvicorn's
+          // default *.py: the component catalogue is YAML loaded once at
+          // import, so without this a catalogue edit is invisible until a
+          // manual restart -- and the app quietly serves a stale catalogue
+          // while every test passes against the new one.
+          ['backend.main:app', '--port', '8000', '--reload',
+           '--reload-dir', 'backend', '--reload-dir', 'powertool', '--reload-dir', 'data',
+           '--reload-include', '*.py', '--reload-include', '*.yaml'],
           { cwd: repoRoot, stdio: 'inherit' },
         )
         proc.on('error', (e) => server.config.logger.error(`backend failed to start: ${e.message}`))
@@ -59,5 +67,12 @@ export default defineConfig({
     proxy: {
       '/api': 'http://localhost:8000',
     },
+  },
+  test: {
+    environment: 'jsdom',
+    // React Testing Library's auto-cleanup-after-each-test hooks itself onto
+    // a global `afterEach` — without this it silently no-ops and DOM nodes
+    // leak between tests in the same file.
+    globals: true,
   },
 })

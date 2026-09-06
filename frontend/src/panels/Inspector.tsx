@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import { fmt, kvGroupKey, pct, powerFactor } from '../format'
 import { CollapsiblePanel } from './CollapsiblePanel'
 import { LABEL } from '../labels'
@@ -5,6 +6,10 @@ import { useCatalogue } from '../hooks/useCatalogue'
 import { useStore } from '../store'
 import { takenBusbarSlots } from '../canvas/connect'
 import { permitsFleetKind } from '../technology'
+import { Row, SectionTitle } from '../components/DetailRows'
+import { ModalShell } from '../components/Modal'
+import { SpecView } from '../components/SpecView'
+import type { SpecViewTarget } from '../components/SpecView'
 import type { DiagramEdge, DiagramNode, EdgeResult, NodeResult, TransformerInfo } from '../types'
 
 function NumberField({
@@ -24,21 +29,6 @@ function NumberField({
       <input type="number" step={step} value={Number.isFinite(value) ? value : ''} onChange={(e) => onChange(e.target.valueAsNumber)} />
     </label>
   )
-}
-
-/** Read-only "label: value" row, used for the catalogue preview and every
- * Results section. */
-function Row({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="kv-row">
-      <span className="k">{label}</span>
-      <span className="v">{value}</span>
-    </div>
-  )
-}
-
-function SectionTitle({ children }: { children: string }) {
-  return <h3 className="inspector-section-title">{children}</h3>
 }
 
 function CustomTransformerFields({
@@ -64,11 +54,20 @@ function CustomTransformerFields({
 }
 
 /** Read-only preview of a catalogue transformer, shown in the Inspector when
- * a palette item is clicked (not dragged) — see Palette.tsx. */
+ * a palette item is clicked (not dragged) — see Palette.tsx. Shared by the PV
+ * and BESS station transformer catalogues (ticket 06): both are
+ * `TransformerInfo`, and this card already renders exactly the rows either
+ * one needs.
+ *
+ * Heads with `display_name`, not the raw catalogue key — the key is what a
+ * saved design payload stores and an engineer debugging one needs to see,
+ * so it stays visible as a row rather than disappearing (ticket 06 decision
+ * 3: raw keys must stop leaking into the headline). */
 function TransformerPreview({ tx }: { tx: TransformerInfo }) {
   return (
     <div>
-      <h3>{tx.key}</h3>
+      <h3>{tx.display_name}</h3>
+      <Row label={LABEL.catalogueKey} value={tx.key} />
       <Row label={LABEL.brand} value={tx.brand ?? '—'} />
       <Row label={LABEL.sRatedKva} value={fmt(tx.s_rated_kva)} />
       <Row label={LABEL.ukPercent} value={fmt(tx.uk_percent, 2)} />
@@ -90,6 +89,34 @@ function NodeProperties({ node }: { node: DiagramNode }) {
   const technology = useStore((s) => s.designMeta?.technology)
   const patch = (p: Record<string, unknown>) => updateNodeProps(node.id, p)
   const props = node.props
+  // Ticket 06: the expand control opening a placed station's specification
+  // full-screen. Local to this component so closing it (Escape) never
+  // touches selection/diagram state — the canvas underneath is untouched.
+  const [specTarget, setSpecTarget] = useState<SpecViewTarget | null>(null)
+
+  // Station transformer -> duration -> solution, each narrowing the next
+  // (ticket 02): a custom transformer corresponds to no catalogue entry, so
+  // it carries no pairing to narrow the solution choice with.
+  const bessTransformer = props.mode === 'custom'
+    ? undefined
+    : catalogue?.bess_transformers.find((tx) => tx.key === props.model)
+  const bessPaired = bessTransformer?.paired_solutions ?? {}
+  const dischargeHours = diagram.settings.rules.discharge_hours
+  const bessSolutionOptions = props.mode === 'custom'
+    ? catalogue?.bess_solutions ?? []
+    : (catalogue?.bess_solutions ?? []).filter(
+        (sol) => sol.key in bessPaired
+          && (dischargeHours === undefined || sol.duration_h === dischargeHours),
+      )
+  const pairedContainers = bessPaired[String(props.bess_solution)]
+  // The PV counterpart to `bessTransformer` above — same "custom means no
+  // catalogue entry" guard. Only meaningful for a PV station; harmless
+  // (undefined) for every other node kind.
+  const pvTransformer = props.mode === 'custom'
+    ? undefined
+    : catalogue?.transformers.find((tx) => tx.key === props.model)
+  const stationTransformer = props.fleet_kind === 'bess' ? bessTransformer : pvTransformer
+  const selectedBessSolution = catalogue?.bess_solutions.find((sol) => sol.key === props.bess_solution)
 
   return (
     <div>
@@ -125,7 +152,7 @@ function NodeProperties({ node }: { node: DiagramNode }) {
                 <option value="">— select —</option>
                 {catalogue?.transformers.map((tx) => (
                   <option key={tx.key} value={tx.key}>
-                    {tx.key}
+                    {tx.display_name}
                   </option>
                 ))}
               </select>
@@ -158,25 +185,54 @@ function NodeProperties({ node }: { node: DiagramNode }) {
                 <option value="">— select —</option>
                 {(props.fleet_kind === 'bess' ? catalogue?.bess_transformers : catalogue?.transformers)?.map((tx) => (
                   <option key={tx.key} value={tx.key}>
-                    {tx.key}
+                    {tx.display_name}
                   </option>
                 ))}
               </select>
             </label>
           )}
+          {/* Ticket 06: hidden — not disabled — for a custom station. A
+              custom transformer has no catalogue entry and therefore no
+              specification to open. */}
+          {stationTransformer && (
+            <button type="button" onClick={() => setSpecTarget({ kind: 'bess_transformer', item: stationTransformer })}>
+              Station transformer specification
+            </button>
+          )}
           {props.mode === 'custom' && <CustomTransformerFields props={props} onChange={patch} />}
           {props.fleet_kind === 'bess' && (
-            <label className="field">
-              <span>BESS solution</span>
-              <select value={String(props.bess_solution ?? '')} onChange={(e) => patch({ bess_solution: e.target.value })}>
-                <option value="">— select —</option>
-                {catalogue?.bess_solutions.map((sol) => (
-                  <option key={sol.key} value={sol.key}>
-                    {sol.key}
-                  </option>
-                ))}
-              </select>
-            </label>
+            <>
+              <label className="field">
+                <span>BESS solution</span>
+                <select value={String(props.bess_solution ?? '')} onChange={(e) => patch({ bess_solution: e.target.value })}>
+                  <option value="">— select —</option>
+                  {bessSolutionOptions.map((sol) => (
+                    <option key={sol.key} value={sol.key}>
+                      {sol.display_name}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <NumberField
+                label="Containers"
+                value={Number(props.containers_override ?? pairedContainers ?? 0)}
+                onChange={(v) => patch({ containers_override: v })}
+              />
+              {props.containers_override === undefined && (
+                <p className="panel-hint">
+                  {pairedContainers !== undefined
+                    ? `Defaulted from the pairing (${pairedContainers}). Enter a value to override.`
+                    : 'No pairing default for this transformer/solution — enter a container count.'}
+                </p>
+              )}
+              {/* Ticket 06: same "hidden, not disabled" rule — no control for
+                  the half that isn't chosen yet. */}
+              {selectedBessSolution && (
+                <button type="button" onClick={() => setSpecTarget({ kind: 'bess_solution', item: selectedBessSolution })}>
+                  BESS solution specification
+                </button>
+              )}
+            </>
           )}
         </>
       )}
@@ -206,6 +262,15 @@ function NodeProperties({ node }: { node: DiagramNode }) {
       <button type="button" className="danger" onClick={() => removeNode(node.id)}>
         Delete block
       </button>
+      {specTarget && (
+        <ModalShell size="full" onEscape={() => setSpecTarget(null)}>
+          <SpecView
+            target={specTarget}
+            solutions={catalogue?.bess_solutions ?? []}
+            transformers={catalogue?.bess_transformers ?? []}
+          />
+        </ModalShell>
+      )}
     </div>
   )
 }
@@ -353,6 +418,7 @@ export function Inspector() {
   const diagram = useStore((s) => s.diagram)
   const results = useStore((s) => s.results)
   const catalogue = useCatalogue()
+  const [specViewOpen, setSpecViewOpen] = useState(false)
 
   if (!selection) {
     return (
@@ -364,10 +430,41 @@ export function Inspector() {
 
   if (selection.type === 'palette') {
     const tx = catalogue?.transformers.find((t) => t.key === selection.key)
+    // A BESS solution or BESS station transformer selected in the palette
+    // gets a control to open its full specification full-screen (ticket 04).
+    // Ticket 06: a BESS station transformer now gets the same compact
+    // TransformerPreview card the PV branch already had — it was previously
+    // falling through to "Loading…" because this lookup only checked the PV
+    // catalogue.
+    const bessTx = catalogue?.bess_transformers.find((t) => t.key === selection.key)
+    const bessSolution = catalogue?.bess_solutions.find((s) => s.key === selection.key)
+    const previewTx = tx ?? bessTx
+    const specTarget = bessTx
+      ? ({ kind: 'bess_transformer', item: bessTx } as const)
+      : bessSolution
+        ? ({ kind: 'bess_solution', item: bessSolution } as const)
+        : null
+
     return (
       <CollapsiblePanel title="Inspector" side="right" className="inspector">
         <SectionTitle>Catalogue preview</SectionTitle>
-        {tx ? <TransformerPreview tx={tx} /> : <p className="panel-hint">Loading…</p>}
+        {previewTx && <TransformerPreview tx={previewTx} />}
+        {bessSolution && <h3>{bessSolution.display_name}</h3>}
+        {specTarget && (
+          <button type="button" onClick={() => setSpecViewOpen(true)}>
+            View full specification
+          </button>
+        )}
+        {!previewTx && !bessSolution && <p className="panel-hint">Loading…</p>}
+        {specViewOpen && specTarget && (
+          <ModalShell size="full" onEscape={() => setSpecViewOpen(false)}>
+            <SpecView
+              target={specTarget}
+              solutions={catalogue?.bess_solutions ?? []}
+              transformers={catalogue?.bess_transformers ?? []}
+            />
+          </ModalShell>
+        )}
       </CollapsiblePanel>
     )
   }
@@ -380,7 +477,7 @@ export function Inspector() {
           <>
             <p className="panel-hint">{node.kind}</p>
             <SectionTitle>Properties</SectionTitle>
-            <NodeProperties node={node} />
+            <NodeProperties key={node.id} node={node} />
             <SectionTitle>Results</SectionTitle>
             <NodeResults result={results?.nodes[node.id]} />
           </>

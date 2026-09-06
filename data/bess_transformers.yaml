@@ -13,11 +13,20 @@
 #   p0_kw      = 0.1% of the rating
 #   pk_kw      = 1.0% of the rating
 #   i0_percent = 0.0
-# lv_kv is chosen to match the PCS voltage of one of the placeholder BESS
-# solutions; hv_kv is left null (MV section voltage is a per-study choice).
+# lv_kv is chosen to match the PCS voltage of a paired BESS solution (see
+# data/bess.yaml); hv_kv is left null (MV section voltage is a per-study
+# choice).
+#
+# paired_solutions lists the BESS solutions (data/bess.yaml) this station
+# transformer is actually sold with, each with the number of containers that
+# station transformer serves. This is the pairing the sizing engine reads the
+# container count from — see powertool.graph.supported_durations and
+# powertool.database.load_bess_transformers. A station transformer with no
+# paired_solutions (or omitting the key) is not sold with anything; a station
+# naming it is rejected with unpaired_bess_solution.
 #
 bess_transformers:
-  GENERIC_BESS_TX_2750_LV069:   # sized for GENERIC_BESS_5MWH_LV069 (2500 kW PCS)
+  GENERIC_BESS_TX_2750_LV069:   # sized for sungrow-st6900ux-4h, 1 container (1800 kVA PCS)
     s_rated_kva: 2750
     uk_percent: 8.0
     pk_kw: 27.5
@@ -26,8 +35,22 @@ bess_transformers:
     hv_kv: null
     lv_kv: 0.69
     brand: Generic
+    paired_solutions:
+      sungrow-st6900ux-4h: 1
 
-  GENERIC_BESS_TX_1750_LV100:   # sized for GENERIC_BESS_3MWH_LV100 (1725 kW PCS)
+  GENERIC_BESS_TX_4000_LV069:   # sized for sungrow-st6900ux-4h, 2 containers (3600 kVA PCS)
+    s_rated_kva: 4000
+    uk_percent: 8.0
+    pk_kw: 40.0
+    p0_kw: 4.0
+    i0_percent: 0.0
+    hv_kv: null
+    lv_kv: 0.69
+    brand: Generic
+    paired_solutions:
+      sungrow-st6900ux-4h: 2
+
+  GENERIC_BESS_TX_1750_LV100:   # no paired solution — exercises bess_lv_mismatch
     s_rated_kva: 1750
     uk_percent: 8.0
     pk_kw: 17.5

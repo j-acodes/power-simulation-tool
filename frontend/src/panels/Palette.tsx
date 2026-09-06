@@ -2,10 +2,11 @@ import { useMemo } from 'react'
 import { CollapsiblePanel } from './CollapsiblePanel'
 import { useCatalogue } from '../hooks/useCatalogue'
 import { useStore } from '../store'
-import type { DiagramNode, NodeKind, TransformerInfo } from '../types'
+import type { DiagramNode, NodeKind } from '../types'
 import { takenBusbarSlots } from '../canvas/connect'
 import type { PaletteDropPayload } from '../canvas/Editor'
 import { permitsFleetKind } from '../technology'
+import { groupByBrand } from '../catalogueGrouping'
 
 const BESS_CUSTOM_PROPS = {
   mode: 'custom',
@@ -29,36 +30,28 @@ function Item({
   props,
   onClick,
   selected,
+  draggable = true,
 }: {
   label: string
-  kind: NodeKind
-  props: DiagramNode['props']
+  kind?: NodeKind
+  props?: DiagramNode['props']
   onClick?: () => void
   selected?: boolean
+  /** A BESS solution is selectable but never draggable (ticket 06): dragging
+   *  one onto the canvas would have to invent a station, and a solution is
+   *  chosen for a station that already exists. */
+  draggable?: boolean
 }) {
   return (
     <div
       className={`palette-item${selected ? ' selected' : ''}`}
-      draggable
-      onDragStart={(e) => onDragStart(e, { kind, props })}
+      draggable={draggable}
+      onDragStart={draggable && kind && props ? (e) => onDragStart(e, { kind, props }) : undefined}
       onClick={onClick}
     >
       {label}
     </div>
   )
-}
-
-/** Groups the transformer catalogue by brand, preserving first-seen order —
- * with 11 models across 3 brands, one collapsible dropdown per brand reads
- * better than one long flat list or one single "catalogue" dropdown. */
-function groupByBrand(transformers: TransformerInfo[]): Array<[string, TransformerInfo[]]> {
-  const groups = new Map<string, TransformerInfo[]>()
-  for (const tx of transformers) {
-    const brand = tx.brand ?? 'Other'
-    if (!groups.has(brand)) groups.set(brand, [])
-    groups.get(brand)!.push(tx)
-  }
-  return [...groups.entries()]
 }
 
 export function Palette() {
@@ -104,7 +97,7 @@ export function Palette() {
                 {transformers.map((tx) => (
                   <Item
                     key={tx.key}
-                    label={tx.key}
+                    label={tx.display_name}
                     kind="station"
                     props={{ mode: 'catalogue', model: tx.key }}
                     selected={selection?.type === 'palette' && selection.key === tx.key}
@@ -137,7 +130,7 @@ export function Palette() {
                 {transformers.map((tx) => (
                   <Item
                     key={tx.key}
-                    label={tx.key}
+                    label={tx.display_name}
                     kind="station"
                     props={{ mode: 'catalogue', model: tx.key, fleet_kind: 'bess' }}
                     selected={selection?.type === 'palette' && selection.key === tx.key}
@@ -153,6 +146,23 @@ export function Palette() {
         <div className="palette-section">
           <h3>BESS stations — custom</h3>
           <Item label="Custom BESS station" kind="station" props={BESS_CUSTOM_PROPS} />
+        </div>
+      )}
+      {showsBess && (
+        <div className="palette-section">
+          <details className="palette-group" open>
+            <summary>BESS solutions — catalogue</summary>
+            {!catalogue && <p className="palette-hint">Loading catalogue…</p>}
+            {catalogue?.bess_solutions.map((sol) => (
+              <Item
+                key={sol.key}
+                label={sol.display_name}
+                draggable={false}
+                selected={selection?.type === 'palette' && selection.key === sol.key}
+                onClick={() => setSelection({ type: 'palette', key: sol.key })}
+              />
+            ))}
+          </details>
         </div>
       )}
     </CollapsiblePanel>

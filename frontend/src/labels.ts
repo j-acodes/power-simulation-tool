@@ -5,6 +5,7 @@
  */
 export const LABEL = {
   brand: 'Brand',
+  catalogueKey: 'Catalogue key',
   sRatedKva: 'Rated power S (kVA)',
   ukPercent: 'Short-circuit voltage uk (%)',
   pkKw: 'Load losses Pk (kW)',

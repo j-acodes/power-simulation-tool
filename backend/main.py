@@ -82,7 +82,7 @@ def get_session() -> Iterator[Session]:
         session.close()
 
 
-def _transformer_info(key: str, tx) -> TransformerInfo:
+def _transformer_info(key: str, tx, paired_solutions: dict[str, int] | None = None) -> TransformerInfo:
     return TransformerInfo(
         key=key,
         display_name=tx.display_name,
@@ -94,6 +94,11 @@ def _transformer_info(key: str, tx) -> TransformerInfo:
         pk_kw=tx.pk_kw,
         p0_kw=tx.p0_kw,
         i0_percent=tx.i0_percent,
+        model=tx.model,
+        vector_group=tx.vector_group,
+        cooling=tx.cooling,
+        datasheet_url=tx.datasheet_url,
+        paired_solutions=paired_solutions or {},
     )
 
 
@@ -101,17 +106,49 @@ def _transformer_info(key: str, tx) -> TransformerInfo:
 def get_catalogue() -> CatalogueResponse:
     transformers = [_transformer_info(key, tx) for key, tx in db.transformers.items()]
     bess_transformers = [
-        _transformer_info(key, tx) for key, tx in db.bess_transformers.items()
+        _transformer_info(key, tx, db.bess_pairings.get(key))
+        for key, tx in db.bess_transformers.items()
     ]
     bess_solutions = [
         BessSolutionInfo(
             key=key,
-            e_container_kwh=sol.e_container_kwh,
-            pcs_p_kw=sol.pcs_p_kw,
+            display_name=sol.display_name,
+            brand=sol.brand,
+            series=sol.series,
+            model=sol.model,
+            e_nominal_kwh=sol.e_nominal_kwh,
+            pcs_s_kva=sol.pcs_s_kva,
+            pcs_count=sol.pcs_count,
             pcs_lv_kv=sol.pcs_lv_kv,
+            duration_h=sol.duration_h,
             aux_p_kw=sol.aux_p_kw,
             aux_q_kvar=sol.aux_q_kvar,
-            containers_by_duration=sol.containers_by_duration,
+            datasheet_version=sol.datasheet_version,
+            preliminary=sol.preliminary,
+            datasheet_url=sol.datasheet_url,
+            cell_type=sol.cell_type,
+            dc_v_min=sol.dc_v_min,
+            dc_v_max=sol.dc_v_max,
+            ac_v_min=sol.ac_v_min,
+            ac_v_max=sol.ac_v_max,
+            ac_i_a=sol.ac_i_a,
+            pf_at_nominal=sol.pf_at_nominal,
+            q_range_percent=sol.q_range_percent,
+            f_nominal_hz=sol.f_nominal_hz,
+            thdi_percent=sol.thdi_percent,
+            isolation=sol.isolation,
+            width_mm=sol.width_mm,
+            height_mm=sol.height_mm,
+            depth_mm=sol.depth_mm,
+            weight_kg=sol.weight_kg,
+            ip_rating=sol.ip_rating,
+            corrosion_class=sol.corrosion_class,
+            temp_min_c=sol.temp_min_c,
+            temp_max_c=sol.temp_max_c,
+            humidity_min_pct=sol.humidity_min_pct,
+            humidity_max_pct=sol.humidity_max_pct,
+            altitude_max_m=sol.altitude_max_m,
+            cooling=sol.cooling,
         )
         for key, sol in db.bess_solutions.items()
     ]

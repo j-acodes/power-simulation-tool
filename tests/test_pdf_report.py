@@ -91,11 +91,10 @@ def test_a_bess_report_says_pcs_and_a_pv_report_says_inverter():
 # --- what a BESS design needs to be assessed without the tool open -----------
 
 def test_the_report_carries_containers_and_the_energy_outcome():
-    text = _story_text(_bess_only(duration=4.0, p_target_mw=3.0))
+    # sungrow-st6900ux-4h: 1 container at its declared 4 h duration, 6904 kWh.
+    text = _story_text(_bess_only(duration=4.0, p_target_mw=1.0))
     assert "Containers" in text
-    assert "8" in text                       # 8 containers at 4 h, from the table
-    assert "40.0" in text                    # 40 MWh delivered
-    assert "12.0" in text                    # 12 MWh required
+    assert "6.9 MWh (needs 4.0 MWh) — OK" in text
     assert "Delivered energy" in text
 
 

@@ -70,3 +70,27 @@ delivered figures — the ones that can actually move.
 - `_rule_opt` split out so the per-fleet lookups stop re-deriving the settings dict.
 - One double flattening of `station_ids` removed; the settings panel's new block now
   matches the file's own conditional-render pattern rather than wrapping an IIFE.
+
+## Superseded (2026-09-06, `.scratch/component-datasheets/` tickets 01 and 02)
+
+Two of the behaviours this ticket delivered no longer hold, and this note exists so the
+ticket stops claiming them.
+
+**Container count no longer comes from a table on the solution, and is no longer fixed.**
+`BessSolution.containers_by_duration` was deleted. A count now comes from the **pairing**
+carried by the station's own station transformer — which solutions it is sold with, and how
+many containers it serves for each — and it can be overridden per station, for one that is
+only partially populated. The principle survives: the count is still read from supplier data,
+never interpolated, derived or rounded. Only its source moved, and the override is now the
+single place a count is a judgement rather than a figure.
+
+**Discharge duration is no longer restricted by the selected solution.** Each solution now
+declares exactly one duration, taken from its model number (`ST6900UX-4H` sells 4 h). The
+durations a design may run at are those its drawn stations' station transformers are paired
+to sell. The guarantee this ticket cared about is unchanged — the invalid state stays
+unreachable through the interface and is still rejected server-side for a hand-edited payload
+— but `supported_durations` is now transformer-driven rather than solution-driven.
+
+What prompted it: the first real datasheet. Sungrow's PowerTitan 3.0 is transformerless, so a
+container is not a complete station, and nothing recorded which station transformer it is
+actually sold behind. See `.scratch/component-datasheets/spec.md`.

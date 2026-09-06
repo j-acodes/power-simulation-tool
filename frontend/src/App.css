@@ -189,6 +189,42 @@
   max-width: calc(100vw - 3rem);
 }
 
+/* Near-viewport, for the full-screen specification view (SpecView). Scrolls
+   its own content rather than the page, so the overlay itself never grows
+   past the viewport. */
+.modal.modal-full {
+  width: calc(100vw - 3rem);
+  height: calc(100vh - 3rem);
+  max-width: calc(100vw - 3rem);
+  overflow-y: auto;
+}
+
+/* SpecView: the read-only full-screen specification (ticket 04). The
+   "simulated" block is marked visually distinct — it's the entire point of
+   the view (what the engine reads vs. the rest of the datasheet). */
+.spec-view-header h2 {
+  margin-bottom: 0.25rem;
+}
+
+.spec-view-preliminary {
+  display: inline-block;
+  margin-top: 0.25rem;
+  padding: 0.15rem 0.5rem;
+  border-radius: 4px;
+  font-size: 0.85em;
+  color: var(--accent);
+  background: var(--accent-bg);
+  border: 1px solid var(--accent-border);
+}
+
+.spec-view-simulated {
+  padding: 0.75rem 1rem;
+  margin-bottom: 1rem;
+  border: 1px solid var(--accent-border);
+  border-radius: 8px;
+  background: var(--accent-bg);
+}
+
 .results-tables-header {
   display: flex;
   align-items: center;
@@ -367,6 +403,61 @@
   flex: 1;
   display: flex;
   min-height: 0;
+}
+
+/* Catalogue page (ticket 05): one column of catalogue sections, no side
+   panels — reuses .app-body's flex but stacks instead of splitting left/right. */
+.catalogue-body {
+  flex-direction: column;
+  padding: 1rem;
+  overflow-y: auto;
+  gap: 1.5rem;
+  max-width: 900px;
+  margin: 0 auto;
+  width: 100%;
+}
+
+.catalogue-body h2 {
+  font-size: 16px;
+  margin: 0 0 0.5rem;
+}
+
+.catalogue-row {
+  display: block;
+  width: 100%;
+  box-sizing: border-box;
+  text-align: left;
+  padding: 0.5rem 0.75rem;
+  margin-bottom: 0.35rem;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--code-bg);
+  font: inherit;
+  color: var(--text-h);
+}
+
+/* No datasheet, no specification to open — deliberately not shaped like a
+   button (no pointer cursor, no hover state) so the missing affordance reads
+   as absent rather than broken. */
+.catalogue-row-static {
+  cursor: default;
+}
+
+.catalogue-row-clickable {
+  cursor: pointer;
+}
+
+.catalogue-row-clickable:hover {
+  border-color: var(--accent);
+}
+
+.catalogue-row-header {
+  font-weight: 500;
+  margin-bottom: 0.25rem;
+}
+
+.catalogue-brand {
+  font-weight: 600;
 }
 
 .panel {

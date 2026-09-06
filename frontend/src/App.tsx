@@ -1,5 +1,6 @@
 import { Route, Routes } from 'react-router-dom'
 import { DisplayNameGate } from './components/DisplayName'
+import { CataloguePage } from './pages/CataloguePage'
 import { DesignEditorPage } from './pages/DesignEditorPage'
 import { ProjectsPage } from './pages/ProjectsPage'
 import { ScratchPage } from './pages/ScratchPage'
@@ -11,6 +12,7 @@ function App() {
       <Routes>
         <Route path="/" element={<ProjectsPage />} />
         <Route path="/design/:id" element={<DesignEditorPage />} />
+        <Route path="/catalogue" element={<CataloguePage />} />
         <Route path="/scratch" element={<ScratchPage />} />
         <Route path="/stage1" element={<Stage1Page />} />
       </Routes>
