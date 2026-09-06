@@ -19,6 +19,7 @@ import math
 
 from powertool import ComponentDatabase, arrange_plant, size_generation
 from powertool.architecture import PlantLayout
+from powertool.components import DEFAULT_AMBIENT_C
 from powertool.sizing import SizingResult
 
 from .solve import build_chain
@@ -97,7 +98,7 @@ def seed_diagram(params: dict, db: ComponentDatabase) -> dict:
     v_export_kv = v_hv_kv if interconnection == "HV" else v_mv_kv
 
     station = db.transformer(params["station_model"])
-    rated_kva = station.s_rated_kva
+    rated_kva = station.rating_at(DEFAULT_AMBIENT_C)
     max_loading = params["max_loading"]
     p_poc_kw = params["p_poc_mw"] * 1000.0
     pf_target = params["pf_target"]

@@ -23,7 +23,7 @@ function solution(overrides: Partial<BessSolutionInfo> = {}): BessSolutionInfo {
 
 function transformer(overrides: Partial<TransformerInfo> = {}): TransformerInfo {
   return {
-    key: 'GENERIC_BESS_TX_2750_LV069', display_name: '2750 kVA - Generic', s_rated_kva: 2750,
+    key: 'GENERIC_BESS_TX_2750_LV069', display_name: '2750 kVA - Generic', s_rated_kva_at_40c: 2750,
     hv_kv: null, lv_kv: 0.69, brand: 'Generic', uk_percent: 8, pk_kw: 27.5, p0_kw: 2.75,
     i0_percent: 0, model: null, vector_group: null, cooling: null, datasheet_url: null,
     paired_solutions: {},

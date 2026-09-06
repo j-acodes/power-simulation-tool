@@ -108,7 +108,7 @@ function SimulatedBessTransformer({ item }: { item: TransformerInfo }) {
   return (
     <>
       {item.brand && <Row label="Brand" value={item.brand} />}
-      <Row label="Rated power" value={`${fmt(item.s_rated_kva)} kVA`} />
+      <Row label="Rated power" value={`${fmt(item.s_rated_kva_at_40c)} kVA`} />
       <Row label="uk%" value={fmt(item.uk_percent, 2)} />
       <Row label="Pk" value={`${fmt(item.pk_kw, 2)} kW`} />
       <Row label="P0" value={`${fmt(item.p0_kw, 2)} kW`} />

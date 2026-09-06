@@ -72,6 +72,12 @@ class Cable:
         return v_kv * v_kv * b_us / 1000.0
 
 
+# The ambient the engine sizes to today. A single named constant so a future
+# design-level ambient setting has one place to thread through — see ADR-0004
+# and the "AC power at ambient" entry in CONTEXT.md. Not user-configurable yet.
+DEFAULT_AMBIENT_C = 40.0
+
+
 @dataclass
 class Transformer:
     """A two-winding transformer, defined by its nameplate / factory-test data.
@@ -85,11 +91,12 @@ class Transformer:
     """
 
     name: str
-    s_rated_kva: float
+    s_rated_kva_at_40c: float
     uk_percent: float
     pk_kw: float
     p0_kw: float = 0.0
     i0_percent: float = 0.0
+    s_rated_kva_at_30c: float | None = None  # None: not published — see ADR-0004
     hv_kv: float | None = None
     lv_kv: float | None = None
     brand: str | None = None  # manufacturer, for catalogue display
@@ -98,18 +105,78 @@ class Transformer:
     cooling: str | None = None  # typed parameter — never computed with
     datasheet_url: str | None = None  # typed parameter — never computed with
 
+    # --- Typed parameters ------------------------------------------------
+    # Structured, stored, displayed — never read by the sizing engine. See
+    # CONTEXT.md's "Simulated parameter / typed parameter" entry. All optional:
+    # ``None`` means the datasheet is silent, not zero. String-valued fields are
+    # transcribed verbatim from the datasheet row — not normalised or parsed.
+    mv_kv_min: float | None = None
+    mv_kv_max: float | None = None
+    lv_winding_count: int = 1
+    insulation_level: str | None = None
+    f_nominal: str | None = None                # string: some products publish two
+    uk_tolerance_pct: float | None = None
+    winding_material_mv: str | None = None
+    winding_material_lv: str | None = None
+    ip_rating_transformer: str | None = None
+    ip_rating_enclosure: str | None = None
+    rmu_kv_min: float | None = None
+    rmu_kv_max: float | None = None
+    rmu_rated_current_a: float | None = None
+    rmu_units: str | None = None
+    rmu_relay_protection: str | None = None
+    rmu_short_time_withstand: str | None = None
+    cabinet_protection: str | None = None
+    surge_protection: str | None = None
+    ac_insulation_detection: str | None = None
+    cabinet_temp_control: str | None = None
+    ups: str | None = None
+    width_mm: float | None = None
+    height_mm: float | None = None
+    depth_mm: float | None = None
+    weight_kg: float | None = None
+    cable_entry: str | None = None
+    corrosion_class: str | None = None
+    temp_min_c: float | None = None
+    temp_max_c: float | None = None
+    humidity_min_pct: float | None = None
+    humidity_max_pct: float | None = None
+    altitude_max_m: float | None = None
+    communication: str | None = None
+    standards: str | None = None
+    datasheet_version: str | None = None
+    preliminary: bool = False
+
+    def rating_at(self, ambient_c: float) -> float:
+        """The published rating [kVA] at ``ambient_c`` — lookup only, never
+        interpolated. See CONTEXT.md's "AC power at ambient" and ADR-0004.
+
+        An exact published ambient wins. Otherwise the nearest published
+        ambient AT OR ABOVE the requested one — a hotter rating is a lower
+        one, so this understates rather than invents. Otherwise (nothing
+        published at or above) the highest published ambient.
+        """
+        published: dict[float, float] = {40.0: self.s_rated_kva_at_40c}
+        if self.s_rated_kva_at_30c is not None:
+            published[30.0] = self.s_rated_kva_at_30c
+        if ambient_c in published:
+            return published[ambient_c]
+        at_or_above = [a for a in published if a >= ambient_c]
+        chosen = min(at_or_above) if at_or_above else max(published)
+        return published[chosen]
+
     @property
     def display_name(self) -> str:
         """Catalogue label: ``"POWER kVA - BRAND"`` when a brand is set, else the
         raw name (e.g. the generic placeholders)."""
         if self.brand:
-            return f"{self.s_rated_kva:g} kVA - {self.brand}"
+            return f"{self.s_rated_kva_at_40c:g} kVA - {self.brand}"
         return self.name
 
     @property
     def ur_percent(self) -> float:
         """Resistive part of the short-circuit voltage [%], from the load loss."""
-        return 100.0 * self.pk_kw / self.s_rated_kva
+        return 100.0 * self.pk_kw / self.rating_at(DEFAULT_AMBIENT_C)
 
     @property
     def ux_percent(self) -> float:
@@ -129,12 +196,13 @@ class Transformer:
         v_kv is accepted for a uniform interface with Cable but is not needed:
         this model is expressed in per-unit of the transformer rating.
         """
-        load_ratio_sq = (s_kva / self.s_rated_kva) ** 2
+        s_rated = self.rating_at(DEFAULT_AMBIENT_C)
+        load_ratio_sq = (s_kva / s_rated) ** 2
         p_cu = self.pk_kw * load_ratio_sq
         dp_kw = p_cu + self.p0_kw
 
-        q_x = (self.ux_percent / 100.0) * (s_kva ** 2) / self.s_rated_kva
-        q_mag = (self.i0_percent / 100.0) * self.s_rated_kva
+        q_x = (self.ux_percent / 100.0) * (s_kva ** 2) / s_rated
+        q_mag = (self.i0_percent / 100.0) * s_rated
         dq_kvar = q_x + q_mag
         return dp_kw, dq_kvar
 
@@ -167,7 +235,7 @@ class TransformerGroup:
     @property
     def s_rated_total_kva(self) -> float:
         """Fleet rating: the sum of every unit's rated power."""
-        return sum(tx.s_rated_kva * count for tx, count in self.units)
+        return sum(tx.rating_at(DEFAULT_AMBIENT_C) * count for tx, count in self.units)
 
     @property
     def n_units(self) -> int:
@@ -180,10 +248,11 @@ class TransformerGroup:
         dp_kw = 0.0
         dq_kvar = 0.0
         for tx, count in self.units:
+            s_rated = tx.rating_at(DEFAULT_AMBIENT_C)
             dp_kw += count * (tx.pk_kw * r_sq + tx.p0_kw)
             dq_kvar += count * (
-                (tx.ux_percent / 100.0) * r_sq * tx.s_rated_kva
-                + (tx.i0_percent / 100.0) * tx.s_rated_kva
+                (tx.ux_percent / 100.0) * r_sq * s_rated
+                + (tx.i0_percent / 100.0) * s_rated
             )
         return dp_kw, dq_kvar
 

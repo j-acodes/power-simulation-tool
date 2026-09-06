@@ -264,7 +264,7 @@ export interface SolveResponse {
 export interface TransformerInfo {
   key: string
   display_name: string
-  s_rated_kva: number
+  s_rated_kva_at_40c: number
   hv_kv: number | null
   lv_kv: number | null
   brand: string | null

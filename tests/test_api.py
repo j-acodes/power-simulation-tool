@@ -43,7 +43,7 @@ def test_catalogue_returns_transformers_cables_and_defaults():
     for tx in data["transformers"]:
         assert tx["key"]
         assert tx["display_name"]
-        assert tx["s_rated_kva"] > 0
+        assert tx["s_rated_kva_at_40c"] > 0
         assert tx["uk_percent"] > 0
         assert tx["pk_kw"] >= 0
         assert tx["p0_kw"] >= 0

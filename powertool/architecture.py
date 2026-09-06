@@ -25,7 +25,7 @@ import math
 from dataclasses import dataclass
 
 from .cable_sizing import CableSelection, select_cable
-from .components import Cable, Transformer, current_a
+from .components import DEFAULT_AMBIENT_C, Cable, Transformer, current_a
 from .sizing import SizingResult, format_cable_label
 
 
@@ -82,7 +82,7 @@ class PlantLayout:
 
     @property
     def s_fleet_kva(self) -> float:
-        return sum(tx.s_rated_kva * n for tx, n in self.fleet)
+        return sum(tx.rating_at(DEFAULT_AMBIENT_C) * n for tx, n in self.fleet)
 
     @property
     def circuit_sizes(self) -> list[int]:
@@ -192,12 +192,12 @@ def arrange_plant(
     if not fleet:
         raise ValueError("The fleet needs at least one transformer model")
 
-    s_fleet = sum(tx.s_rated_kva * n for tx, n in fleet)
+    s_fleet = sum(tx.rating_at(DEFAULT_AMBIENT_C) * n for tx, n in fleet)
     loading = stage1.s_inv_kva / s_fleet
 
     plans: list[StationPlan] = []
     for tx, count in fleet:
-        share = tx.s_rated_kva / s_fleet
+        share = tx.rating_at(DEFAULT_AMBIENT_C) / s_fleet
         p_lv = stage1.p_inv_kw * share
         q_lv = stage1.q_inv_kvar * share
         p_mv, q_mv = station_mv_output(p_lv, q_lv, tx)
@@ -219,7 +219,7 @@ def arrange_plant(
 
     bins = assign_circuits([p.i_a for p in plans], max_circuit_current_a)
     circuit_plans = [
-        sorted((plans[i] for i in b), key=lambda p: -p.transformer.s_rated_kva)
+        sorted((plans[i] for i in b), key=lambda p: -p.transformer.rating_at(DEFAULT_AMBIENT_C))
         for b in bins
     ]
     # Deterministic display order: heaviest circuit first.
@@ -285,7 +285,7 @@ def arrange_plant_manual(
                              f"needs at least one MV/LV station")
 
     stations = [tx for circuit in circuits for tx in circuit]
-    s_fleet = sum(tx.s_rated_kva for tx in stations)
+    s_fleet = sum(tx.rating_at(DEFAULT_AMBIENT_C) for tx in stations)
     loading = stage1.s_inv_kva / s_fleet
 
     # Fleet = (model, count) aggregated over the drawn stations, in order of
@@ -300,7 +300,7 @@ def arrange_plant_manual(
             fleet.append((tx, 1))
 
     def _plan(tx: Transformer) -> StationPlan:
-        share = tx.s_rated_kva / s_fleet
+        share = tx.rating_at(DEFAULT_AMBIENT_C) / s_fleet
         p_lv = stage1.p_inv_kw * share
         q_lv = stage1.q_inv_kvar * share
         p_mv, q_mv = station_mv_output(p_lv, q_lv, tx)
@@ -348,6 +348,9 @@ class StationResult:
     q_mv_kvar: float
     s_mv_kva: float
     loading: float  # s_lv / s_rated
+    # Deliberately NOT s_rated_kva_at_40c: this is a *result*, the rating already
+    # resolved at the ambient the design asked for. Naming a temperature here would
+    # be a lie the moment the ambient setting can be anything but 40 °C.
     s_rated_kva: float
     model: str  # display label, e.g. "3300 kVA - Huawei"
     v_lv_kv: float  # the station's own transformer LV rating
@@ -459,7 +462,7 @@ def size_circuits(
                 q_mv_kvar=plan.q_mv_kvar,
                 s_mv_kva=plan.s_mv_kva,
                 loading=plan.loading,
-                s_rated_kva=plan.transformer.s_rated_kva,
+                s_rated_kva=plan.transformer.rating_at(DEFAULT_AMBIENT_C),
                 model=plan.transformer.display_name,
                 v_lv_kv=plan.v_lv_kv,
                 kind=plan.kind,
@@ -566,7 +569,7 @@ def auto_hv_transformer(s_kva: float, v_hv_kv: float, v_mv_kv: float) -> Transfo
             s_rated = rating_mva * 1000.0
             return Transformer(
                 name=f"HV_{rating_mva:g}MVA_{v_hv_kv:g}_{v_mv_kv:g}kV (auto)",
-                s_rated_kva=s_rated,
+                s_rated_kva_at_40c=s_rated,
                 uk_percent=12.5,
                 pk_kw=0.0036 * s_rated,
                 p0_kw=0.0006 * s_rated,

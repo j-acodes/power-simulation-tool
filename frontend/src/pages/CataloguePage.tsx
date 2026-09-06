@@ -24,7 +24,7 @@ function StaticTransformerRow({ tx }: { tx: TransformerInfo }) {
   return (
     <div className="catalogue-row catalogue-row-static">
       <div className="catalogue-row-header">{tx.display_name}</div>
-      <Row label={LABEL.sRatedKva} value={fmt(tx.s_rated_kva)} />
+      <Row label={LABEL.sRatedKva} value={fmt(tx.s_rated_kva_at_40c)} />
       <Row label={LABEL.ukPercent} value={fmt(tx.uk_percent, 2)} />
       <Row label={LABEL.hvKv} value={tx.hv_kv != null ? fmt(tx.hv_kv, 2) : '—'} />
       <Row label={LABEL.lvKv} value={tx.lv_kv != null ? fmt(tx.lv_kv, 2) : '—'} />

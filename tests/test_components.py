@@ -43,7 +43,7 @@ def test_cable_charging():
 
 def test_transformer_rated_losses():
     # At rated load: copper = Pk, plus iron = P0.
-    t = Transformer("t", s_rated_kva=2500, uk_percent=6.0, pk_kw=24.0, p0_kw=2.5, i0_percent=0.8)
+    t = Transformer("t", s_rated_kva_at_40c=2500, uk_percent=6.0, pk_kw=24.0, p0_kw=2.5, i0_percent=0.8)
     dp, dq = t.losses(2500)
     assert dp == pytest.approx(24.0 + 2.5)
     # ux% = sqrt(uk^2 - ur^2), ur% = 100*Pk/Sr = 0.96
@@ -55,16 +55,45 @@ def test_transformer_rated_losses():
 
 def test_transformer_copper_scales_with_load_squared():
     # At half load copper loss is a quarter; iron is unchanged.
-    t = Transformer("t", s_rated_kva=2500, uk_percent=6.0, pk_kw=24.0, p0_kw=2.5)
+    t = Transformer("t", s_rated_kva_at_40c=2500, uk_percent=6.0, pk_kw=24.0, p0_kw=2.5)
     dp, _ = t.losses(1250)
     assert dp == pytest.approx(24.0 * 0.25 + 2.5)
 
 
 def test_transformer_invalid_uk_raises():
     # uk% smaller than the resistive part implied by Pk is non-physical.
-    t = Transformer("bad", s_rated_kva=1000, uk_percent=0.1, pk_kw=50.0)
+    t = Transformer("bad", s_rated_kva_at_40c=1000, uk_percent=0.1, pk_kw=50.0)
     with pytest.raises(ValueError):
         _ = t.ux_percent
+
+
+# --- rating_at: lookup only, never interpolated (ADR-0004) -----------------
+
+def test_rating_at_returns_the_published_30c_figure():
+    t = Transformer("t", s_rated_kva_at_40c=2750, s_rated_kva_at_30c=3080,
+                    uk_percent=8.0, pk_kw=27.5)
+    assert t.rating_at(30.0) == 3080
+    assert t.rating_at(40.0) == 2750
+
+
+def test_rating_at_falls_back_upward_when_30c_is_null():
+    # 30 C is not published: the nearest published ambient AT OR ABOVE 30 C
+    # is 40 C, so that (lower, conservative) figure is returned — never an
+    # interpolated value.
+    t = Transformer("t", s_rated_kva_at_40c=2750, s_rated_kva_at_30c=None,
+                    uk_percent=8.0, pk_kw=27.5)
+    assert t.rating_at(30.0) == 2750
+    # A requested ambient above every published one falls back to the
+    # highest published ambient — still the 40 C figure here.
+    assert t.rating_at(50.0) == 2750
+
+
+def test_rating_at_never_interpolates():
+    t = Transformer("t", s_rated_kva_at_40c=2750, s_rated_kva_at_30c=3080,
+                    uk_percent=8.0, pk_kw=27.5)
+    # An ambient strictly between the two published points still resolves to
+    # the nearest published ambient at or above it (40 C), not an average.
+    assert t.rating_at(35.0) == 2750
 
 
 # --- BessSolution: the discharge duration is declared, never derived --------

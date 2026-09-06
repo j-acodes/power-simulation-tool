@@ -5,10 +5,11 @@
 # solution's PCS voltage (see data/bess.yaml), which has no reason to equal
 # the PV LV bus, so mixing the two catalogues would only invite mismatches.
 #
-# *** PLACEHOLDER DATA — NOT FROM A REAL DATASHEET ***
-# No real BESS station transformer has been selected for this project yet.
-# Ratings follow the same placeholder assumptions already used for the PV
-# catalogue above (see transformers.yaml) pending a real datasheet:
+# SUNGROW_MVS7400_LS below is a real datasheet entry (see data/datasheets).
+# The GENERIC_* entries that follow it are still placeholder data — no other
+# real BESS station transformer has been selected for this project yet.
+# Their ratings follow placeholder assumptions matching the PV catalogue
+# above (see transformers.yaml) pending real datasheets:
 #   uk_percent = 8.0   (uniform placeholder)
 #   p0_kw      = 0.1% of the rating
 #   pk_kw      = 1.0% of the rating
@@ -26,8 +27,66 @@
 # naming it is rejected with unpaired_bess_solution.
 #
 bess_transformers:
+  SUNGROW_MVS7400_LS:     # MVS7400-LS, real datasheet — DS_20250919_MVS7400-LS_Datasheet_V2_EN.pdf
+    s_rated_kva_at_40c: 7400
+    s_rated_kva_at_30c: null      # not published
+    uk_percent: 7.0                # the ONLY datasheet-backed electrical figure on this entry
+    pk_kw: 74.0                    # placeholder formula (1.0% of rating), same as the GENERIC_* entries below
+    p0_kw: 7.4                     # placeholder formula (0.1% of rating)
+    i0_percent: 0.0                # placeholder, same as the GENERIC_* entries below
+    hv_kv: null
+    lv_kv: 0.69
+    brand: Sungrow
+    model: MVS7400-LS
+    vector_group: Dy11y11
+    cooling: ONAN
+    preliminary: true
+    datasheet_version: V2
+    datasheet_url: null   # no public URL known; local: DS_20250919_MVS7400-LS_Datasheet_V2_EN.pdf
+    paired_solutions:
+      # UNSOURCED — inferred, not read off the datasheet: 4 containers x
+      # 1800 kVA PCS (4 x 450 kVA per container, see data/bess.yaml) = 7200
+      # kVA under this 7400 kVA station. The datasheet does not state a
+      # container count. Pending confirmation.
+      sungrow-st6900ux-4h: 4
+    # Typed specification, transcribed verbatim from the datasheet.
+    mv_kv_min: 11.0
+    mv_kv_max: 36.0
+    lv_winding_count: 2
+    insulation_level: A
+    f_nominal: "50 Hz / 60 Hz"
+    uk_tolerance_pct: 10.0
+    winding_material_mv: Aluminum
+    winding_material_lv: Aluminum
+    ip_rating_transformer: IP68
+    ip_rating_enclosure: IP55
+    rmu_kv_min: 24.0
+    rmu_kv_max: 40.5
+    rmu_rated_current_a: 630.0
+    rmu_units: "DCV / CCV / CV / DV"
+    rmu_relay_protection: "ANSI 50, 50N, 51, 51N"
+    rmu_short_time_withstand: "20 kA / 3 s or 25 kA / 1 s"
+    cabinet_protection: Fuse+Disconnector
+    surge_protection: Type I+II
+    ac_insulation_detection: Optional
+    cabinet_temp_control: Air cooling and HVAC
+    ups: "2 h (default); 15 min / 3 / 4 h (optional)"
+    width_mm: 6058
+    height_mm: 2896
+    depth_mm: 2438
+    weight_kg: 26500
+    cable_entry: Bottom entry
+    corrosion_class: C4
+    temp_min_c: -30.0
+    temp_max_c: 45.0
+    humidity_min_pct: 0.0
+    humidity_max_pct: 100.0
+    altitude_max_m: 4000.0
+    communication: "Ethernet, Optical fiber, RS485"
+    standards: "IEC 62271-202, IEC 61439"
+
   GENERIC_BESS_TX_2750_LV069:   # sized for sungrow-st6900ux-4h, 1 container (1800 kVA PCS)
-    s_rated_kva: 2750
+    s_rated_kva_at_40c: 2750
     uk_percent: 8.0
     pk_kw: 27.5
     p0_kw: 2.75
@@ -39,7 +98,7 @@ bess_transformers:
       sungrow-st6900ux-4h: 1
 
   GENERIC_BESS_TX_4000_LV069:   # sized for sungrow-st6900ux-4h, 2 containers (3600 kVA PCS)
-    s_rated_kva: 4000
+    s_rated_kva_at_40c: 4000
     uk_percent: 8.0
     pk_kw: 40.0
     p0_kw: 4.0
@@ -51,7 +110,7 @@ bess_transformers:
       sungrow-st6900ux-4h: 2
 
   GENERIC_BESS_TX_1750_LV100:   # no paired solution — exercises bess_lv_mismatch
-    s_rated_kva: 1750
+    s_rated_kva_at_40c: 1750
     uk_percent: 8.0
     pk_kw: 17.5
     p0_kw: 1.75

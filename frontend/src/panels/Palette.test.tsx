@@ -19,14 +19,14 @@ const bessSolution: BessSolutionInfo = {
 }
 
 const bessTransformer: TransformerInfo = {
-  key: 'GENERIC_BESS_TX_2750_LV069', display_name: '2750 kVA - Generic', s_rated_kva: 2750,
+  key: 'GENERIC_BESS_TX_2750_LV069', display_name: '2750 kVA - Generic', s_rated_kva_at_40c: 2750,
   hv_kv: null, lv_kv: 0.69, brand: 'Generic', uk_percent: 8, pk_kw: 27.5, p0_kw: 2.75,
   i0_percent: 0, model: null, vector_group: null, cooling: null, datasheet_url: null,
   paired_solutions: { [bessSolution.key]: 1 },
 }
 
 const pvTransformer: TransformerInfo = {
-  key: 'ACME_1000', display_name: 'ACME 1000', s_rated_kva: 1000,
+  key: 'ACME_1000', display_name: 'ACME 1000', s_rated_kva_at_40c: 1000,
   hv_kv: 20, lv_kv: 0.8, brand: 'Acme', uk_percent: 6, pk_kw: 8, p0_kw: 1,
   i0_percent: 0.5, model: null, vector_group: null, cooling: null, datasheet_url: null,
   paired_solutions: {},

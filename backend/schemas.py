@@ -124,7 +124,8 @@ class SolveResponse(BaseModel):
 class TransformerInfo(BaseModel):
     key: str
     display_name: str
-    s_rated_kva: float
+    s_rated_kva_at_40c: float
+    s_rated_kva_at_30c: float | None = None
     hv_kv: float | None
     lv_kv: float | None
     brand: str | None
@@ -139,6 +140,42 @@ class TransformerInfo(BaseModel):
     vector_group: str | None = None
     cooling: str | None = None
     datasheet_url: str | None = None
+    mv_kv_min: float | None = None
+    mv_kv_max: float | None = None
+    lv_winding_count: int = 1
+    insulation_level: str | None = None
+    f_nominal: str | None = None
+    uk_tolerance_pct: float | None = None
+    winding_material_mv: str | None = None
+    winding_material_lv: str | None = None
+    ip_rating_transformer: str | None = None
+    ip_rating_enclosure: str | None = None
+    rmu_kv_min: float | None = None
+    rmu_kv_max: float | None = None
+    rmu_rated_current_a: float | None = None
+    rmu_units: str | None = None
+    rmu_relay_protection: str | None = None
+    rmu_short_time_withstand: str | None = None
+    cabinet_protection: str | None = None
+    surge_protection: str | None = None
+    ac_insulation_detection: str | None = None
+    cabinet_temp_control: str | None = None
+    ups: str | None = None
+    width_mm: float | None = None
+    height_mm: float | None = None
+    depth_mm: float | None = None
+    weight_kg: float | None = None
+    cable_entry: str | None = None
+    corrosion_class: str | None = None
+    temp_min_c: float | None = None
+    temp_max_c: float | None = None
+    humidity_min_pct: float | None = None
+    humidity_max_pct: float | None = None
+    altitude_max_m: float | None = None
+    communication: str | None = None
+    standards: str | None = None
+    datasheet_version: str | None = None
+    preliminary: bool = False
     # BESS solution key -> containers per station: the solutions this station
     # transformer is sold with (data/bess_transformers.yaml's paired_solutions).
     # Always empty for a PV transformer, which has no pairing to carry.

@@ -56,7 +56,7 @@ import math
 from dataclasses import dataclass, field
 
 from .architecture import PlantArchitecture
-from .components import Cable, Transformer
+from .components import DEFAULT_AMBIENT_C, Cable, Transformer
 from .sizing import SizingResult
 
 NODE_KINDS = ("poc", "hv_tx", "busbar", "station", "aux")
@@ -172,6 +172,10 @@ def _custom_transformer(props: dict, name: str, hv_kv: float | None,
         if value is None or value < 0:
             return None
         values[key] = value
+    # A hand-entered rating is taken as the 40 C figure — the engineer typing
+    # it is not choosing a temperature, so the user-facing prop name stays
+    # "s_rated_kva" while it maps onto the catalogue's ambient-suffixed field.
+    values["s_rated_kva_at_40c"] = values.pop("s_rated_kva")
     tx = Transformer(name=str(props.get("name") or name), hv_kv=hv_kv, lv_kv=lv_kv,
                      **values)
     try:
@@ -1501,7 +1505,7 @@ def map_results(inputs: GraphInputs, stage1s: list[SizingResult],
             "kind": "hv_tx",
             "mode": inputs.hv_mode,
             "name": hv.name if hv else None,
-            "s_rated_kva": hv.s_rated_kva if hv else None,
+            "s_rated_kva": hv.rating_at(DEFAULT_AMBIENT_C) if hv else None,
             "n_parallel": export.hv_n_parallel,
             "s_through_kva": export.s_tx_through_kva,
             "dp_kw": export.dp_tx_kw,

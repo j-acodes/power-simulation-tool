@@ -256,7 +256,7 @@ def test_custom_station_transformer_accepted_and_checked():
     }
     assert validate_graph(diagram, db) == []
     inputs = graph_to_inputs(diagram, db)
-    assert inputs.branches[0].circuits[0][0].s_rated_kva == 3000.0
+    assert inputs.branches[0].circuits[0][0].s_rated_kva_at_40c == 3000.0
 
     # uk% below the resistive share implied by Pk: the loss model rejects it.
     diagram["nodes"][2]["props"]["uk_percent"] = 0.5
@@ -461,7 +461,7 @@ def test_graph_to_inputs_round_trip_is_positional():
     # outward from the busbar. Nothing is sorted or regrouped.
     branch = inputs.branches[0]
     assert branch.station_ids == [["a1"], ["b1", "b2"]]
-    assert [[tx.s_rated_kva for tx in c] for c in branch.circuits] == \
+    assert [[tx.s_rated_kva_at_40c for tx in c] for c in branch.circuits] == \
            [[3300], [9000, 3300]]
     assert branch.segment_edge_ids == {
         (1, 1): "e_a1", (2, 1): "e_b1", (2, 2): "e_b2"}
@@ -669,7 +669,7 @@ def test_golden_45mw_example_drawn_equals_the_auto_path():
     stage1, layout, arch = _auto_reference()
     # Anchor the fixture: this is the arrangement the auto path produces today.
     assert layout.circuit_sizes == [2, 2, 2, 1, 1]
-    assert [[p.transformer.s_rated_kva for p in c] for c in layout.circuit_plans] == \
+    assert [[p.transformer.s_rated_kva_at_40c for p in c] for c in layout.circuit_plans] == \
            [[9000, 3300], [9000, 3300], [9000, 3300], [9000], [9000]]
 
     diagram, station_ids, edge_ids = _drawn_example(layout)
@@ -726,7 +726,7 @@ def test_golden_45mw_example_drawn_equals_the_auto_path():
             assert drawn["loading"] == station.loading
 
     # The auto-sized MV/HV transformer, on the drawn block.
-    assert results["nodes"]["hv"]["s_rated_kva"] == arch.export.hv_transformer.s_rated_kva
+    assert results["nodes"]["hv"]["s_rated_kva"] == arch.export.hv_transformer.s_rated_kva_at_40c
     assert results["nodes"]["hv"]["dp_kw"] == arch.export.dp_tx_kw
     assert results["nodes"]["poc"]["p_target_kw"] == P_POC_KW
     assert math.isclose(results["nodes"]["bus"]["p_kw"],

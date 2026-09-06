@@ -37,7 +37,7 @@ def test_catalogue_loads(db):
 def test_pv_stations_present_with_labels(db):
     for key, (kva, brand, label) in PV_STATIONS.items():
         tx = db.transformers[key]
-        assert tx.s_rated_kva == kva
+        assert tx.s_rated_kva_at_40c == kva
         assert tx.brand == brand
         assert tx.display_name == label
 

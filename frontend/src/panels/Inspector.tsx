@@ -69,7 +69,7 @@ function TransformerPreview({ tx }: { tx: TransformerInfo }) {
       <h3>{tx.display_name}</h3>
       <Row label={LABEL.catalogueKey} value={tx.key} />
       <Row label={LABEL.brand} value={tx.brand ?? '—'} />
-      <Row label={LABEL.sRatedKva} value={fmt(tx.s_rated_kva)} />
+      <Row label={LABEL.sRatedKva} value={fmt(tx.s_rated_kva_at_40c)} />
       <Row label={LABEL.ukPercent} value={fmt(tx.uk_percent, 2)} />
       <Row label={LABEL.pkKw} value={fmt(tx.pk_kw, 2)} />
       <Row label={LABEL.p0Kw} value={fmt(tx.p0_kw, 2)} />

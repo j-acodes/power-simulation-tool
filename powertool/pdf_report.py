@@ -29,7 +29,7 @@ from reportlab.platypus import (
 )
 
 from .architecture import PlantArchitecture
-from .components import conversion_label, fleet_label
+from .components import DEFAULT_AMBIENT_C, conversion_label, fleet_label
 from .sizing import SizingResult
 
 # RP Global "Colour Codes" brand sheet.
@@ -129,7 +129,7 @@ def _summary(stage1s: list[SizingResult], arch: PlantArchitecture,
     else:
         hv = export.hv_transformer
         interconn = (f"HV, at {export.v_hv_kv:g} kV"
-                     + (f" via {hv.s_rated_kva / 1000:g} MVA auto-sized MV/HV transformer"
+                     + (f" via {hv.rating_at(DEFAULT_AMBIENT_C) / 1000:g} MVA auto-sized MV/HV transformer"
                         if hv is not None else ""))
     target = sum(r.p_poc_target_kw or 0.0 for r in arch.branch_refinements)
     rows = [
@@ -308,10 +308,10 @@ def _transformer_rows(branch, export, p_inv: float, include_export: bool,
     # than the column.
     if include_export and export is not None and export.hv_transformer is not None:
         hv = export.hv_transformer
-        loading = export.s_tx_through_kva / (hv.s_rated_kva * export.hv_n_parallel)
+        loading = export.s_tx_through_kva / (hv.rating_at(DEFAULT_AMBIENT_C) * export.hv_n_parallel)
         rows.append([
             f"{hv.name} (MV/HV{', shared' if shared else ''})",
-            str(export.hv_n_parallel), _fmt(hv.s_rated_kva, 0),
+            str(export.hv_n_parallel), _fmt(hv.rating_at(DEFAULT_AMBIENT_C), 0),
             f"{loading * 100:.0f}%", _fmt(export.s_tx_through_kva, 1),
             f"{(export.dp_tx_kw / export.hv_n_parallel) / p_inv * 100:.3f}%",
             f"{export.dp_tx_kw / p_inv * 100:.3f}%", _fmt(export.dq_tx_kvar),
