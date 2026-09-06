@@ -2,10 +2,11 @@ import { useMemo } from 'react'
 import { CollapsiblePanel } from './CollapsiblePanel'
 import { useCatalogue } from '../hooks/useCatalogue'
 import { useStore } from '../store'
-import type { DiagramNode, NodeKind, TransformerInfo } from '../types'
+import type { DiagramNode, NodeKind } from '../types'
 import { takenBusbarSlots } from '../canvas/connect'
 import type { PaletteDropPayload } from '../canvas/Editor'
 import { permitsFleetKind } from '../technology'
+import { groupByBrand } from '../catalogueGrouping'
 
 const BESS_CUSTOM_PROPS = {
   mode: 'custom',
@@ -46,19 +47,6 @@ function Item({
       {label}
     </div>
   )
-}
-
-/** Groups the transformer catalogue by brand, preserving first-seen order —
- * with 11 models across 3 brands, one collapsible dropdown per brand reads
- * better than one long flat list or one single "catalogue" dropdown. */
-function groupByBrand(transformers: TransformerInfo[]): Array<[string, TransformerInfo[]]> {
-  const groups = new Map<string, TransformerInfo[]>()
-  for (const tx of transformers) {
-    const brand = tx.brand ?? 'Other'
-    if (!groups.has(brand)) groups.set(brand, [])
-    groups.get(brand)!.push(tx)
-  }
-  return [...groups.entries()]
 }
 
 export function Palette() {

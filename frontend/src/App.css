@@ -405,6 +405,61 @@
   min-height: 0;
 }
 
+/* Catalogue page (ticket 05): one column of catalogue sections, no side
+   panels — reuses .app-body's flex but stacks instead of splitting left/right. */
+.catalogue-body {
+  flex-direction: column;
+  padding: 1rem;
+  overflow-y: auto;
+  gap: 1.5rem;
+  max-width: 900px;
+  margin: 0 auto;
+  width: 100%;
+}
+
+.catalogue-body h2 {
+  font-size: 16px;
+  margin: 0 0 0.5rem;
+}
+
+.catalogue-row {
+  display: block;
+  width: 100%;
+  box-sizing: border-box;
+  text-align: left;
+  padding: 0.5rem 0.75rem;
+  margin-bottom: 0.35rem;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--code-bg);
+  font: inherit;
+  color: var(--text-h);
+}
+
+/* No datasheet, no specification to open — deliberately not shaped like a
+   button (no pointer cursor, no hover state) so the missing affordance reads
+   as absent rather than broken. */
+.catalogue-row-static {
+  cursor: default;
+}
+
+.catalogue-row-clickable {
+  cursor: pointer;
+}
+
+.catalogue-row-clickable:hover {
+  border-color: var(--accent);
+}
+
+.catalogue-row-header {
+  font-weight: 500;
+  margin-bottom: 0.25rem;
+}
+
+.catalogue-brand {
+  font-weight: 600;
+}
+
 .panel {
   width: 260px;
   max-width: 30%;

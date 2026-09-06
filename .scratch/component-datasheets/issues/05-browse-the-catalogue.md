@@ -20,12 +20,12 @@ second one.
 
 **Blocked by:** 04 (Read a component's full specification full-screen).
 
-**Status:** ready-for-agent
+**Status:** done
 
-- [ ] A top-level route lists the catalogue and is reachable without opening a project
-- [ ] All four catalogues appear on it
-- [ ] BESS entries show their brand, series and model; PV station transformers and cables show
+- [x] A top-level route lists the catalogue and is reachable without opening a project
+- [x] All four catalogues appear on it
+- [x] BESS entries show their brand, series and model; PV station transformers and cables show
       the parameters they already carry
-- [ ] Selecting any catalogue-backed row opens its specification full-screen
-- [ ] The page offers no technology filter
-- [ ] PV station transformers and cables have gained no datasheet fields
+- [x] Selecting any catalogue-backed row opens its specification full-screen
+- [x] The page offers no technology filter
+- [x] PV station transformers and cables have gained no datasheet fields
