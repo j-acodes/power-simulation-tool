@@ -138,12 +138,15 @@ def test_catalogue_serves_bess_transformer_typed_fields():
     assert tx["cooling"] is None
     assert tx["datasheet_url"] is None
 
-    # A PV transformer carries the same fields, shared type, also unset.
+    # A PV transformer carries the same fields — the type is shared. Its
+    # model, vector group and cooling are still unset, but every PV entry now
+    # cites the datasheet its parameters were read off.
     pv = data["transformers"][0]
     assert pv["model"] is None
     assert pv["vector_group"] is None
     assert pv["cooling"] is None
-    assert pv["datasheet_url"] is None
+    assert pv["datasheet_url"]
+    assert all(t["datasheet_url"] for t in data["transformers"])
 
 
 def test_catalogue_serves_the_bess_station_transformer_pairing():

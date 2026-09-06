@@ -1,4 +1,5 @@
 import { spawn } from 'node:child_process'
+import { createConnection } from 'node:net'
 import { fileURLToPath } from 'node:url'
 import react from '@vitejs/plugin-react'
 import type { Plugin } from 'vite'
@@ -6,10 +7,30 @@ import { defineConfig } from 'vitest/config'
 
 const repoRoot = fileURLToPath(new URL('..', import.meta.url))
 
+/** Is something already serving on this port? */
+function alreadyServing(port: number): Promise<boolean> {
+  return new Promise((resolve) => {
+    const socket = createConnection({ port, host: '127.0.0.1' })
+    const done = (answer: boolean) => {
+      socket.destroy()
+      resolve(answer)
+    }
+    socket.on('connect', () => done(true))
+    socket.on('error', () => done(false))
+    socket.setTimeout(500, () => done(false))
+  })
+}
+
 // ponytail: dev-only supervisor so `npm run dev` is the single command.
 // Starts uvicorn as a child of Vite, restarts it if it dies, and kills it on
-// shutdown. Gives up after 3 crashes so a permanently-broken backend (port
-// already taken, bad venv) fails loudly instead of looping.
+// shutdown. Gives up after 3 crashes so a permanently-broken backend (a bad
+// venv, say) fails loudly instead of looping.
+//
+// It stands down entirely when a backend is already listening. That is the
+// normal case on a machine running one as a service -- and the old behaviour
+// there was four identical "Address already in use" errors per session,
+// looking like a fault when nothing was wrong. Vite proxies /api to whatever
+// holds the port, so standing down costs nothing.
 function backend(): Plugin {
   return {
     name: 'start-backend',
@@ -49,7 +70,16 @@ function backend(): Plugin {
         })
       }
 
-      start()
+      void alreadyServing(8000).then((busy) => {
+        if (busy) {
+          server.config.logger.info(
+            'backend already listening on :8000 — leaving it alone (proxying to it)',
+          )
+          return
+        }
+        start()
+      })
+
       const stop = () => {
         stopping = true
         proc?.kill()

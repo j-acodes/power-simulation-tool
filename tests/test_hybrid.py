@@ -5,9 +5,9 @@ reproduces the PV-only result to within 1e-9" — is vacuous read literally: a
 branch with a zero active target cannot be sized at all, so the design collapses
 to single-fleet and the comparison passes without exercising anything. It is
 split here into the two independent failures it was written to catch. This file
-holds the TOPOLOGY half; the PHYSICS half is the golden-snapshot diff driven by
-``.scratch/bess-module/golden_snapshot.py``, which the test suite cannot express
-because it must compare against numbers captured before the refactor.
+holds the TOPOLOGY half; the PHYSICS half is the golden snapshot, which was a
+manual script compared against numbers captured before a refactor and is now
+``tests/test_golden_snapshot.py``, compared against a committed baseline.
 
 What the topology gate protects: a BESS busbar and its stations are *drawn* —
 they validate, they parse, they reach the branch builder — and the design still

@@ -37,6 +37,7 @@ transformers:
     hv_kv: null
     lv_kv: 0.8
     brand: Sungrow
+    datasheet_url: https://info-support.sungrowpower.com/application/pdf/2025/04/23/DS_20250418_MVS3200-LV_4480-LV_Datasheet_V4_EN%EF%BC%88EUR%EF%BC%89.pdf
 
   SUNGROW_MVS4480:        # MVS4480-LV, 4480 kVA @40C, datasheet uk 8%
     s_rated_kva: 4480
@@ -47,6 +48,7 @@ transformers:
     hv_kv: null
     lv_kv: 0.8
     brand: Sungrow
+    datasheet_url: https://info-support.sungrowpower.com/application/pdf/2025/04/23/DS_20250418_MVS3200-LV_4480-LV_Datasheet_V4_EN%EF%BC%88EUR%EF%BC%89.pdf
 
   SUNGROW_MVS6400:        # MVS6400-LV, 6400 kVA @40C, dual-LV, datasheet uk 8%
     s_rated_kva: 6400
@@ -57,6 +59,7 @@ transformers:
     hv_kv: null
     lv_kv: 0.8
     brand: Sungrow
+    datasheet_url: https://info-support.sungrowpower.com/application/pdf/2025/04/23/DS_20250418_MVS6400-LV_Datasheet_V4_EN%EF%BC%88EUR%EF%BC%89.pdf
 
   SUNGROW_MVS7040:        # MVS7040-LV, 7040 kVA @40C, dual-LV, datasheet uk 8%
     s_rated_kva: 7040
@@ -67,6 +70,7 @@ transformers:
     hv_kv: null
     lv_kv: 0.8
     brand: Sungrow
+    datasheet_url: https://info-support.sungrowpower.com/application/pdf/2024/07/01/DS_20240419_MVS7040-LV_Datasheet_V3_EN.pdf
 
   SUNGROW_MVS8960:        # MVS8960-LV, 8960 kVA @40C, dual-LV, datasheet uk 9.5% (MV 20-35kV)
     s_rated_kva: 8960
@@ -77,6 +81,7 @@ transformers:
     hv_kv: null
     lv_kv: 0.8
     brand: Sungrow
+    datasheet_url: https://info-support.sungrowpower.com/application/pdf/2025/04/23/DS_20250418_MVS8960-LV_Datasheet_V4_EN(EUR).pdf
 
   # Huawei JUPITER Smart Transformer Station (SUN2000-330KTL string inverters)
   HUAWEI_JUPITER3000:     # JUPITER-3000K-H1, 3300 kVA @40C, Dy11
@@ -88,6 +93,7 @@ transformers:
     hv_kv: null
     lv_kv: 0.8
     brand: Huawei
+    datasheet_url: https://solar.huawei.com/admin/asset/v1/pro/view/90e6198f4921408db2be6a4222d89d5a.pdf
 
   HUAWEI_JUPITER6000:     # JUPITER-6000K-H1, 6600 kVA @40C, Dy11-y11
     s_rated_kva: 6600
@@ -98,6 +104,7 @@ transformers:
     hv_kv: null
     lv_kv: 0.8
     brand: Huawei
+    datasheet_url: https://solar.huawei.com/admin/asset/v1/pro/view/90e6198f4921408db2be6a4222d89d5a.pdf
 
   HUAWEI_JUPITER9000:     # JUPITER-9000K-H1, 9000 kVA @40C, Dy11-y11
     s_rated_kva: 9000
@@ -108,9 +115,12 @@ transformers:
     hv_kv: null
     lv_kv: 0.8
     brand: Huawei
+    datasheet_url: https://solar.huawei.com/admin/asset/v1/pro/view/90e6198f4921408db2be6a4222d89d5a.pdf
 
   # TBEA TS-KT-EL Smart Transformer Station (ratings are the @40C AC power;
   # uk not published by TBEA). MV 10-35 kV (TS9000: 20-35 kV).
+  # The linked brochure covers more of the range than this catalogue carries:
+  # only TS3000, TS6000 and TS9000 were wanted.
   TBEA_TS3000:            # TS3000KT-EL, 3300 kVA @40C (3000@50C), Dy11
     s_rated_kva: 3300
     uk_percent: 8.0
@@ -120,6 +130,7 @@ transformers:
     hv_kv: null
     lv_kv: 0.8
     brand: TBEA
+    datasheet_url: https://eeamarketfiles.blob.core.windows.net/blob/assets/images/esquare/1.%20TBEA%20Utility%20Solar%20Inverter%20Brochure-2024-8_compressed.pdf
 
   TBEA_TS6000:            # TS6000KT-EL, 6600 kVA @40C (6000@50C), Dy11y11
     s_rated_kva: 6600
@@ -130,6 +141,7 @@ transformers:
     hv_kv: null
     lv_kv: 0.8
     brand: TBEA
+    datasheet_url: https://eeamarketfiles.blob.core.windows.net/blob/assets/images/esquare/1.%20TBEA%20Utility%20Solar%20Inverter%20Brochure-2024-8_compressed.pdf
 
   TBEA_TS9000:            # TS9000KT-EL, 9240 kVA @40C (8400@50C), Dy11y11
     s_rated_kva: 9240
@@ -140,3 +152,4 @@ transformers:
     hv_kv: null
     lv_kv: 0.8
     brand: TBEA
+    datasheet_url: https://eeamarketfiles.blob.core.windows.net/blob/assets/images/esquare/1.%20TBEA%20Utility%20Solar%20Inverter%20Brochure-2024-8_compressed.pdf

@@ -12,9 +12,14 @@ import { fmt } from '../format'
 import { LABEL } from '../labels'
 import type { BessSolutionInfo, CableInfo, TransformerInfo } from '../types'
 
-/** A transformer with no datasheet behind it (every PV station transformer,
- * today's cables) — shown with what it already carries, not made to look
- * clickable, because there is no specification a click would open. */
+/** A transformer with no transcribed specification behind it (every PV station
+ * transformer, today's cables) — shown with what it already carries, and not
+ * made to look clickable, because there is no specification a click would open.
+ *
+ * It can still cite its source. The PV catalogue's parameters were read off
+ * published datasheets whose links used to live in a loose text file beside the
+ * YAML; they are on the entries now, so the link sits next to the numbers it
+ * justifies rather than in a list nobody opens. */
 function StaticTransformerRow({ tx }: { tx: TransformerInfo }) {
   return (
     <div className="catalogue-row catalogue-row-static">
@@ -23,6 +28,13 @@ function StaticTransformerRow({ tx }: { tx: TransformerInfo }) {
       <Row label={LABEL.ukPercent} value={fmt(tx.uk_percent, 2)} />
       <Row label={LABEL.hvKv} value={tx.hv_kv != null ? fmt(tx.hv_kv, 2) : '—'} />
       <Row label={LABEL.lvKv} value={tx.lv_kv != null ? fmt(tx.lv_kv, 2) : '—'} />
+      {tx.datasheet_url && (
+        <p className="catalogue-row-source">
+          <a href={tx.datasheet_url} target="_blank" rel="noreferrer">
+            View datasheet
+          </a>
+        </p>
+      )}
     </div>
   )
 }
