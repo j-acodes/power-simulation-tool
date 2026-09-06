@@ -23,3 +23,8 @@ frontend/dist/
 # Databases
 *.db
 .claude/
+
+# Datasheet PDFs are deliberately not tracked: the catalogue stores a source
+# URL, not the document (see .scratch/component-datasheets/spec.md). Keeping the
+# PDFs locally is fine; committing them is what this prevents.
+data/datasheets/
