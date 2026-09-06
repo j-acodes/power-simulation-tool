@@ -23,9 +23,21 @@ function solution(overrides: Partial<BessSolutionInfo> = {}): BessSolutionInfo {
 
 function transformer(overrides: Partial<TransformerInfo> = {}): TransformerInfo {
   return {
-    key: 'GENERIC_BESS_TX_2750_LV069', display_name: '2750 kVA - Generic', s_rated_kva: 2750,
+    key: 'GENERIC_BESS_TX_2750_LV069', display_name: '2750 kVA - Generic', s_rated_kva_at_40c: 2750,
     hv_kv: null, lv_kv: 0.69, brand: 'Generic', uk_percent: 8, pk_kw: 27.5, p0_kw: 2.75,
     i0_percent: 0, model: null, vector_group: null, cooling: null, datasheet_url: null,
+    s_rated_kva_at_30c: null,
+    mv_kv_min: null, mv_kv_max: null, lv_winding_count: 1, insulation_level: null,
+    f_nominal: null, uk_tolerance_pct: null, winding_material_mv: null, winding_material_lv: null,
+    ip_rating_transformer: null, ip_rating_enclosure: null,
+    rmu_kv_min: null, rmu_kv_max: null, rmu_rated_current_a: null, rmu_units: null,
+    rmu_relay_protection: null, rmu_short_time_withstand: null,
+    cabinet_protection: null, surge_protection: null, ac_insulation_detection: null,
+    cabinet_temp_control: null, ups: null,
+    width_mm: null, height_mm: null, depth_mm: null, weight_kg: null, cable_entry: null,
+    corrosion_class: null, temp_min_c: null, temp_max_c: null, humidity_min_pct: null,
+    humidity_max_pct: null, altitude_max_m: null, communication: null, standards: null,
+    datasheet_version: null, preliminary: false,
     paired_solutions: {},
     ...overrides,
   }
@@ -151,6 +163,6 @@ describe('SpecView — BESS station transformer', () => {
   it('shows its own simulated electrical parameters', () => {
     const tx = transformer()
     render(<SpecView target={{ kind: 'bess_transformer', item: tx }} solutions={[]} transformers={[]} />)
-    expect(screen.getByText('2,750 kVA')).toBeTruthy()
+    expect(screen.getByText(/2,750 kVA @ 40 °C/)).toBeTruthy()
   })
 })

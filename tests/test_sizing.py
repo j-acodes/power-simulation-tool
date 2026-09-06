@@ -21,7 +21,7 @@ from powertool import (
 
 def test_single_transformer_unity_pf():
     # One MV/LV transformer, 2000 kW at unity PF (Q_poc = 0).
-    t = Transformer("t", s_rated_kva=2500, uk_percent=6.0, pk_kw=24.0, p0_kw=2.5, i0_percent=0.8)
+    t = Transformer("t", s_rated_kva_at_40c=2500, uk_percent=6.0, pk_kw=24.0, p0_kw=2.5, i0_percent=0.8)
     chain = Chain([ChainElement(t, v_kv=20)])
     res = size_pv_inverters(chain, p_poc_kw=2000, pf_target=1.0)
 
@@ -57,7 +57,7 @@ def test_cable_reactive_is_series_only_and_never_negative():
 
 def test_power_factor_sets_poc_reactive():
     # Q_poc = P * tan(acos(PF)), injected (positive).
-    t = Transformer("t", s_rated_kva=5000, uk_percent=6.0, pk_kw=40.0)
+    t = Transformer("t", s_rated_kva_at_40c=5000, uk_percent=6.0, pk_kw=40.0)
     chain = Chain([ChainElement(t, v_kv=20)])
     res = size_pv_inverters(chain, p_poc_kw=4000, pf_target=0.95)
     assert res.q_poc_kvar == pytest.approx(4000 * math.tan(math.acos(0.95)))
@@ -66,7 +66,7 @@ def test_power_factor_sets_poc_reactive():
 
 def test_active_power_monotonically_increases_toward_inverter():
     # Walking from POC to inverter, active power can only grow (losses add).
-    t = Transformer("t", s_rated_kva=2500, uk_percent=6.0, pk_kw=24.0, p0_kw=2.5)
+    t = Transformer("t", s_rated_kva_at_40c=2500, uk_percent=6.0, pk_kw=24.0, p0_kw=2.5)
     cable = Cable("c", r_ohm_per_km=0.1, x_ohm_per_km=0.1)
     chain = Chain(
         [
@@ -91,14 +91,14 @@ def test_parallel_cables_reduce_series_losses():
 
 @pytest.mark.parametrize("bad_pf", [0.0, -0.1, 1.5])
 def test_invalid_power_factor_raises(bad_pf):
-    t = Transformer("t", s_rated_kva=2500, uk_percent=6.0, pk_kw=24.0)
+    t = Transformer("t", s_rated_kva_at_40c=2500, uk_percent=6.0, pk_kw=24.0)
     chain = Chain([ChainElement(t, v_kv=20)])
     with pytest.raises(ValueError):
         size_pv_inverters(chain, p_poc_kw=2000, pf_target=bad_pf)
 
 
 def test_invalid_poc_power_raises():
-    t = Transformer("t", s_rated_kva=2500, uk_percent=6.0, pk_kw=24.0)
+    t = Transformer("t", s_rated_kva_at_40c=2500, uk_percent=6.0, pk_kw=24.0)
     chain = Chain([ChainElement(t, v_kv=20)])
     with pytest.raises(ValueError):
         size_pv_inverters(chain, p_poc_kw=-100, pf_target=1.0)
@@ -108,7 +108,7 @@ def test_power_factor_form_delegates_to_reactive_in_form():
     # size_generation must compute Q from the PF target and delegate to
     # size_generation_pq; both forms produce identical results for the same
     # effective (P, Q) at the head of the chain.
-    t = Transformer("t", s_rated_kva=5000, uk_percent=6.0, pk_kw=40.0)
+    t = Transformer("t", s_rated_kva_at_40c=5000, uk_percent=6.0, pk_kw=40.0)
     chain = Chain([ChainElement(t, v_kv=20)])
     p_poc_kw, pf_target = 4000.0, 0.95
     q_poc_kvar = p_poc_kw * math.tan(math.acos(pf_target))
@@ -123,7 +123,7 @@ def test_power_factor_form_delegates_to_reactive_in_form():
 
 
 def test_size_pv_inverters_alias_is_deprecated_but_equivalent():
-    t = Transformer("t", s_rated_kva=2500, uk_percent=6.0, pk_kw=24.0)
+    t = Transformer("t", s_rated_kva_at_40c=2500, uk_percent=6.0, pk_kw=24.0)
     chain = Chain([ChainElement(t, v_kv=20)])
     with pytest.warns(DeprecationWarning):
         via_alias = size_pv_inverters(chain, p_poc_kw=2000, pf_target=1.0)
@@ -136,7 +136,7 @@ def test_power_factor_target_is_echoed_verbatim():
     # recomputed from P and Q. The two agree to within an ulp, so an approx
     # comparison would pass either way — this asserts exact equality on purpose,
     # because they are different quantities and only one of them is a target.
-    t = Transformer("t", s_rated_kva=5000, uk_percent=6.0, pk_kw=40.0)
+    t = Transformer("t", s_rated_kva_at_40c=5000, uk_percent=6.0, pk_kw=40.0)
     chain = Chain([ChainElement(t, v_kv=20)])
     for pf in (0.8, 0.92, 0.95, 0.995, 1.0):
         result = size_generation(chain, p_poc_kw=4000.0, pf_target=pf)

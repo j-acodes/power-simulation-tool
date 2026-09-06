@@ -1,6 +1,7 @@
 # Transformer types, defined by nameplate / factory-test values.
 #
-#   s_rated_kva : rated apparent power [kVA]
+#   s_rated_kva_at_40c : rated apparent power [kVA] at 40 C ambient
+#   s_rated_kva_at_30c : rated apparent power [kVA] at 30 C ambient (null if unpublished)
 #   uk_percent  : short-circuit (impedance) voltage [%]
 #   pk_kw       : load (copper) losses at rated load [kW]   (short-circuit test)
 #   p0_kw       : no-load (iron) losses [kW]                (open-circuit test)
@@ -29,7 +30,7 @@ transformers:
 
   # Sungrow MVS-LV series (1500 Vdc string inverter SG350HX), Dy11 / Dy11y11
   SUNGROW_MVS3200:        # MVS3200-LV, 3200 kVA @40C, datasheet uk 7%
-    s_rated_kva: 3200
+    s_rated_kva_at_40c: 3200
     uk_percent: 8.0
     pk_kw: 32.0
     p0_kw: 3.2
@@ -40,7 +41,7 @@ transformers:
     datasheet_url: https://info-support.sungrowpower.com/application/pdf/2025/04/23/DS_20250418_MVS3200-LV_4480-LV_Datasheet_V4_EN%EF%BC%88EUR%EF%BC%89.pdf
 
   SUNGROW_MVS4480:        # MVS4480-LV, 4480 kVA @40C, datasheet uk 8%
-    s_rated_kva: 4480
+    s_rated_kva_at_40c: 4480
     uk_percent: 8.0
     pk_kw: 44.8
     p0_kw: 4.48
@@ -51,7 +52,7 @@ transformers:
     datasheet_url: https://info-support.sungrowpower.com/application/pdf/2025/04/23/DS_20250418_MVS3200-LV_4480-LV_Datasheet_V4_EN%EF%BC%88EUR%EF%BC%89.pdf
 
   SUNGROW_MVS6400:        # MVS6400-LV, 6400 kVA @40C, dual-LV, datasheet uk 8%
-    s_rated_kva: 6400
+    s_rated_kva_at_40c: 6400
     uk_percent: 8.0
     pk_kw: 64.0
     p0_kw: 6.4
@@ -62,7 +63,7 @@ transformers:
     datasheet_url: https://info-support.sungrowpower.com/application/pdf/2025/04/23/DS_20250418_MVS6400-LV_Datasheet_V4_EN%EF%BC%88EUR%EF%BC%89.pdf
 
   SUNGROW_MVS7040:        # MVS7040-LV, 7040 kVA @40C, dual-LV, datasheet uk 8%
-    s_rated_kva: 7040
+    s_rated_kva_at_40c: 7040
     uk_percent: 8.0
     pk_kw: 70.4
     p0_kw: 7.04
@@ -73,7 +74,7 @@ transformers:
     datasheet_url: https://info-support.sungrowpower.com/application/pdf/2024/07/01/DS_20240419_MVS7040-LV_Datasheet_V3_EN.pdf
 
   SUNGROW_MVS8960:        # MVS8960-LV, 8960 kVA @40C, dual-LV, datasheet uk 9.5% (MV 20-35kV)
-    s_rated_kva: 8960
+    s_rated_kva_at_40c: 8960
     uk_percent: 8.0
     pk_kw: 89.6
     p0_kw: 8.96
@@ -85,7 +86,7 @@ transformers:
 
   # Huawei JUPITER Smart Transformer Station (SUN2000-330KTL string inverters)
   HUAWEI_JUPITER3000:     # JUPITER-3000K-H1, 3300 kVA @40C, Dy11
-    s_rated_kva: 3300
+    s_rated_kva_at_40c: 3300
     uk_percent: 8.0
     pk_kw: 33.0
     p0_kw: 3.3
@@ -96,7 +97,7 @@ transformers:
     datasheet_url: https://solar.huawei.com/admin/asset/v1/pro/view/90e6198f4921408db2be6a4222d89d5a.pdf
 
   HUAWEI_JUPITER6000:     # JUPITER-6000K-H1, 6600 kVA @40C, Dy11-y11
-    s_rated_kva: 6600
+    s_rated_kva_at_40c: 6600
     uk_percent: 8.0
     pk_kw: 66.0
     p0_kw: 6.6
@@ -107,7 +108,7 @@ transformers:
     datasheet_url: https://solar.huawei.com/admin/asset/v1/pro/view/90e6198f4921408db2be6a4222d89d5a.pdf
 
   HUAWEI_JUPITER9000:     # JUPITER-9000K-H1, 9000 kVA @40C, Dy11-y11
-    s_rated_kva: 9000
+    s_rated_kva_at_40c: 9000
     uk_percent: 8.0
     pk_kw: 90.0
     p0_kw: 9.0
@@ -122,7 +123,7 @@ transformers:
   # The linked brochure covers more of the range than this catalogue carries:
   # only TS3000, TS6000 and TS9000 were wanted.
   TBEA_TS3000:            # TS3000KT-EL, 3300 kVA @40C (3000@50C), Dy11
-    s_rated_kva: 3300
+    s_rated_kva_at_40c: 3300
     uk_percent: 8.0
     pk_kw: 33.0
     p0_kw: 3.3
@@ -133,7 +134,7 @@ transformers:
     datasheet_url: https://eeamarketfiles.blob.core.windows.net/blob/assets/images/esquare/1.%20TBEA%20Utility%20Solar%20Inverter%20Brochure-2024-8_compressed.pdf
 
   TBEA_TS6000:            # TS6000KT-EL, 6600 kVA @40C (6000@50C), Dy11y11
-    s_rated_kva: 6600
+    s_rated_kva_at_40c: 6600
     uk_percent: 8.0
     pk_kw: 66.0
     p0_kw: 6.6
@@ -144,7 +145,7 @@ transformers:
     datasheet_url: https://eeamarketfiles.blob.core.windows.net/blob/assets/images/esquare/1.%20TBEA%20Utility%20Solar%20Inverter%20Brochure-2024-8_compressed.pdf
 
   TBEA_TS9000:            # TS9000KT-EL, 9240 kVA @40C (8400@50C), Dy11y11
-    s_rated_kva: 9240
+    s_rated_kva_at_40c: 9240
     uk_percent: 8.0
     pk_kw: 92.4
     p0_kw: 9.24

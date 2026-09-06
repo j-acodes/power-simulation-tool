@@ -37,18 +37,18 @@ from powertool.sizing import SizingResult
 
 def _tx_2500() -> Transformer:
     # Representative 2500 kVA 20/0.8 kV station transformer.
-    return Transformer("TX_2500", s_rated_kva=2500, uk_percent=6.0, pk_kw=24.0,
+    return Transformer("TX_2500", s_rated_kva_at_40c=2500, uk_percent=6.0, pk_kw=24.0,
                        p0_kw=2.5, i0_percent=0.8, hv_kv=20, lv_kv=0.8)
 
 
 def _tx_9000() -> Transformer:
     # A big PV station, parameters per the project's design assumptions.
-    return Transformer("TX_9000", s_rated_kva=9000, uk_percent=8.0, pk_kw=90.0,
+    return Transformer("TX_9000", s_rated_kva_at_40c=9000, uk_percent=8.0, pk_kw=90.0,
                        p0_kw=9.0, i0_percent=0.0, lv_kv=0.8, brand="BrandA")
 
 
 def _tx_3300() -> Transformer:
-    return Transformer("TX_3300", s_rated_kva=3300, uk_percent=8.0, pk_kw=33.0,
+    return Transformer("TX_3300", s_rated_kva_at_40c=3300, uk_percent=8.0, pk_kw=33.0,
                        p0_kw=3.3, i0_percent=0.0, lv_kv=0.8, brand="BrandB")
 
 
@@ -74,7 +74,7 @@ def test_station_mv_output_subtracts_transformer_losses():
 
 
 def test_station_mv_output_degenerate_losses_raise():
-    bad = Transformer("BAD", s_rated_kva=100, uk_percent=50.0, pk_kw=40.0, p0_kw=80.0)
+    bad = Transformer("BAD", s_rated_kva_at_40c=100, uk_percent=50.0, pk_kw=40.0, p0_kw=80.0)
     with pytest.raises(ValueError):
         station_mv_output(100.0, 0.0, bad)
 
@@ -226,7 +226,7 @@ def test_arrange_mixed_fleet_shares_and_ordering():
     assert layout.n_transformers == 3
     assert layout.n_circuits == 1
     plans = layout.circuit_plans[0]
-    assert [p.transformer.s_rated_kva for p in plans] == [9000, 3300, 3300]
+    assert [p.transformer.s_rated_kva_at_40c for p in plans] == [9000, 3300, 3300]
     big, small = plans[0], plans[1]
     assert big.p_lv_kw / small.p_lv_kw == pytest.approx(9000 / 3300)
     assert big.loading == pytest.approx(small.loading)  # uniform per-unit loading
@@ -321,7 +321,7 @@ def test_manual_arrangement_never_reorders_what_was_drawn():
                                   v_mv_kv=20.0)
 
     assert layout.circuit_sizes == [1, 2]
-    assert [[p.transformer.s_rated_kva for p in c] for c in layout.circuit_plans] == \
+    assert [[p.transformer.s_rated_kva_at_40c for p in c] for c in layout.circuit_plans] == \
            [[3300], [3300, 9000]]
     # Same fleet, auto-arranged: one circuit, biggest station nearest the busbar.
     auto = arrange_plant(stage1, [(_tx_3300(), 2), (_tx_9000(), 1)],
@@ -577,7 +577,7 @@ def test_forced_section_that_cannot_carry_the_flow_raises():
 # --- size_architecture ------------------------------------------------------------
 
 def _hv_tx() -> Transformer:
-    return Transformer("HV_50MVA", s_rated_kva=50_000, uk_percent=12.5, pk_kw=180.0,
+    return Transformer("HV_50MVA", s_rated_kva_at_40c=50_000, uk_percent=12.5, pk_kw=180.0,
                        p0_kw=30.0, i0_percent=0.3, hv_kv=132, lv_kv=20)
 
 
@@ -733,14 +733,14 @@ def test_auto_hv_transformer_picks_smallest_covering_rating():
     from powertool import auto_hv_transformer
 
     tx = auto_hv_transformer(43_500, v_hv_kv=132, v_mv_kv=20)
-    assert tx.s_rated_kva == 50_000
+    assert tx.s_rated_kva_at_40c == 50_000
     assert tx.hv_kv == 132 and tx.lv_kv == 20
     assert tx.pk_kw == pytest.approx(0.0036 * 50_000)
     assert tx.p0_kw == pytest.approx(0.0006 * 50_000)
     assert tx.uk_percent == 12.5
 
     exact = auto_hv_transformer(50_000, v_hv_kv=132, v_mv_kv=20)
-    assert exact.s_rated_kva == 50_000
+    assert exact.s_rated_kva_at_40c == 50_000
 
     with pytest.raises(ValueError):
         auto_hv_transformer(300_000, v_hv_kv=220, v_mv_kv=33)
@@ -756,7 +756,7 @@ def test_size_architecture_auto_hv():
     export = arch.export
     assert export is not None and export.hv_transformer is not None
     assert export.hv_n_parallel == 1
-    assert export.hv_transformer.s_rated_kva >= export.s_tx_through_kva
+    assert export.hv_transformer.s_rated_kva_at_40c >= export.s_tx_through_kva
     assert export.hv_transformer.hv_kv == 132.0
     assert "(auto)" in export.hv_transformer.name
     assert arch.power_balance_ok

@@ -31,12 +31,34 @@ stations are grouped into as many circuits as the cable current limit demands.
 _Avoid_: feeder, string (string is reserved for PV DC strings, a concept this tool does not model)
 
 **Station**:
-One MV/LV conversion point on the diagram: a transformer, plus — depending on fleet kind —
-the inverters or PCS units behind it. The generation or storage equipment behind a station is
-accounted for through the fleet's aggregate power rather than as a thing of its own, so a
-station's identity in this project is carried by its transformer.
+One MV/LV conversion point on the diagram: a transformer station, plus — depending on fleet
+kind — the inverters or PCS units behind it. The generation or storage equipment behind a
+station is accounted for through the fleet's aggregate power rather than as a thing of its
+own, so a station's identity in this project is carried by the transformer station it names.
+A station is the instance drawn on the canvas; the transformer station is the product it
+names, and the two are never the same word.
 _Avoid_: substation (substation refers to the shared HV/MV transformer block, a different
-node on the diagram), MV/LV transformer
+node on the diagram), MV/LV transformer, transformer station (that is the product, not the
+node)
+
+**Transformer station**:
+A real MV/LV product a supplier sells, identified the way a quote identifies it, and the unit
+a station catalogue entry describes. It is the whole enclosure — the transformer, its MV
+switchgear, its control cabinet and its UPS — but only the transformer's own figures are read
+by the sizing engine; the rest is recorded and shown. One catalogue entry per model number,
+so two ratings of the same physical enclosure are two entries, not one entry with variants.
+_Avoid_: MVS, medium-voltage substation (the supplier's word for it, and it collides with
+substation), station transformer, MV/LV transformer, station (that is the node on the
+diagram)
+
+**AC power at ambient**:
+The rated apparent power of a transformer station, which is only meaningful alongside the
+ambient temperature it was measured at. Suppliers publish a single figure and usually leave
+the temperature implicit; this project makes it explicit, holding a rating per ambient and
+never interpolating between them. A design asking for an ambient the entry does not publish
+is warned and falls back to the figure for the nearest published ambient at or above it — a
+hotter rating is a lower one, so the station is understated rather than invented.
+_Avoid_: rated power, nameplate rating (both drop the temperature, which is the whole point)
 
 **Technology**:
 The set of fleet kinds a design is permitted to contain — `pv`, `bess` or `hybrid` — declared
@@ -139,9 +161,15 @@ _Avoid_: stored energy, capacity
 **Simulated parameter / typed parameter**:
 The two tiers every catalogue parameter falls into, and the distinction the catalogue is built
 around. A **simulated** parameter is one the sizing engine reads — nominal energy, PCS rating
-and LV voltage, discharge duration, auxiliary draw. A **typed** parameter is structured,
-stored and shown, but never computed with: cell chemistry, dimensions, ingress protection,
-the operating envelope. Both are transcribed from a datasheet with equal care; only one of
-them can change a number in a design review. There is no third, free-form tier — a datasheet
-row that fits neither is not stored at all.
+and LV voltage, discharge duration, auxiliary draw, AC power at ambient. A **typed** parameter
+is structured, stored and shown, but never computed with: cell chemistry, dimensions, ingress
+protection, the operating envelope, a ring main unit's protection functions. Both are
+transcribed from a datasheet with equal care; only one of them can change a number in a design
+review.
+
+A typed parameter is defined by never being computed with, not by being numeric. A datasheet
+row whose value is a set or an alternative rather than a number — the protection functions a
+relay implements, the switchgear units on offer — is typed and transcribed verbatim, one row
+to one field. What the tiers exclude is free-form prose, not non-numeric fact: there is no
+third tier, and a datasheet row that will not survive verbatim transcription is not stored.
 _Avoid_: display field, metadata (both blur the point, which is what the engine reads)

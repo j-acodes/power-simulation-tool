@@ -98,6 +98,11 @@ export interface RuleSettings {
    *  solutions paired with every drawn BESS station's own station
    *  transformer; unset means the energy gate does not apply. */
   discharge_hours?: number
+  /** The ambient a design sizes its transformer stations against — see
+   *  ADR-0004 and CONTEXT.md's "AC power at ambient" entry. A fixed choice
+   *  (never a free number): unset means 40, matching every design saved
+   *  before this setting existed. */
+  ambient_temp_c?: 30 | 40
 }
 
 export interface DiagramSettings {
@@ -264,7 +269,11 @@ export interface SolveResponse {
 export interface TransformerInfo {
   key: string
   display_name: string
-  s_rated_kva: number
+  s_rated_kva_at_40c: number
+  /** `null` means the entry publishes no 30C figure — see ADR-0004 and
+   *  CONTEXT.md's "AC power at ambient" entry; the design falls back to the
+   *  40C figure and is warned. */
+  s_rated_kva_at_30c: number | null
   hv_kv: number | null
   lv_kv: number | null
   brand: string | null
@@ -273,12 +282,49 @@ export interface TransformerInfo {
   p0_kw: number
   i0_percent: number
   /** Typed parameters (never computed with) — see CONTEXT.md's "Simulated
-   *  parameter / typed parameter" entry. Unset for every PV transformer and
-   *  for the placeholder BESS station transformers. */
+   *  parameter / typed parameter" entry. `null` means the datasheet is
+   *  silent on that field, not that the value is zero. Unset for every PV
+   *  transformer, which has no transcribed datasheet behind it. */
   model: string | null
   vector_group: string | null
   cooling: string | null
   datasheet_url: string | null
+  mv_kv_min: number | null
+  mv_kv_max: number | null
+  lv_winding_count: number
+  insulation_level: string | null
+  f_nominal: string | null
+  uk_tolerance_pct: number | null
+  winding_material_mv: string | null
+  winding_material_lv: string | null
+  ip_rating_transformer: string | null
+  ip_rating_enclosure: string | null
+  rmu_kv_min: number | null
+  rmu_kv_max: number | null
+  rmu_rated_current_a: number | null
+  rmu_units: string | null
+  rmu_relay_protection: string | null
+  rmu_short_time_withstand: string | null
+  cabinet_protection: string | null
+  surge_protection: string | null
+  ac_insulation_detection: string | null
+  cabinet_temp_control: string | null
+  ups: string | null
+  width_mm: number | null
+  height_mm: number | null
+  depth_mm: number | null
+  weight_kg: number | null
+  cable_entry: string | null
+  corrosion_class: string | null
+  temp_min_c: number | null
+  temp_max_c: number | null
+  humidity_min_pct: number | null
+  humidity_max_pct: number | null
+  altitude_max_m: number | null
+  communication: string | null
+  standards: string | null
+  datasheet_version: string | null
+  preliminary: boolean
   /** BESS solution key -> containers per station: the solutions this station
    *  transformer is sold with. Always empty for a PV transformer. */
   paired_solutions: Record<string, number>

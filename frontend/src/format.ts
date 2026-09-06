@@ -17,6 +17,17 @@ export function powerFactor(pKw: number, qKvar: number): number {
   return s > 0 ? pKw / s : 1
 }
 
+/** A transformer station's rating at both ambients it can publish — see
+ * ADR-0004 and CONTEXT.md's "AC power at ambient" entry. Catalogue views show
+ * both slots always, marking the 30 °C one "not published" rather than
+ * omitting it, so a missing figure reads as a gap in the datasheet rather
+ * than as the entry never having one. */
+export function ratingAtAmbients(tx: { s_rated_kva_at_40c: number; s_rated_kva_at_30c: number | null }): string {
+  const at40 = `${fmt(tx.s_rated_kva_at_40c, 0)} kVA @ 40 °C`
+  const at30 = tx.s_rated_kva_at_30c != null ? `${fmt(tx.s_rated_kva_at_30c, 0)} kVA @ 30 °C` : 'not published @ 30 °C'
+  return `${at40} / ${at30}`
+}
+
 /** Mirrors Python's "%g" formatting closely enough for the clean tier voltages
  * this app deals with (0.8, 20, 132, ...) — used to key into the catalogue's
  * voltage-class-grouped cable list. */

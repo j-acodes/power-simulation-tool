@@ -256,7 +256,7 @@ def test_custom_station_transformer_accepted_and_checked():
     }
     assert validate_graph(diagram, db) == []
     inputs = graph_to_inputs(diagram, db)
-    assert inputs.branches[0].circuits[0][0].s_rated_kva == 3000.0
+    assert inputs.branches[0].circuits[0][0].s_rated_kva_at_40c == 3000.0
 
     # uk% below the resistive share implied by Pk: the loss model rejects it.
     diagram["nodes"][2]["props"]["uk_percent"] = 0.5
@@ -335,6 +335,40 @@ def test_supported_durations_is_empty_for_an_unpaired_transformer():
     diagram = _minimal()
     diagram["nodes"][2]["props"] = _bess_station_props(model="GENERIC_BESS_TX_1750_LV100")
     from powertool.graph import _parse_structure
+    parsed_nodes, _ = _parse_structure(diagram, [])
+    assert supported_durations(parsed_nodes, db) == []
+
+
+def test_the_0_5c_and_1c_station_transformers_offer_different_durations():
+    # This is the behaviour the whole 0.5 C distinction exists for: the
+    # MVS7080-LS is paired only with the 2 h solution, the MVS7400-LS only
+    # with the 4 h solution.
+    from powertool.graph import _parse_structure
+
+    diagram = _minimal()
+    diagram["nodes"][2]["props"] = _bess_station_props(
+        model="SUNGROW_MVS7080_LS", solution="sungrow-st6680ux-2h")
+    parsed_nodes, _ = _parse_structure(diagram, [])
+    assert supported_durations(parsed_nodes, db) == [2.0]
+
+    diagram = _minimal()
+    diagram["nodes"][2]["props"] = _bess_station_props(
+        model="SUNGROW_MVS7400_LS", solution="sungrow-st6900ux-4h")
+    parsed_nodes, _ = _parse_structure(diagram, [])
+    assert supported_durations(parsed_nodes, db) == [4.0]
+
+
+def test_mixing_the_0_5c_and_1c_stations_has_no_common_duration():
+    # supported_durations is documented to return empty when two drawn
+    # stations' transformers share no duration in common.
+    from powertool.graph import _parse_structure
+
+    diagram = _minimal()
+    diagram["nodes"][2]["props"] = _bess_station_props(
+        model="SUNGROW_MVS7080_LS", solution="sungrow-st6680ux-2h")
+    diagram["nodes"].append(_node(
+        "s2", "station", mode="catalogue", model="SUNGROW_MVS7400_LS",
+        fleet_kind="bess", bess_solution="sungrow-st6900ux-4h"))
     parsed_nodes, _ = _parse_structure(diagram, [])
     assert supported_durations(parsed_nodes, db) == []
 
@@ -461,7 +495,7 @@ def test_graph_to_inputs_round_trip_is_positional():
     # outward from the busbar. Nothing is sorted or regrouped.
     branch = inputs.branches[0]
     assert branch.station_ids == [["a1"], ["b1", "b2"]]
-    assert [[tx.s_rated_kva for tx in c] for c in branch.circuits] == \
+    assert [[tx.s_rated_kva_at_40c for tx in c] for c in branch.circuits] == \
            [[3300], [9000, 3300]]
     assert branch.segment_edge_ids == {
         (1, 1): "e_a1", (2, 1): "e_b1", (2, 2): "e_b2"}
@@ -509,6 +543,42 @@ def test_map_results_keys_every_drawn_element():
     # No 132 kV cables in the catalogue yet: the export span is reported unsized.
     assert results["edges"]["e_exp"]["sized"] is False
     assert any(w["code"] == "hv_cable_not_sized" for w in results["warnings"])
+
+
+def test_absent_ambient_setting_behaves_as_40c():
+    # No settings.rules.ambient_temp_c at all — every design saved before this
+    # setting existed — must resolve exactly the 40C figure it always did.
+    diagram = _minimal()
+    assert "ambient_temp_c" not in diagram["settings"]["rules"]
+    inputs = graph_to_inputs(diagram, db)
+    assert inputs.ambient_c == 40.0
+
+    from backend.solve import solve_diagram
+    result = solve_diagram(diagram, db)
+    assert result["issues"] == []
+    assert not any(w["code"] == "ambient_rating_not_published" for w in result["results"]["warnings"])
+    tx = db.transformer("HUAWEI_JUPITER3000")
+    assert result["results"]["nodes"]["s1"]["s_rated_kva"] == tx.s_rated_kva_at_40c
+
+
+def test_ambient_30_falls_back_to_40_with_a_warning_and_still_solves():
+    # HUAWEI_JUPITER3000 (the station _minimal() draws) publishes no 30C
+    # figure — a design asking for 30C must still solve, using the nearest
+    # published ambient at or above it (40C), with a warning naming the gap.
+    diagram = _minimal()
+    diagram["settings"]["rules"]["ambient_temp_c"] = 30
+    assert validate_graph(diagram, db) == []  # a warning, not a blocking issue
+    inputs = graph_to_inputs(diagram, db)
+    assert inputs.ambient_c == 30.0
+
+    from backend.solve import solve_diagram
+    result = solve_diagram(diagram, db)
+    assert result["issues"] == []
+    warnings = result["results"]["warnings"]
+    assert any(w["code"] == "ambient_rating_not_published" for w in warnings)
+    tx = db.transformer("HUAWEI_JUPITER3000")
+    assert tx.s_rated_kva_at_30c is None  # the entry this fallback exercises
+    assert result["results"]["nodes"]["s1"]["s_rated_kva"] == tx.s_rated_kva_at_40c
 
 
 def test_mv_interconnection_sizes_the_drawn_export_run():
@@ -669,7 +739,7 @@ def test_golden_45mw_example_drawn_equals_the_auto_path():
     stage1, layout, arch = _auto_reference()
     # Anchor the fixture: this is the arrangement the auto path produces today.
     assert layout.circuit_sizes == [2, 2, 2, 1, 1]
-    assert [[p.transformer.s_rated_kva for p in c] for c in layout.circuit_plans] == \
+    assert [[p.transformer.s_rated_kva_at_40c for p in c] for c in layout.circuit_plans] == \
            [[9000, 3300], [9000, 3300], [9000, 3300], [9000], [9000]]
 
     diagram, station_ids, edge_ids = _drawn_example(layout)
@@ -726,7 +796,7 @@ def test_golden_45mw_example_drawn_equals_the_auto_path():
             assert drawn["loading"] == station.loading
 
     # The auto-sized MV/HV transformer, on the drawn block.
-    assert results["nodes"]["hv"]["s_rated_kva"] == arch.export.hv_transformer.s_rated_kva
+    assert results["nodes"]["hv"]["s_rated_kva"] == arch.export.hv_transformer.s_rated_kva_at_40c
     assert results["nodes"]["hv"]["dp_kw"] == arch.export.dp_tx_kw
     assert results["nodes"]["poc"]["p_target_kw"] == P_POC_KW
     assert math.isclose(results["nodes"]["bus"]["p_kw"],

@@ -124,7 +124,8 @@ class SolveResponse(BaseModel):
 class TransformerInfo(BaseModel):
     key: str
     display_name: str
-    s_rated_kva: float
+    s_rated_kva_at_40c: float
+    s_rated_kva_at_30c: float | None = None
     hv_kv: float | None
     lv_kv: float | None
     brand: str | None
@@ -139,6 +140,42 @@ class TransformerInfo(BaseModel):
     vector_group: str | None = None
     cooling: str | None = None
     datasheet_url: str | None = None
+    mv_kv_min: float | None = None
+    mv_kv_max: float | None = None
+    lv_winding_count: int = 1
+    insulation_level: str | None = None
+    f_nominal: str | None = None
+    uk_tolerance_pct: float | None = None
+    winding_material_mv: str | None = None
+    winding_material_lv: str | None = None
+    ip_rating_transformer: str | None = None
+    ip_rating_enclosure: str | None = None
+    rmu_kv_min: float | None = None
+    rmu_kv_max: float | None = None
+    rmu_rated_current_a: float | None = None
+    rmu_units: str | None = None
+    rmu_relay_protection: str | None = None
+    rmu_short_time_withstand: str | None = None
+    cabinet_protection: str | None = None
+    surge_protection: str | None = None
+    ac_insulation_detection: str | None = None
+    cabinet_temp_control: str | None = None
+    ups: str | None = None
+    width_mm: float | None = None
+    height_mm: float | None = None
+    depth_mm: float | None = None
+    weight_kg: float | None = None
+    cable_entry: str | None = None
+    corrosion_class: str | None = None
+    temp_min_c: float | None = None
+    temp_max_c: float | None = None
+    humidity_min_pct: float | None = None
+    humidity_max_pct: float | None = None
+    altitude_max_m: float | None = None
+    communication: str | None = None
+    standards: str | None = None
+    datasheet_version: str | None = None
+    preliminary: bool = False
     # BESS solution key -> containers per station: the solutions this station
     # transformer is sold with (data/bess_transformers.yaml's paired_solutions).
     # Always empty for a PV transformer, which has no pairing to carry.
@@ -260,11 +297,45 @@ class ProjectDetail(BaseModel):
     designs: list[DesignSummary]
 
 
+class RuleSettings(BaseModel):
+    """The one rule setting with a genuinely closed set of legal values in a
+    design's ``settings.rules`` — see ADR-0004 and CONTEXT.md's "AC power at
+    ambient" entry. Every other rule is a free number the frontend renders
+    with a plain number input; a value outside {30, 40} is never something
+    the sizing engine's transformer catalogue could honor, so it is rejected
+    here rather than accepted and silently mishandled downstream.
+
+    Not a model of the whole ``rules`` dict — every other field stays
+    untyped JSON on ``payload``, exactly as before this setting existed.
+    """
+
+    ambient_temp_c: Literal[30.0, 40.0] = 40.0
+
+
+def _validate_rule_settings(payload: dict) -> None:
+    """Raise (a Pydantic ``ValidationError``) if a design payload's
+    ``settings.rules.ambient_temp_c`` is set to anything but 30 or 40.
+
+    A payload silent on the field, or shaped unexpectedly (not yet a valid
+    diagram at all), is left alone here — that is the engine's own
+    ``validate_graph`` job, not this one's.
+    """
+    settings = payload.get("settings") if isinstance(payload, dict) else None
+    rules = settings.get("rules") if isinstance(settings, dict) else None
+    if isinstance(rules, dict) and "ambient_temp_c" in rules:
+        RuleSettings(ambient_temp_c=rules["ambient_temp_c"])
+
+
 class DesignCreate(BaseModel):
     name: str
     technology: Technology
     payload: dict
     last_edited_by: str
+
+    @model_validator(mode="after")
+    def _ambient_temp_c_is_legal(self) -> "DesignCreate":
+        _validate_rule_settings(self.payload)
+        return self
 
 
 class DesignFull(BaseModel):
@@ -290,3 +361,8 @@ class DesignUpdate(BaseModel):
     payload: dict
     version: int
     last_edited_by: str
+
+    @model_validator(mode="after")
+    def _ambient_temp_c_is_legal(self) -> "DesignUpdate":
+        _validate_rule_settings(self.payload)
+        return self

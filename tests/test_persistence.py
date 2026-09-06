@@ -5,10 +5,22 @@ injected by ``tests/conftest.py`` — never touches a real ``powertool.db``.
 
 import pytest
 from fastapi.testclient import TestClient
+from pydantic import ValidationError
 
 from backend.main import app
+from backend.schemas import RuleSettings
 
 client = TestClient(app)
+
+
+def test_rule_settings_rejects_an_ambient_that_is_not_30_or_40():
+    """ADR-0004: ambient_temp_c is a fixed choice, not a free number — see
+    the API-level rejection test below for the same rule enforced on a
+    design payload."""
+    RuleSettings(ambient_temp_c=30)
+    RuleSettings(ambient_temp_c=40)
+    with pytest.raises(ValidationError):
+        RuleSettings(ambient_temp_c=35)
 
 SAMPLE_PAYLOAD = {"schema_version": 1, "nodes": [], "edges": []}
 
@@ -89,6 +101,27 @@ def test_design_create_requires_valid_technology():
     for technology in ("pv", "bess", "hybrid"):
         design = _create_design(project["id"], f"Design {technology}", technology)
         assert design["technology"] == technology
+
+
+def test_design_create_rejects_an_unpublished_ambient_setting():
+    """ADR-0004: ambient_temp_c has exactly two legal values (30, 40) — a
+    design payload asking for anything else is rejected at the Pydantic
+    layer (backend.schemas.RuleSettings), not silently accepted."""
+    project = _create_project("Plant Ambient")
+    bad_payload = {**SAMPLE_PAYLOAD, "settings": {"rules": {"ambient_temp_c": 35}}}
+
+    resp = client.post(
+        f"/api/projects/{project['id']}/designs",
+        json={"name": "x", "technology": "pv", "payload": bad_payload, "last_edited_by": "Alice"},
+    )
+    assert resp.status_code == 422
+
+    ok_payload = {**SAMPLE_PAYLOAD, "settings": {"rules": {"ambient_temp_c": 30}}}
+    resp = client.post(
+        f"/api/projects/{project['id']}/designs",
+        json={"name": "y", "technology": "pv", "payload": ok_payload, "last_edited_by": "Alice"},
+    )
+    assert resp.status_code == 201
 
 
 def test_project_delete_cascades_designs():
