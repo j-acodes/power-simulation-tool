@@ -16,8 +16,9 @@ degenerate branch that leaked so much as one aux kilowatt into the shared bus
 would show up here, and nowhere else.
 """
 
-import pytest
 import math
+
+import pytest
 
 from fastapi.testclient import TestClient
 

@@ -429,7 +429,6 @@ def size_circuits(
     max_parallel: int = 12,
     segment_lengths: dict[tuple[int, int], float] | None = None,
     segment_candidates: dict[tuple[int, int], list[Cable]] | None = None,
-    segment_selections: dict[tuple[int, int], CableSelection] | None = None,
 ) -> list[CircuitResult]:
     """Size every cable segment of every MV circuit in the layout.
 
@@ -505,29 +504,14 @@ def size_circuits(
             if segment_candidates:
                 candidates = segment_candidates.get((c_idx, k), cable_candidates)
 
-            sel = (segment_selections[(c_idx, k)]
-                   if segment_selections and (c_idx, k) in segment_selections
-                   else select_cable(
-                       candidates, s, layout.v_mv_kv, length_km, cos_phi, sin_phi,
-                       max_utilization=max_utilization,
-                       max_loss_percent=(max_loss_percent_base
-                                         + max_loss_percent_per_km * length_km),
-                       max_vdrop_percent=max_vdrop_percent,
-                       max_parallel=max_parallel,
-                   ))
-            if segment_selections and (c_idx, k) in segment_selections:
-                i_circuit = current_a(s, layout.v_mv_kv) / sel.n_parallel
-                loss_pct = (dp := 3.0 * i_circuit * i_circuit
-                            * sel.cable.r_ohm_per_km * length_km
-                            * sel.n_parallel / 1000.0)
-                loss_pct = dp / (s * cos_phi) * 100.0 if s * cos_phi > 0 else math.inf
-                dv_ll = math.sqrt(3) * i_circuit * (
-                    sel.cable.r_ohm_per_km * length_km * cos_phi
-                    + sel.cable.x_ohm_per_km * length_km * sin_phi)
-                sel = replace(sel, current_per_circuit_a=i_circuit,
-                              utilization=i_circuit / sel.cable.rated_current_a,
-                              loss_percent=loss_pct,
-                              vdrop_percent=dv_ll / (layout.v_mv_kv * 1000.0) * 100.0)
+            sel = select_cable(
+                candidates, s, layout.v_mv_kv, length_km, cos_phi, sin_phi,
+                max_utilization=max_utilization,
+                max_loss_percent=(max_loss_percent_base
+                                  + max_loss_percent_per_km * length_km),
+                max_vdrop_percent=max_vdrop_percent,
+                max_parallel=max_parallel,
+            )
 
             # Same 1/n arithmetic as the Stage-1 solver (sizing._cable_contribution):
             # n parallel circuits share the current, so series losses scale as 1/n
@@ -653,7 +637,6 @@ def size_branch(
     max_parallel: int = 12,
     segment_lengths: dict[tuple[int, int], float] | None = None,
     segment_candidates: dict[tuple[int, int], list[Cable]] | None = None,
-    segment_selections: dict[tuple[int, int], CableSelection] | None = None,
     aux_p_kw: float = 0.0,
     aux_q_kvar: float = 0.0,
 ) -> BranchArchitecture:
@@ -672,7 +655,6 @@ def size_branch(
         max_parallel=max_parallel,
         segment_lengths=segment_lengths,
         segment_candidates=segment_candidates,
-        segment_selections=segment_selections,
     )
     return BranchArchitecture(
         layout=layout,
@@ -698,10 +680,9 @@ def recompute_branch(
 ) -> BranchArchitecture:
     """Rebuild one branch's complete detail rows at an operating point.
 
-    The layout (including drawn circuit and station order) is retained.  The
-    existing cable selections are supplied as one-element candidate lists so
-    this parity path cannot silently change a discrete drawing decision while
-    the continuous operating point is being recomputed.
+    The layout (including drawn circuit and station order) is retained. Auto
+    sections are reselected from the original catalogue at each operating
+    point; forced sections retain their original one-element restrictions.
     """
     p_inv = stage1.p_inv_kw * correction_factor
     q_inv = stage1.q_inv_kvar * (
@@ -737,13 +718,6 @@ def recompute_branch(
                     <= branch.layout.max_loading + 1e-9),
         max_loading=branch.layout.max_loading,
     )
-    frozen: dict[tuple[int, int], list[Cable]] = {}
-    selections: dict[tuple[int, int], CableSelection] = {}
-    for circuit in branch.circuits:
-        for segment in circuit.segments:
-            if segment.selection is not None:
-                frozen[(circuit.index, segment.index)] = [segment.selection.cable]
-                selections[(circuit.index, segment.index)] = segment.selection
     return size_branch(
         layout, branch.cable_candidates or [],
         max_utilization=branch.max_utilization,
@@ -752,8 +726,7 @@ def recompute_branch(
         max_vdrop_percent=branch.max_vdrop_percent,
         max_parallel=branch.max_parallel,
         segment_lengths=branch.segment_lengths,
-        segment_candidates=frozen,
-        segment_selections=selections,
+        segment_candidates=branch.segment_candidates,
         aux_p_kw=branch.aux_p_kw,
         aux_q_kvar=branch.aux_q_kvar,
     )
@@ -1175,24 +1148,11 @@ def size_plant(
                     k_q if reactive_target else None,
                 )
             except StationOverloadError:
-                # A physically overloaded station can no longer supply the
-                # requested P/Q duty, but remains a valid design result: the
-                # loading/energy gates must be shown to the engineer.
-                if final_probe is not None:
-                    break
-                raise
-            recomputed = size_branch(
-                recomputed.layout, recomputed.cable_candidates or [],
-                max_utilization=recomputed.max_utilization,
-                max_loss_percent_base=recomputed.max_loss_percent_base,
-                max_loss_percent_per_km=recomputed.max_loss_percent_per_km,
-                max_vdrop_percent=recomputed.max_vdrop_percent,
-                max_parallel=recomputed.max_parallel,
-                segment_lengths=recomputed.segment_lengths,
-                segment_candidates=recomputed.segment_candidates,
-                aux_p_kw=recomputed.aux_p_kw,
-                aux_q_kvar=recomputed.aux_q_kvar,
-            )
+                # Keep the existing diagnostic result for a station-only
+                # overload, but never mask a forced cable crossing.
+                if final_probe is None or base_branch.segment_candidates:
+                    raise
+                break
             probe = size_plant(
                 [recomputed], stage1s,
                 max_utilization=max_utilization,
@@ -1210,7 +1170,7 @@ def size_plant(
             final_p, final_q = probe.p_poc_delivered_kw, probe.q_poc_delivered_kvar
             p_short = target_p - final_p
             q_short = target_q - final_q
-            if p_short <= 0.0 and (not reactive_target or abs(q_short) <= 1e-7):
+            if p_short <= 1e-5 and (not reactive_target or abs(q_short) <= 1e-7):
                 break
             if final_p <= 0:
                 raise ValueError("Active POC duty cannot be met by the fleet.")
@@ -1233,7 +1193,7 @@ def size_plant(
         assert final_probe is not None
         refinement = BranchRefinement(
             p_poc_target_kw=target_p,
-            p_poc_delivered_kw=final_probe.p_poc_delivered_kw,
+            p_poc_delivered_kw=p,
             correction_factor=k_p,
             p_inv_refined_kw=stage1s[0].p_inv_kw * k_p,
             q_inv_refined_kvar=stage1s[0].q_inv_kvar * (k_q if reactive_target else k_p),
@@ -1257,24 +1217,13 @@ def size_plant(
         final_branches = branches
         final_p_delivered: list[float] = []
         final_q_delivered: list[float] = []
+        _, _, unrefined_p_delivered, _ = _delivered_with_frozen_cables(
+            branches, export, [1.0] * len(branches)
+        )
         for _ in range(_MAX_REFINE_ITERATIONS):
             recomputed_branches = []
             for branch, stage1, p_factor, q_factor in zip(branches, stage1s, kp, kq):
                 recomputed = recompute_branch(branch, stage1, p_factor, q_factor)
-                # Auto selections are re-evaluated at the corrected operating
-                # point; forced sections remain constrained by their candidate.
-                recomputed = size_branch(
-                    recomputed.layout, recomputed.cable_candidates or [],
-                    max_utilization=recomputed.max_utilization,
-                    max_loss_percent_base=recomputed.max_loss_percent_base,
-                    max_loss_percent_per_km=recomputed.max_loss_percent_per_km,
-                    max_vdrop_percent=recomputed.max_vdrop_percent,
-                    max_parallel=recomputed.max_parallel,
-                    segment_lengths=recomputed.segment_lengths,
-                    segment_candidates=recomputed.segment_candidates,
-                    aux_p_kw=recomputed.aux_p_kw,
-                    aux_q_kvar=recomputed.aux_q_kvar,
-                )
                 recomputed_branches.append(recomputed)
             probe = size_plant(
                 recomputed_branches, stage1s,
@@ -1323,7 +1272,7 @@ def size_plant(
         refinements = [
             BranchRefinement(
                 p_poc_target_kw=target,
-                p_poc_delivered_kw=final_p_delivered[i],
+                p_poc_delivered_kw=unrefined_p_delivered[i],
                 correction_factor=kp[i],
                 p_inv_refined_kw=stage1s[i].p_inv_kw * kp[i],
                 q_inv_refined_kvar=stage1s[i].q_inv_kvar * kq[i],

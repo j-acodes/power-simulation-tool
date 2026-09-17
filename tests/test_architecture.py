@@ -864,6 +864,43 @@ def test_recompute_operating_point_updates_uniform_loading_and_current():
         / selection.n_parallel)
 
 
+def test_refinement_reselects_auto_cable_from_original_catalogue():
+    stage1 = _stage1(p_inv_kw=1_000.0, q_inv_kvar=200.0)
+    layout = arrange_plant(
+        stage1, [(_tx_2500(), 1)], max_circuit_current_a=10_000.0,
+        trunk_length_km=10.0, spacing_km=0.35, v_mv_kv=20.0,
+    )
+    catalogue = _catalogue()
+    initial = size_branch(layout, catalogue, max_parallel=1)
+    assert initial.circuits[0].segments[0].cable_label == "Al_3x1x95_20kV"
+
+    refined = size_architecture(
+        layout, stage1, catalogue, max_parallel=1, p_poc_target_kw=2_200.0,
+        q_poc_target_kvar=0.0,
+    )
+    assert refined.branch_refinements[0].p_poc_delivered_kw == pytest.approx(
+        initial.p_busbar_kw
+    )
+    assert refined.branch_refinements[0].p_poc_refined_delivered_kw >= 2_200.0 - 1e-5
+    assert refined.branches[0].circuits[0].segments[0].cable_label == "Al_3x1x400_20kV"
+
+
+def test_forced_cable_crossing_after_refinement_is_not_swallowed():
+    stage1 = _stage1(p_inv_kw=1_000.0, q_inv_kvar=200.0)
+    layout = arrange_plant(
+        stage1, [(_tx_2500(), 1)], max_circuit_current_a=10_000.0,
+        trunk_length_km=10.0, spacing_km=0.35, v_mv_kv=20.0,
+    )
+    cable = _catalogue()[0]
+    branch = size_branch(layout, [cable], max_parallel=1,
+                         segment_candidates={(1, 1): [cable]})
+    with pytest.raises(ValueError, match="No cable can carry"):
+        size_plant(
+            [branch], [stage1], max_parallel=1, p_poc_targets_kw=[2_200.0],
+            q_poc_targets_kvar=[0.0],
+        )
+
+
 def test_single_branch_size_plant_matches_the_size_architecture_shim():
     # The shim (size_architecture) wraps its one branch and one Stage-1 result
     # into the list-shaped size_plant call; calling size_plant directly with

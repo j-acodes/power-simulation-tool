@@ -90,7 +90,7 @@
             "n_stations": 1,
             "p_inv_kw": 12792.273308527483,
             "p_inv_refined_kw": 12675.533449610335,
-            "p_poc_delivered_kw": 12000.000000101574,
+            "p_poc_delivered_kw": 12151.839358448358,
             "p_poc_refined_delivered_kw": 12000.000000101574,
             "p_poc_target_kw": 12000.0,
             "pf_inv": 0.8589109563335425,
@@ -238,7 +238,7 @@
             "n_stations": 1,
             "p_inv_kw": 3158.7483821686233,
             "p_inv_refined_kw": 3090.056735361821,
-            "p_poc_delivered_kw": 3000.0000001117196,
+            "p_poc_delivered_kw": 3067.210228592961,
             "p_poc_refined_delivered_kw": 3000.0000001117196,
             "p_poc_target_kw": 3000.0,
             "pf_inv": 0.9320535258114038,
@@ -380,7 +380,7 @@
             "n_stations": 1,
             "p_inv_kw": 3169.426283154361,
             "p_inv_refined_kw": 3102.641151541793,
-            "p_poc_delivered_kw": 3000.000000131218,
+            "p_poc_delivered_kw": 3065.003165859253,
             "p_poc_refined_delivered_kw": 3000.000000131218,
             "p_poc_target_kw": 3000.0,
             "pf_inv": 0.9228708194978767,
@@ -528,7 +528,7 @@
             "n_stations": 1,
             "p_inv_kw": 3158.7483821686233,
             "p_inv_refined_kw": 3090.056735361821,
-            "p_poc_delivered_kw": 3000.0000001117196,
+            "p_poc_delivered_kw": 3067.210228592961,
             "p_poc_refined_delivered_kw": 3000.0000001117196,
             "p_poc_target_kw": 3000.0,
             "pf_inv": 0.9320535258114038,
@@ -669,7 +669,7 @@
             "n_stations": 1,
             "p_inv_kw": 3169.426283154361,
             "p_inv_refined_kw": 3102.641151541793,
-            "p_poc_delivered_kw": 3000.000000131218,
+            "p_poc_delivered_kw": 3065.003165859253,
             "p_poc_refined_delivered_kw": 3000.000000131218,
             "p_poc_target_kw": 3000.0,
             "pf_inv": 0.9228708194978767,
@@ -869,7 +869,7 @@
             "n_stations": 1,
             "p_inv_kw": 3163.6293199563147,
             "p_inv_refined_kw": 3095.690578427064,
-            "p_poc_delivered_kw": 3000.000007673424,
+            "p_poc_delivered_kw": 3066.2663347130856,
             "p_poc_refined_delivered_kw": 3000.000007673424,
             "p_poc_target_kw": 3000.0,
             "pf_inv": 0.9275499479007377,
@@ -898,7 +898,7 @@
             "n_stations": 1,
             "p_inv_kw": 3159.4437839475777,
             "p_inv_refined_kw": 3090.139795146409,
-            "p_poc_delivered_kw": 3000.0000089628106,
+            "p_poc_delivered_kw": 3067.4760280624605,
             "p_poc_refined_delivered_kw": 3000.0000089628106,
             "p_poc_target_kw": 3000.0,
             "pf_inv": 0.9223839554986534,
@@ -955,15 +955,145 @@
     }
   },
   "min_12mw_pf090": {
-    "issues": [
-      {
-        "code": "engine_error",
-        "edge_id": null,
-        "message": "P/Q refinement did not converge within 50 iterations (11,883.0 kW, 5,451.7 kvar delivered; targets 12,000.0 kW, 5,811.9 kvar).",
-        "node_id": null
-      }
-    ],
-    "results": null
+    "issues": [],
+    "results": {
+      "edges": {
+        "e_t1": {
+          "cable": "AL_300_20kV",
+          "cable_label": "Al_3x1x300_20kV",
+          "current_a": 296.1194913108316,
+          "dp_kw": 26.93737056282184,
+          "dq_series_kvar": 21.04482075220457,
+          "forced": false,
+          "length_m": 800.0,
+          "loss_percent": 0.2693730931485823,
+          "n_parallel": 1,
+          "p_kw": 10000.02273722401,
+          "q_charging_kvar": 29.440000000000005,
+          "q_kvar": -2285.530357712545,
+          "s_kva": 10257.88008123622,
+          "sized": true,
+          "utilization": 0.7135409429176666,
+          "vdrop_percent": 0.21028997491868376
+        }
+      },
+      "nodes": {
+        "aux": {
+          "kind": "aux",
+          "p_kw": 50.0,
+          "q_kvar": 10.0
+        },
+        "bus": {
+          "circuit_sizes": [
+            1
+          ],
+          "kind": "busbar",
+          "n_circuits": 1,
+          "p_kw": 9973.085366661187,
+          "q_kvar": -2306.5751784647496,
+          "s_kva": 10236.343135349713,
+          "v_kv": 20.0
+        },
+        "poc": {
+          "kind": "poc",
+          "meets_target": false,
+          "p_delivered_kw": 9923.085366661187,
+          "p_refined_delivered_kw": 9923.085366661187,
+          "p_target_kw": 12000.0,
+          "pf_target": 0.9,
+          "q_delivered_kvar": -2316.5751784647496
+        },
+        "s1": {
+          "circuit": 1,
+          "dp_tx_kw": 5090.4525798802915,
+          "dq_tx_kvar": 40378.02182341169,
+          "fleet_kind": "pv",
+          "i_a": 296.1194913108316,
+          "kind": "station",
+          "loading": 12.415963063099506,
+          "model": "3300 kVA - Huawei",
+          "p_lv_kw": 15090.475317104301,
+          "p_mv_kw": 10000.02273722401,
+          "position": 1,
+          "q_lv_kvar": 38092.491465699146,
+          "q_mv_kvar": -2285.530357712545,
+          "s_lv_kva": 40972.67810822837,
+          "s_mv_kva": 10257.88008123622,
+          "s_rated_kva": 3300
+        }
+      },
+      "summary": {
+        "all_current_ok": true,
+        "branches": [
+          {
+            "bess_aux_p_kw": 0.0,
+            "bess_aux_q_kvar": 0.0,
+            "circuit_sizes": [
+              1
+            ],
+            "containers": null,
+            "correction_factor": 1.1659124948062907,
+            "e_delivered_kwh": null,
+            "e_required_kwh": null,
+            "energy_ok": null,
+            "fleet_loading": 12.415963063099506,
+            "kind": "pv",
+            "loading_ok": false,
+            "max_loading": 1.0,
+            "n_circuits": 1,
+            "n_stations": 1,
+            "p_inv_kw": 12943.05995031942,
+            "p_inv_refined_kw": 15090.475317104301,
+            "p_poc_delivered_kw": 11998.245211995738,
+            "p_poc_refined_delivered_kw": 9923.085366661187,
+            "p_poc_target_kw": 12000.0,
+            "pf_inv": 0.7685981703949866,
+            "q_inv_kvar": 10772.973619610975,
+            "q_inv_refined_kvar": 76184.98293139829,
+            "s_fleet_kva": 3300,
+            "s_inv_kva": 16839.826646566067,
+            "s_inv_refined_kva": 77665.14063306384
+          }
+        ],
+        "circuit_sizes": [
+          1
+        ],
+        "correction_factor": 1.1659124948062907,
+        "fleet_loading": 12.415963063099506,
+        "loading_ok": false,
+        "loss_percent_of_p_inv": 33.91139008486238,
+        "max_circuit_current_a": 400.0,
+        "n_circuits": 1,
+        "n_stations": 1,
+        "p_inv_kw": 12943.05995031942,
+        "p_inv_refined_kw": 15090.475317104301,
+        "p_poc_delivered_kw": 9923.085366661187,
+        "p_poc_refined_delivered_kw": 9923.085366661187,
+        "p_poc_target_kw": 12000.0,
+        "pf_inv": 0.7685981703949866,
+        "power_balance_ok": true,
+        "q_inv_kvar": 10772.973619610975,
+        "q_inv_refined_kvar": 76184.98293139829,
+        "q_poc_delivered_kvar": -2316.5751784647496,
+        "s_fleet_kva": 3300,
+        "s_inv_kva": 16839.826646566067,
+        "s_inv_refined_kva": 77665.14063306384,
+        "total_active_loss_kw": 5117.389950443114,
+        "total_cable_loss_kw": 26.93737056282184,
+        "total_transformer_loss_kw": 5090.4525798802915,
+        "v_hv_kv": null,
+        "v_mv_kv": 20.0,
+        "worst_trunk_current_a": 296.1194913108316
+      },
+      "warnings": [
+        {
+          "code": "fleet_overloaded",
+          "edge_id": null,
+          "message": "The drawn stations carry 1242 % of their combined rating \u2014 the required inverter power exceeds the installed station capacity. Add stations or pick bigger units.",
+          "node_id": "bus"
+        }
+      ]
+    }
   },
   "min_3mw_pf095": {
     "issues": [],
@@ -1055,7 +1185,7 @@
             "n_stations": 1,
             "p_inv_kw": 3163.6147359619677,
             "p_inv_refined_kw": 3095.6905706248453,
-            "p_poc_delivered_kw": 3000.000000120448,
+            "p_poc_delivered_kw": 3066.2750813220437,
             "p_poc_refined_delivered_kw": 3000.000000120448,
             "p_poc_target_kw": 3000.0,
             "pf_inv": 0.9278029072188844,
@@ -1325,7 +1455,7 @@
             "n_stations": 1,
             "p_inv_kw": 3113.6147359619677,
             "p_inv_refined_kw": 3044.325232245032,
-            "p_poc_delivered_kw": 3000.0000000992277,
+            "p_poc_delivered_kw": 3067.5547407535582,
             "p_poc_refined_delivered_kw": 3000.0000000992277,
             "p_poc_target_kw": 3000.0,
             "pf_inv": 0.9267582064677732,
@@ -1562,7 +1692,7 @@
               "n_stations": 3,
               "p_inv_kw": 10525.613253242222,
               "p_inv_refined_kw": 10431.374489306918,
-              "p_poc_delivered_kw": 10000.000000073549,
+              "p_poc_delivered_kw": 10093.175766538361,
               "p_poc_refined_delivered_kw": 10000.000000073549,
               "p_poc_target_kw": 10000.0,
               "pf_inv": 0.8922711988299046,
@@ -2981,7 +3111,7 @@
               "n_stations": 35,
               "p_inv_kw": 123568.68218924828,
               "p_inv_refined_kw": 122371.79608447826,
-              "p_poc_delivered_kw": 120000.000000125,
+              "p_poc_delivered_kw": 121161.34942485957,
               "p_poc_refined_delivered_kw": 120000.000000125,
               "p_poc_target_kw": 120000.0,
               "pf_inv": 0.8882626541572677,
@@ -3641,7 +3771,7 @@
               "n_stations": 14,
               "p_inv_kw": 46499.2497938449,
               "p_inv_refined_kw": 46055.21767211281,
-              "p_poc_delivered_kw": 45000.000000067346,
+              "p_poc_delivered_kw": 45463.1826675573,
               "p_poc_refined_delivered_kw": 45000.000000067346,
               "p_poc_target_kw": 45000.0,
               "pf_inv": 0.8827984679115655,
@@ -4229,7 +4359,7 @@
               "n_stations": 13,
               "p_inv_kw": 46899.27446677646,
               "p_inv_refined_kw": 45821.80744188125,
-              "p_poc_delivered_kw": 45000.000000081716,
+              "p_poc_delivered_kw": 46043.04192601551,
               "p_poc_refined_delivered_kw": 45000.000000081716,
               "p_poc_target_kw": 45000.0,
               "pf_inv": 0.9202903057611068,
