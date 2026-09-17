@@ -9,6 +9,7 @@ the biggest stations sit nearest the substation.
 """
 
 import math
+from dataclasses import replace
 
 import pytest
 
@@ -825,6 +826,42 @@ def test_two_branch_refinement_meets_each_branchs_own_target_with_different_corr
     factor_b = plant.branch_refinements[1].correction_factor
     assert factor_a != pytest.approx(factor_b)
     assert plant.power_balance_ok
+
+
+def test_recompute_operating_point_preserves_complete_branch_details():
+    stage1, layout = _full_plant_inputs()
+    branch = size_branch(layout, _catalogue(), aux_p_kw=120.0, aux_q_kvar=40.0)
+
+    recomputed = architecture.recompute_branch(branch, stage1, 1.0)
+    station = recomputed.circuits[0].stations[0]
+    original = branch.circuits[0].stations[0]
+
+    assert station.p_lv_kw == pytest.approx(original.p_lv_kw)
+    assert station.q_lv_kvar == pytest.approx(original.q_lv_kvar)
+    assert station.s_mv_kva == pytest.approx(original.s_mv_kva)
+    assert recomputed.circuits[0].segments[0].p_kw == pytest.approx(
+        branch.circuits[0].segments[0].p_kw)
+    assert recomputed.circuits[0].segments[0].dp_kw == pytest.approx(
+        branch.circuits[0].segments[0].dp_kw)
+
+
+def test_recompute_operating_point_updates_uniform_loading_and_current():
+    stage1, layout = _full_plant_inputs()
+    layout = replace(layout, max_loading=0.90)
+    branch = size_branch(layout, _catalogue())
+    recomputed = architecture.recompute_branch(branch, stage1, 1.10)
+    fleet_loading = stage1.s_inv_kva * 1.10 / layout.s_fleet_kva
+    station = recomputed.circuits[0].stations[0]
+    assert recomputed.layout.fleet_loading == pytest.approx(fleet_loading)
+    assert station.loading == pytest.approx(fleet_loading)
+    assert recomputed.layout.loading_ok is False
+    plan = recomputed.layout.circuit_plans[0][0]
+    assert plan.i_a == pytest.approx(current_a(station.s_mv_kva, layout.v_mv_kv))
+    selection = recomputed.circuits[0].segments[0].selection
+    assert selection is not None
+    assert selection.current_per_circuit_a == pytest.approx(
+        current_a(recomputed.circuits[0].segments[0].s_kva, layout.v_mv_kv)
+        / selection.n_parallel)
 
 
 def test_single_branch_size_plant_matches_the_size_architecture_shim():

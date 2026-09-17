@@ -22,7 +22,7 @@ convention of the Stage-1 solver is preserved throughout.
 from __future__ import annotations
 
 import math
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 
 from .cable_sizing import CableSelection, select_cable
 from .components import DEFAULT_AMBIENT_C, Cable, Transformer, current_a
@@ -79,6 +79,7 @@ class PlantLayout:
     # — see ADR-0004. Threaded in from the diagram's setting by the caller
     # rather than read from a global constant.
     ambient_c: float = DEFAULT_AMBIENT_C
+    max_loading: float = 1.0
 
     @property
     def n_transformers(self) -> int:
@@ -240,6 +241,7 @@ def arrange_plant(
         fleet_loading=loading,
         loading_ok=loading <= max_loading + 1e-9,
         ambient_c=ambient_c,
+        max_loading=max_loading,
     )
 
 
@@ -336,6 +338,7 @@ def arrange_plant_manual(
         fleet_loading=loading,
         loading_ok=loading <= max_loading + 1e-9,
         ambient_c=ambient_c,
+        max_loading=max_loading,
     )
 
 
@@ -422,6 +425,7 @@ def size_circuits(
     max_parallel: int = 12,
     segment_lengths: dict[tuple[int, int], float] | None = None,
     segment_candidates: dict[tuple[int, int], list[Cable]] | None = None,
+    segment_selections: dict[tuple[int, int], CableSelection] | None = None,
 ) -> list[CircuitResult]:
     """Size every cable segment of every MV circuit in the layout.
 
@@ -497,20 +501,29 @@ def size_circuits(
             if segment_candidates:
                 candidates = segment_candidates.get((c_idx, k), cable_candidates)
 
-            sel = select_cable(
-                candidates,
-                s,
-                layout.v_mv_kv,
-                length_km,
-                cos_phi,
-                sin_phi,
-                max_utilization=max_utilization,
-                max_loss_percent=(
-                    max_loss_percent_base + max_loss_percent_per_km * length_km
-                ),
-                max_vdrop_percent=max_vdrop_percent,
-                max_parallel=max_parallel,
-            )
+            sel = (segment_selections[(c_idx, k)]
+                   if segment_selections and (c_idx, k) in segment_selections
+                   else select_cable(
+                       candidates, s, layout.v_mv_kv, length_km, cos_phi, sin_phi,
+                       max_utilization=max_utilization,
+                       max_loss_percent=(max_loss_percent_base
+                                         + max_loss_percent_per_km * length_km),
+                       max_vdrop_percent=max_vdrop_percent,
+                       max_parallel=max_parallel,
+                   ))
+            if segment_selections and (c_idx, k) in segment_selections:
+                i_circuit = current_a(s, layout.v_mv_kv) / sel.n_parallel
+                loss_pct = (dp := 3.0 * i_circuit * i_circuit
+                            * sel.cable.r_ohm_per_km * length_km
+                            * sel.n_parallel / 1000.0)
+                loss_pct = dp / (s * cos_phi) * 100.0 if s * cos_phi > 0 else math.inf
+                dv_ll = math.sqrt(3) * i_circuit * (
+                    sel.cable.r_ohm_per_km * length_km * cos_phi
+                    + sel.cable.x_ohm_per_km * length_km * sin_phi)
+                sel = replace(sel, current_per_circuit_a=i_circuit,
+                              utilization=i_circuit / sel.cable.rated_current_a,
+                              loss_percent=loss_pct,
+                              vdrop_percent=dv_ll / (layout.v_mv_kv * 1000.0) * 100.0)
 
             # Same 1/n arithmetic as the Stage-1 solver (sizing._cable_contribution):
             # n parallel circuits share the current, so series losses scale as 1/n
@@ -607,6 +620,14 @@ class BranchArchitecture:
     circuits: list[CircuitResult]
     aux_p_kw: float
     aux_q_kvar: float
+    segment_lengths: dict[tuple[int, int], float] | None = None
+    segment_candidates: dict[tuple[int, int], list[Cable]] | None = None
+    cable_candidates: list[Cable] | None = None
+    max_utilization: float = 0.80
+    max_loss_percent_base: float = 1.30
+    max_loss_percent_per_km: float = 0.0
+    max_vdrop_percent: float | None = None
+    max_parallel: int = 12
 
     @property
     def p_busbar_kw(self) -> float:
@@ -628,6 +649,7 @@ def size_branch(
     max_parallel: int = 12,
     segment_lengths: dict[tuple[int, int], float] | None = None,
     segment_candidates: dict[tuple[int, int], list[Cable]] | None = None,
+    segment_selections: dict[tuple[int, int], CableSelection] | None = None,
     aux_p_kw: float = 0.0,
     aux_q_kvar: float = 0.0,
 ) -> BranchArchitecture:
@@ -646,12 +668,87 @@ def size_branch(
         max_parallel=max_parallel,
         segment_lengths=segment_lengths,
         segment_candidates=segment_candidates,
+        segment_selections=segment_selections,
     )
     return BranchArchitecture(
         layout=layout,
         circuits=circuits,
         aux_p_kw=aux_p_kw,
         aux_q_kvar=aux_q_kvar,
+        segment_lengths=segment_lengths,
+        segment_candidates=segment_candidates,
+        cable_candidates=cable_candidates,
+        max_utilization=max_utilization,
+        max_loss_percent_base=max_loss_percent_base,
+        max_loss_percent_per_km=max_loss_percent_per_km,
+        max_vdrop_percent=max_vdrop_percent,
+        max_parallel=max_parallel,
+    )
+
+
+def recompute_branch(
+    branch: BranchArchitecture,
+    stage1: SizingResult,
+    correction_factor: float,
+) -> BranchArchitecture:
+    """Rebuild one branch's complete detail rows at an operating point.
+
+    The layout (including drawn circuit and station order) is retained.  The
+    existing cable selections are supplied as one-element candidate lists so
+    this parity path cannot silently change a discrete drawing decision while
+    the continuous operating point is being recomputed.
+    """
+    p_inv = stage1.p_inv_kw * correction_factor
+    q_inv = stage1.q_inv_kvar * correction_factor
+    s_fleet = branch.layout.s_fleet_kva
+    plans: list[list[StationPlan]] = []
+    for circuit in branch.layout.circuit_plans:
+        new_circuit: list[StationPlan] = []
+        for old in circuit:
+            share = old.transformer.rating_at(branch.layout.ambient_c) / s_fleet
+            p_lv = p_inv * share
+            q_lv = q_inv * share
+            p_mv, q_mv = station_mv_output(p_lv, q_lv, old.transformer)
+            new_circuit.append(replace(
+                old,
+                p_lv_kw=p_lv,
+                q_lv_kvar=q_lv,
+                s_lv_kva=math.hypot(p_lv, q_lv),
+                p_mv_kw=p_mv,
+                q_mv_kvar=q_mv,
+                s_mv_kva=math.hypot(p_mv, q_mv),
+                i_a=current_a(math.hypot(p_mv, q_mv), branch.layout.v_mv_kv),
+                loading=math.hypot(p_lv, q_lv) / old.transformer.rating_at(
+                    branch.layout.ambient_c),
+            ))
+        plans.append(new_circuit)
+    layout = replace(
+        branch.layout,
+        circuit_plans=plans,
+        fleet_loading=math.hypot(p_inv, q_inv) / s_fleet,
+        loading_ok=(math.hypot(p_inv, q_inv) / s_fleet
+                    <= branch.layout.max_loading + 1e-9),
+        max_loading=branch.layout.max_loading,
+    )
+    frozen: dict[tuple[int, int], list[Cable]] = {}
+    selections: dict[tuple[int, int], CableSelection] = {}
+    for circuit in branch.circuits:
+        for segment in circuit.segments:
+            if segment.selection is not None:
+                frozen[(circuit.index, segment.index)] = [segment.selection.cable]
+                selections[(circuit.index, segment.index)] = segment.selection
+    return size_branch(
+        layout, branch.cable_candidates or [],
+        max_utilization=branch.max_utilization,
+        max_loss_percent_base=branch.max_loss_percent_base,
+        max_loss_percent_per_km=branch.max_loss_percent_per_km,
+        max_vdrop_percent=branch.max_vdrop_percent,
+        max_parallel=branch.max_parallel,
+        segment_lengths=branch.segment_lengths,
+        segment_candidates=frozen,
+        segment_selections=selections,
+        aux_p_kw=branch.aux_p_kw,
+        aux_q_kvar=branch.aux_q_kvar,
     )
 
 
