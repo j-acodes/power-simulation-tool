@@ -38,7 +38,10 @@ than the drift it prevents.
 
 **Blocked by:** 02
 
-**Status:** ready-for-agent
+**Status:** done (b5bf2a1)
+
+Evidence: palette, inspector, settings, discharge-duration, and seed-wizard gating are
+implemented through the shared technology permit helper and frontend tests.
 
 - [ ] The palette offers busbars and station catalogues only for fleet kinds the technology
       permits

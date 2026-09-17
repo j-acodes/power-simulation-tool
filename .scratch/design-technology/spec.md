@@ -1,6 +1,10 @@
 # Spec: Design technology, declared at creation
 
-Status: ready-for-agent
+Status: done
+
+Implementation evidence: tickets 01–04 are shipped in commits 0724f3a, f9b8b12,
+b5bf2a1, and 1af3419, with review follow-ups in later history. The current frontend
+tests exercise technology gating and clone conversion rules.
 
 ## Problem Statement
 

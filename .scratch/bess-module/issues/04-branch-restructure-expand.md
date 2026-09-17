@@ -31,7 +31,10 @@ is a bug, not a design change.
 
 **Blocked by:** 01 (Neutral sizing entry points)
 
-**Status:** ready-for-agent
+**Status:** done (ef0d5e7)
+
+Evidence: branch and plant sizing halves, shared export sizing, and compatibility
+accessors were implemented; ticket 09 subsequently removed those temporary accessors.
 
 - [ ] One plant layout exists per fleet, each from its own Stage-1 result and its own maximum
       loading; per-unit loading remains uniform within a fleet

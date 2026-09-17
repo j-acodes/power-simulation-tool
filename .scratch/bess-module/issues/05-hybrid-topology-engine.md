@@ -62,7 +62,12 @@ branch reshape to land properly:
 
 **Blocked by:** 02 (BESS catalogues and station kind), 04 (Branch restructure)
 
-**Status:** ready-for-agent
+**Status:** done (1806d6b, 1f3f35c)
+
+Evidence: per-branch sizing, hybrid graph validation, shared HV solving, convergence
+handling, and zero-BESS regression coverage are implemented. The explicit reactive-share
+requirement in this historical ticket was superseded by design-technology ticket 01 and
+ADR-0001; current code always splits reactive duty pro-rata by active power.
 
 - [ ] A design may hold one busbar per fleet kind; a second busbar of a kind that already
       exists is rejected with a validation issue identifying it

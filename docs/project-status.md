@@ -1,0 +1,49 @@
+# Project status
+
+This status is checked against the repository code and accepted ADRs. Three historical
+implementation plans supplied during the handoff are context only and are superseded by
+code, specs, and ADRs: the interactive builder plan, the separate PV/BESS and hybrid plan,
+and the BESS component-datasheets plan describe how the current shape was reached. They are
+not a second source of requirements.
+
+## Implemented
+
+- The Python engine models component catalogues, loss-cascade sizing, cable auto-sizing,
+  per-fleet hybrid architecture, and result mapping (`powertool/`).
+- The FastAPI app exposes catalogue, stage-1 and diagram solve, PDF report, project/design
+  CRUD, seed, and optimistic-locking save routes (`backend/main.py`, `backend/solve.py`).
+- React/TypeScript provides the project/design editor, React Flow diagram, Zustand state,
+  palette and inspector, catalogue/specification views, result tables, seed flow, and PDF
+  download (`frontend/src/`).
+- PV, BESS, and hybrid designs are represented with one POC, shared export equipment, and
+  one busbar/cascade per fleet. Technology is declared at design creation and changed by
+  cloning; these are accepted decisions in [ADR-0001](adr/0001-hybrid-pv-bess-topology.md)
+  and [ADR-0002](adr/0002-technology-declared-not-derived.md).
+- YAML catalogues include PV and BESS station transformers, cables, and datasheet-backed
+  BESS solutions with pairing, typed fields, auxiliary notices, and ambient-rated station
+  power. Ambient lookup follows [ADR-0004](adr/0004-ac-power-per-ambient-temperature.md).
+
+## Deferred and operational gaps
+
+- BESS round-trip efficiency, charging direction, time-series behaviour, and OND/datasheet
+  parsing remain outside the implemented sizing path; the current model is steady-state and
+  treats BESS discharge as generation.
+- There is no authenticated shared/company deployment setup. SQLite and wholesale schema
+  creation remain appropriate for the current single-engineer setup; there is no Alembic
+  migration path, checked-in CI, or browser E2E suite.
+- Saved-design import/export and automated database backup are not provided. PDF export is
+  implemented, while the local SQLite file remains runtime state rather than a portable
+  project archive.
+
+## Architecture and decisions
+
+`powertool/` owns physics and sizing. `backend/` translates diagram JSON to the engine,
+serves the API, and persists opaque diagrams. `frontend/` renders and edits the API's
+contracts. `data/*.yaml` is the editable component source; catalogue data is loaded at
+startup rather than stored in SQLite.
+
+The branch proposal `docs/adr-postgres-deferred:docs/adr/0003-sqlite-until-deployment.md`
+records a possible future move to Postgres bundled with Alembic. It is not merged and is not
+an accepted main-branch decision. Its trigger is deployment to a shared company server;
+until then, preserve the current SQLite/reset workflow and require explicit authorization for
+any reset.

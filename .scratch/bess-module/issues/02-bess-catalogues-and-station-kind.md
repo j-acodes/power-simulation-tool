@@ -39,7 +39,10 @@ setting survives as the default for custom transformers.
 
 **Blocked by:** None (can start immediately)
 
-**Status:** ready-for-agent
+**Status:** done (cffd180)
+
+Evidence: BESS solution and station-transformer catalogues, fleet-kind parsing, LV
+validation, palette filtering, and catalogue API coverage are implemented.
 
 - [ ] A station declares a fleet kind of `pv` or `bess`; a station declaring none parses as
       `pv` and solves identically to before

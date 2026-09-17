@@ -1,6 +1,21 @@
 # Spec: PV/BESS station separation and BESS sizing
 
-Status: ready-for-agent
+Status: done
+
+Implementation evidence: tickets 01–09 shipped in commits 234a6bd, cffd180, 61bdd65,
+ef0d5e7, 1806d6b, 1f3f35c, d3c9eb5, 67686f2, 761ddfd, and 3946a15 (with review follow-ups in later
+history). The current test suite covers the engine, graph validation, hybrid solve,
+compliance, and reporting paths.
+
+Historical requirements superseded by the component-datasheets work: each BESS
+solution/product declares its `duration_h`; station-transformer pairings restrict which
+declared durations/products are compatible and provide the default container count, with
+an explicit container override. This supersedes the solution's
+`containers_by_duration` table. The original reactive-share requirement is superseded by
+design-technology ticket 01 and ADR-0001: reactive duty is always pro-rata by active power.
+
+The original acceptance checklists in the tickets are preserved as historical text. The
+completion and supersession notes above are authoritative for the current implementation.
 
 ## Problem Statement
 

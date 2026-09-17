@@ -38,7 +38,10 @@ contains no node belonging to a fleet its technology excludes.
 
 **Blocked by:** 02
 
-**Status:** ready-for-agent
+**Status:** done (1af3419)
+
+Evidence: legal clone targets, widening/narrowing conversion, warning copy, persistence,
+and frontend conversion tests are implemented; the original design remains unchanged.
 
 - [ ] Each design row offers a Clone action whose dialog lists only the legal target
       technologies for that design

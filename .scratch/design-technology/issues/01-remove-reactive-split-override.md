@@ -25,7 +25,10 @@ ADR-0001 has already been amended to record this reversal — do not write a new
 
 **Blocked by:** None (can start immediately)
 
-**Status:** ready-for-agent
+**Status:** done (0724f3a)
+
+Evidence: the share field, validator issue, inspector control, and solver argument were
+removed; payloads remain permissive and regression tests cover pro-rata splitting.
 
 - [ ] The reactive split function divides pro-rata by active power and takes no share argument
 - [ ] The share is absent from the point-of-connection node properties, the branch inputs, and

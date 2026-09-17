@@ -26,7 +26,10 @@ should be used by every later ticket.
 
 **Blocked by:** None (can start immediately)
 
-**Status:** ready-for-agent
+**Status:** done (61bdd65)
+
+Evidence: `CONTEXT.md` and ADR-0001 provide the glossary and hybrid topology decision;
+ADR-0001 was later amended when the reactive-share override was removed.
 
 - [ ] A project glossary exists at the repository root, defining every term listed above
 - [ ] The glossary contains no implementation detail, file references or decisions

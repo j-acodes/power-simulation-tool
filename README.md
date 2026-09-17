@@ -1,7 +1,7 @@
 # Power Simulation Tool
 
-A tool to size PV and BESS plants and compute BESS round-trip efficiency, backed by a
-small database of component parameters (cables, transformers, inverters, BESS).
+A tool to size PV, BESS, and hybrid plants, backed by catalogues of component parameters
+(cables, transformers, inverters, and BESS products).
 
 The core idea: the electrical chain from the **Point of Connection (POC)** back to the
 **inverter** is walked as a *loss cascade*, accumulating active and reactive losses, to
@@ -19,7 +19,7 @@ databases (`data/`), chain assembly and database loader (`powertool/chain.py`,
 architecture (`powertool/architecture.py`) and the PDF report
 (`powertool/pdf_report.py`).
 
-**Diagram builder (in progress)** — a FastAPI backend (`backend/`) and a React canvas
+**Diagram builder (implemented)** — a FastAPI backend (`backend/`) and a React canvas
 (`frontend/`) where a plant is drawn block by block and solved live: projects and
 designs persisted with optimistic locking, a seed wizard that proposes a plant from a
 POC target, auto-arrange, full result tables and a PDF report download. See
@@ -53,8 +53,10 @@ to 630 mm² (the practical max for PV MV switchgear terminations). Resistance is
 **validate against your supplier datasheets and installation conditions.** Edit the
 source values in `build_cable_catalogue.py` and re-run to regenerate.
 
-Later milestones: OND parsing · BESS sizing + round-trip efficiency. See
-`~/.claude/plans/` for the full plan.
+The current implementation and historical ticket status are tracked in
+[`docs/project-status.md`](docs/project-status.md). Vocabulary and durable design
+decisions live in [`CONTEXT.md`](CONTEXT.md) and [`docs/adr/`](docs/adr/); the original
+acceptance criteria and implementation evidence remain in [`.scratch/`](.scratch/).
 
 ## Modelling assumptions
 
@@ -81,27 +83,20 @@ with Node in a first stage and ships only Python — see `Dockerfile`.
 
 Work inside a virtualenv, so `python3`, `pytest` and `uvicorn` all resolve to this
 project's Python (3.12, matching the Docker image) rather than whatever is on your
-PATH:
+PATH. Install the dependencies once, then use the root development command:
 
 ```bash
 python3.12 -m venv .venv          # once
 source .venv/bin/activate         # every new shell
 pip install -r requirements.txt
-
-cd frontend && npm install && npm run build && cd ..
-uvicorn backend.main:app --port 8000
+npm ci --prefix frontend
+npm run build --prefix frontend
+npm run dev                            # http://localhost:5173
 ```
 
-For frontend work, run Vite alongside it instead of rebuilding each time — it proxies
-`/api` to port 8000:
-
-```bash
-uvicorn backend.main:app --port 8000 --reload --reload-dir backend --reload-dir powertool
-cd frontend && npm run dev          # http://localhost:5173
-```
-
-Scope `--reload-dir` as above, or the watcher restarts the server every time a frontend
-build writes into `frontend/dist`.
+The root `npm run dev` starts Vite and supervises the FastAPI backend with reload,
+proxying `/api` to port 8000. If a backend is already listening there, the supervisor
+stands down and Vite proxies to that process.
 
 ### Configuration
 
@@ -127,8 +122,11 @@ start the app as usual; the schema is recreated empty on the next startup.
 ## Tests
 
 ```bash
-pytest                        # engine, API and seed tests
-cd frontend && npm test       # vitest on the pure frontend helpers
-cd frontend && npm run build  # tsc typecheck + production build
-cd frontend && npm run lint   # oxlint
+.venv/bin/python -m pytest -q             # engine, API, graph, and seed tests
+DATABASE_URL="sqlite:///$(mktemp -d)/powertool-tests.db" npm --prefix frontend test
+npm --prefix frontend run build            # TypeScript check + production build
+npm --prefix frontend run lint             # oxlint
 ```
+
+Vite can start a backend during frontend tests. The temporary SQLite URL isolates any
+backend started by this command from the real database.

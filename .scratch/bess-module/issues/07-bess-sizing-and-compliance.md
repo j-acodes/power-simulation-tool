@@ -30,6 +30,11 @@ layer)
 
 **Status:** done (67686f2)
 
+Historical note: each solution/product now declares its `duration_h`; component-datasheets
+tickets 01–02 use the selected station-transformer pairing to restrict compatible declared
+durations/products and provide the default container count, with an explicit override.
+This supersedes the original solution-level duration mapping and non-overridable count.
+
 - [x] Container count per station comes from the selected solution's duration table, for
       every duration that table contains
 - [x] Delivered energy is reported for a BESS fleet

@@ -1,6 +1,11 @@
 # Spec: Component datasheets in the catalogue — BESS first
 
-Status: ready-for-agent
+Status: done
+
+Implementation evidence: tickets 01–07 are shipped. The catalogue, pairing, typed
+datasheets, catalogue page, specification view, palette preview, and auxiliary-consumption
+notice are covered by the backend and frontend suites; the implementation is recorded in
+commits 9164453, 8d319d6, 801e882, and the subsequent catalogue follow-ups.
 
 ## Problem Statement
 

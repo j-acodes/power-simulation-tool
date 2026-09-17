@@ -18,7 +18,10 @@ report's default plant name, and the report footers.
 
 **Blocked by:** None (can start immediately)
 
-**Status:** ready-for-agent
+**Status:** done (234a6bd)
+
+Evidence: `size_generation` and `size_generation_pq` are implemented, with the legacy
+alias retained; neutral API/report naming and regression coverage shipped with this ticket.
 
 - [ ] The Stage-1 entry point has a generation-neutral name; the previous name remains
       importable from the package's public interface and emits a deprecation warning
