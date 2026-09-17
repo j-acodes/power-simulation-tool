@@ -1037,6 +1037,12 @@ class BranchInputs:
     containers_by_station: dict[str, int] = field(default_factory=dict)
     e_delivered_kwh: float | None = None
     e_required_kwh: float | None = None
+    # Direct MV interconnection run for this fleet. HV designs keep the
+    # shared export on GraphInputs instead.
+    export_edge_id: str | None = None
+    export_length_km: float = 0.0
+    export_candidates: list[Cable] | None = None
+    export_forced: bool = False
 
     @property
     def fleet(self) -> list[tuple[Transformer, int]]:
@@ -1183,6 +1189,17 @@ def graph_to_inputs(diagram: dict, db) -> GraphInputs:
                     stations_under.append(child)
                     frontier.append(child)
         kind = _effective_busbar_kind(nodes, busbar_id, stations_under)
+        busbar_edge = next(edge for child, edge in tree.children[busbar_parent]
+                           if child == busbar_id)
+        mv_export_length_km = _length_km(busbar_edge) or 0.0
+        mv_export_applicable = (hv_tx_id is None and len(busbar_children) > 1
+                                and mv_export_length_km > 0)
+        mv_export_sizing = _dict(busbar_edge.get("sizing"))
+        mv_export_forced = mv_export_sizing.get("mode") == "forced"
+        mv_export_candidates = (
+            [db.cables[mv_export_sizing.get("cable")]] if mv_export_forced
+            else db.cables_for_voltage(v_mv)
+        ) if mv_export_applicable else None
         # `p_target_mw` is the PV figure only where there is a second fleet to
         # tell it apart from. A design with ONE busbar has a single target and
         # no ambiguity, whatever kind that fleet is — which is what keeps a
@@ -1301,6 +1318,10 @@ def graph_to_inputs(diagram: dict, db) -> GraphInputs:
                 None if e_delivered_kwh is None
                 else p_target_kw * (_rule_opt(diagram, "discharge_hours") or 0.0)
             ),
+            export_edge_id=busbar_edge["id"] if mv_export_applicable else None,
+            export_length_km=mv_export_length_km if mv_export_applicable else 0.0,
+            export_candidates=mv_export_candidates,
+            export_forced=mv_export_forced if mv_export_applicable else False,
         ))
 
     return GraphInputs(
@@ -1488,6 +1509,16 @@ def map_results(inputs: GraphInputs, stage1s: list[SizingResult],
             # somewhere to show it.
             nodes[branch_inputs.aux_ids[0]].update(
                 p_kw=branch_arch.aux_p_kw, q_kvar=branch_arch.aux_q_kvar)
+        if branch_inputs.export_edge_id and branch_arch.mv_export is not None:
+            edges[branch_inputs.export_edge_id] = _segment_payload(
+                branch_arch.mv_export,
+                forced=branch_inputs.export_forced)
+            if branch_arch.mv_export.selection is None:
+                warnings.append(GraphIssue(
+                    "mv_cable_not_sized",
+                    "The catalogue has no cables at the MV export voltage — the "
+                    "export span is shown but not sized (zero losses assumed).",
+                    edge_id=branch_inputs.export_edge_id))
 
         if not layout.loading_ok:
             warnings.append(GraphIssue(
@@ -1659,7 +1690,10 @@ def map_results(inputs: GraphInputs, stage1s: list[SizingResult],
             "all_current_ok": arch.all_current_ok,
             "power_balance_ok": arch.power_balance_ok,
             "v_mv_kv": arch.branches[0].layout.v_mv_kv,
-            "v_hv_kv": export.v_hv_kv if export is not None else None,
+            "v_hv_kv": (export.v_hv_kv if export is not None else
+                        (arch.branches[0].layout.v_mv_kv
+                         if any(b.mv_export is not None for b in arch.branches)
+                         else None)),
             "branches": fleets,
         }
 

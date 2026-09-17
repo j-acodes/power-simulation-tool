@@ -657,6 +657,90 @@ def test_mv_interconnection_sizes_the_drawn_export_run():
     assert "hv" not in results["nodes"]
 
 
+def _hybrid_mv_export_diagram() -> dict:
+    diagram = _minimal()
+    diagram["nodes"][0]["props"]["p_target_bess_mw"] = 2.0
+    diagram["nodes"][1]["props"]["fleet_kind"] = "pv"
+    diagram["nodes"] = [node for node in diagram["nodes"] if node["id"] != "aux"]
+    diagram["edges"] = [edge for edge in diagram["edges"] if edge["id"] != "e_aux"]
+    diagram["edges"][0]["id"] = "e_poc_pv"
+    diagram["edges"][0]["length_m"] = 500.0
+    diagram["nodes"] += [
+        _node("bus_b", "busbar", fleet_kind="bess"),
+        _node("s_b1", "station", mode="catalogue",
+              model="GENERIC_BESS_TX_2750_LV069", fleet_kind="bess",
+              bess_solution="sungrow-st6900ux-4h"),
+    ]
+    diagram["edges"] += [
+        _edge("e_poc_bess", "poc", "bus_b", length_m=2500.0),
+        _edge("e_tb1", "bus_b", "s_b1", length_m=600.0),
+    ]
+    return diagram
+
+
+def test_hybrid_mv_interconnection_sizes_and_maps_each_direct_export_run():
+    """Each fleet's direct POC-to-busbar run is an independent MV export."""
+    diagram = _hybrid_mv_export_diagram()
+
+    assert validate_graph(diagram, db) == []
+    body = client.post("/api/solve", json=diagram).json()
+
+    assert body["issues"] == []
+    exports = body["results"]["edges"]
+    assert exports["e_poc_pv"]["length_m"] == 500.0
+    assert exports["e_poc_pv"]["dp_kw"] > 0
+    assert exports["e_poc_bess"]["length_m"] == 2500.0
+    assert exports["e_poc_bess"]["dp_kw"] > exports["e_poc_pv"]["dp_kw"]
+    assert body["results"]["summary"]["power_balance_ok"] is True
+    assert body["results"]["summary"]["v_hv_kv"] == 20.0
+    assert body["results"]["summary"]["total_cable_loss_kw"] == pytest.approx(
+        sum(edge["dp_kw"] for edge in exports.values()))
+    nodes = body["results"]["nodes"]
+    station_input = sum(node["p_lv_kw"] for node in nodes.values()
+                        if node.get("kind") == "station")
+    transformer_loss = sum(node["dp_tx_kw"] for node in nodes.values()
+                           if node.get("kind") == "station")
+    assert station_input == pytest.approx(
+        body["results"]["summary"]["p_poc_delivered_kw"]
+        + transformer_loss + body["results"]["summary"]["total_cable_loss_kw"])
+
+
+def test_hybrid_mv_export_results_do_not_depend_on_poc_edge_order():
+    first = client.post("/api/solve", json=_hybrid_mv_export_diagram()).json()
+    reversed_diagram = _hybrid_mv_export_diagram()
+    reversed_diagram["edges"] = [reversed_diagram["edges"][2],
+                                  reversed_diagram["edges"][1],
+                                  reversed_diagram["edges"][0],
+                                  reversed_diagram["edges"][3]]
+    second = client.post("/api/solve", json=reversed_diagram).json()
+    assert first["issues"] == second["issues"] == []
+    for edge_id in ("e_poc_pv", "e_poc_bess"):
+        assert second["results"]["edges"][edge_id] == first["results"]["edges"][edge_id]
+
+
+def test_forced_hybrid_mv_export_maps_and_revalidates_its_drawn_run():
+    diagram = _hybrid_mv_export_diagram()
+    bess_edge = next(edge for edge in diagram["edges"] if edge["id"] == "e_poc_bess")
+    bess_edge["sizing"] = {"mode": "forced", "cable": "AL_400_20kV"}
+    body = client.post("/api/solve", json=diagram).json()
+    assert body["issues"] == []
+    export = body["results"]["edges"]["e_poc_bess"]
+    assert export["forced"] is True
+    assert export["cable"] == "AL_400_20kV"
+    assert export["sized"] is True
+
+
+def test_forced_hybrid_mv_export_that_cannot_carry_is_an_engine_error():
+    diagram = _hybrid_mv_export_diagram()
+    diagram["settings"]["rules"]["export_loss_pct_per_km"] = 0.0001
+    bess_edge = next(edge for edge in diagram["edges"] if edge["id"] == "e_poc_bess")
+    bess_edge["sizing"] = {"mode": "forced", "cable": "AL_95_20kV"}
+    body = client.post("/api/solve", json=diagram).json()
+    assert body["results"] is None
+    assert body["issues"][0]["code"] == "engine_error"
+    assert "No cable can carry" in body["issues"][0]["message"]
+
+
 def test_over_current_warning_points_at_the_trunk():
     diagram = _hv_diagram()
     diagram["settings"]["rules"]["max_circuit_current_a"] = 50.0

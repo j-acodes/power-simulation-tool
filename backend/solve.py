@@ -152,6 +152,11 @@ def build_chain(
 # Diagram solve: canvas -> Stage-1 chain -> manual arrangement -> architecture.
 # ---------------------------------------------------------------------------
 
+def _uses_shared_export(inputs: GraphInputs) -> bool:
+    """Whether the legacy single/shared export step owns the POC run."""
+    return inputs.hv_tx_id is not None or len(inputs.branches) == 1
+
+
 def build_export_chain(inputs: GraphInputs, db: ComponentDatabase) -> Chain:
     """The Stage-1 chain shared by every branch: the POC down to the shared MV
     bus.
@@ -178,7 +183,7 @@ def build_export_chain(inputs: GraphInputs, db: ComponentDatabase) -> Chain:
     )
 
     elements: list[ChainElement] = []
-    if inputs.export_length_km > 0:
+    if _uses_shared_export(inputs) and inputs.export_length_km > 0:
         if export_candidates:
             auto = AutoCable(candidates=export_candidates,
                              max_utilization=inputs.max_utilization,
@@ -338,13 +343,18 @@ def solve_architecture(inputs: GraphInputs, db: ComponentDatabase):
             # because the site still has to supply it.
             aux_p_kw=branch.aux_p_kw,
             aux_q_kvar=branch.aux_q_kvar,
+            export_edge_id=branch.export_edge_id,
+            export_length_km=branch.export_length_km,
+            export_candidates=branch.export_candidates,
+            export_loss_percent_per_km=inputs.export_loss_pct_per_km,
+            export_forced=branch.export_forced,
         )
         stage1s.append(stage1)
         layouts.append(layout)
         branch_archs.append(branch_arch)
 
     v_export_kv = inputs.v_hv_kv if inputs.hv_mode != "none" else inputs.v_mv_kv
-    if inputs.export_length_km > 0:
+    if _uses_shared_export(inputs) and inputs.export_length_km > 0:
         export_candidates = ([inputs.export_cable] if inputs.export_cable is not None
                              else db.cables_for_voltage(v_export_kv))
     else:
@@ -356,7 +366,8 @@ def solve_architecture(inputs: GraphInputs, db: ComponentDatabase):
         hv_transformer=inputs.hv_transformer,
         hv_n_parallel=inputs.hv_n_parallel,
         hv_cable_candidates=export_candidates,
-        hv_cable_length_km=inputs.export_length_km,
+        hv_cable_length_km=(inputs.export_length_km if _uses_shared_export(inputs)
+                            else 0.0),
         v_hv_kv=v_export_kv,
         export_loss_percent_per_km=inputs.export_loss_pct_per_km,
         p_poc_targets_kw=[b.p_poc_target_kw for b in inputs.branches],

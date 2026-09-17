@@ -374,17 +374,20 @@ class StationResult:
 
 @dataclass
 class SegmentResult:
-    """One sized cable span. Within a circuit, segment 1 (the trunk) carries the
-    whole circuit and the last segment carries only the far station; the same
-    shape also describes the HV export cable.
+    """One sized cable span.
+
+    Within a circuit, segment 1 (the trunk) carries the whole circuit and the
+    last segment carries only the far station. Export spans use ``index == 0``:
+    the shared HV export cable uses this shape for an HV interconnection, while
+    a direct MV interconnection has one such result on each fleet branch. A
+    ``selection`` of ``None`` means the applicable cable catalogue is pending;
+    the span is recorded with zero losses and reported as unsized.
 
     P/Q/S are taken at the sending end of the span (before its own losses),
-    which is also where the span's current is highest. ``selection`` is None
-    only for an HV export cable when the catalogue has no cables at the HV
-    voltage yet — the span is then recorded with zero losses ("not sized").
+    which is also where the span's current is highest.
     """
 
-    index: int  # 1 = substation -> first station (trunk); 0 = HV export cable
+    index: int  # 1 = substation -> first station; 0 = an export span
     length_km: float
     p_kw: float
     q_kvar: float
@@ -616,6 +619,12 @@ class BranchArchitecture:
     max_loss_percent_per_km: float = 0.0
     max_vdrop_percent: float | None = None
     max_parallel: int = 12
+    export_edge_id: str | None = None
+    export_length_km: float = 0.0
+    export_candidates: list[Cable] | None = None
+    mv_export: SegmentResult | None = None
+    export_forced: bool = False
+    export_loss_percent_per_km: float = 0.1
 
     @property
     def p_busbar_kw(self) -> float:
@@ -639,6 +648,11 @@ def size_branch(
     segment_candidates: dict[tuple[int, int], list[Cable]] | None = None,
     aux_p_kw: float = 0.0,
     aux_q_kvar: float = 0.0,
+    export_edge_id: str | None = None,
+    export_length_km: float = 0.0,
+    export_candidates: list[Cable] | None = None,
+    export_loss_percent_per_km: float = 0.1,
+    export_forced: bool = False,
 ) -> BranchArchitecture:
     """Size one branch's (one fleet's) MV circuits — the per-branch half of
     Stage 2. See :func:`size_plant` for the plant-level half that sizes the
@@ -656,7 +670,7 @@ def size_branch(
         segment_lengths=segment_lengths,
         segment_candidates=segment_candidates,
     )
-    return BranchArchitecture(
+    branch = BranchArchitecture(
         layout=layout,
         circuits=circuits,
         aux_p_kw=aux_p_kw,
@@ -669,7 +683,44 @@ def size_branch(
         max_loss_percent_per_km=max_loss_percent_per_km,
         max_vdrop_percent=max_vdrop_percent,
         max_parallel=max_parallel,
+        export_edge_id=export_edge_id,
+        export_length_km=export_length_km,
+        export_candidates=export_candidates,
+        export_loss_percent_per_km=export_loss_percent_per_km,
+        export_forced=export_forced,
     )
+    if export_length_km > 0:
+        s = math.hypot(branch.p_busbar_kw, branch.q_busbar_kvar)
+        candidates = export_candidates or []
+        if candidates:
+            cos_phi = branch.p_busbar_kw / s if s > 0 else 1.0
+            sin_phi = branch.q_busbar_kvar / s if s > 0 else 0.0
+            sel = select_cable(
+                candidates, s, layout.v_mv_kv, export_length_km, cos_phi, sin_phi,
+                max_utilization=max_utilization,
+                max_loss_percent=export_loss_percent_per_km * export_length_km,
+                max_vdrop_percent=max_vdrop_percent,
+                max_parallel=max_parallel,
+            )
+            dp, dq = sel.cable.series_losses(s, layout.v_mv_kv, export_length_km)
+            dp /= sel.n_parallel
+            dq /= sel.n_parallel
+            branch.mv_export = SegmentResult(
+                index=0, length_km=export_length_km,
+                p_kw=branch.p_busbar_kw, q_kvar=branch.q_busbar_kvar, s_kva=s,
+                selection=sel, cable_label=format_cable_label(sel.cable, sel.n_parallel),
+                dp_kw=dp, dq_series_kvar=dq,
+                q_charging_kvar=sel.cable.charging_kvar(layout.v_mv_kv, export_length_km)
+                                  * sel.n_parallel,
+            )
+        else:
+            branch.mv_export = SegmentResult(
+                index=0, length_km=export_length_km,
+                p_kw=branch.p_busbar_kw, q_kvar=branch.q_busbar_kvar, s_kva=s,
+                selection=None, cable_label="MV export cable (not sized — catalogue pending)",
+                dp_kw=0.0, dq_series_kvar=0.0, q_charging_kvar=0.0,
+            )
+    return branch
 
 
 def recompute_branch(
@@ -731,6 +782,11 @@ def recompute_branch(
         segment_candidates=branch.segment_candidates,
         aux_p_kw=branch.aux_p_kw,
         aux_q_kvar=branch.aux_q_kvar,
+        export_edge_id=branch.export_edge_id,
+        export_length_km=branch.export_length_km,
+        export_candidates=branch.export_candidates,
+        export_loss_percent_per_km=branch.export_loss_percent_per_km,
+        export_forced=branch.export_forced,
     )
 
 
@@ -797,6 +853,13 @@ def _delivered_with_frozen_cables(
             q_branch += q
         p_branch -= branch.aux_p_kw
         q_branch -= branch.aux_q_kvar
+        if branch.mv_export is not None and branch.mv_export.selection is not None:
+            mv_export = branch.mv_export
+            s = math.hypot(p_branch, q_branch)
+            dp, dq = mv_export.selection.cable.series_losses(
+                s, branch.layout.v_mv_kv, mv_export.length_km)
+            p_branch -= dp / mv_export.selection.n_parallel
+            q_branch -= dq / mv_export.selection.n_parallel
         p_branches.append(p_branch)
         q_branches.append(q_branch)
         p_total += p_branch
@@ -915,6 +978,8 @@ class PlantArchitecture:
         )
         if self.export is not None and self.export.hv_cable is not None:
             total += self.export.hv_cable.dp_kw
+        total += sum(b.mv_export.dp_kw for b in self.branches
+                     if b.mv_export is not None)
         return total
 
     @property
@@ -1009,6 +1074,11 @@ def size_plant(
 
     p = sum(b.p_busbar_kw for b in branches)
     q = sum(b.q_busbar_kvar for b in branches)
+    if hv_transformer is None and not auto_hv and hv_cable_length_km <= 0:
+        for branch in branches:
+            if branch.mv_export is not None:
+                p -= branch.mv_export.dp_kw
+                q -= branch.mv_export.dq_series_kvar
 
     if auto_hv:
         if v_hv_kv is None:
@@ -1378,6 +1448,7 @@ def size_plant(
     consumed = (
         sum(st.dp_tx_kw for b in branches for c in b.circuits for st in c.stations)
         + sum(seg.dp_kw for b in branches for c in b.circuits for seg in c.segments)
+        + sum(b.mv_export.dp_kw for b in branches if b.mv_export is not None)
         + sum(b.aux_p_kw for b in branches)
         + (export.dp_tx_kw if export is not None else 0.0)
         + (export.hv_cable.dp_kw if export is not None and export.hv_cable else 0.0)
