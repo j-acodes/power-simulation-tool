@@ -7,6 +7,8 @@ backend/main.py for the request/response glue.
 
 from __future__ import annotations
 
+import math
+
 from powertool import (
     AutoCable,
     AuxLoad,
@@ -358,6 +360,10 @@ def solve_architecture(inputs: GraphInputs, db: ComponentDatabase):
         v_hv_kv=v_export_kv,
         export_loss_percent_per_km=inputs.export_loss_pct_per_km,
         p_poc_targets_kw=[b.p_poc_target_kw for b in inputs.branches],
+        q_poc_targets_kvar=[
+            b.p_poc_target_kw * math.tan(math.acos(inputs.pf_target))
+            for b in inputs.branches
+        ],
     )
     return stage1s, layouts, arch
 

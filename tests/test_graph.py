@@ -106,8 +106,48 @@ def test_station_without_fleet_kind_parses_as_pv_and_solves_identically():
     assert summary["p_inv_kw"] == pytest.approx(3163.6147359619677)
     assert summary["q_inv_kvar"] == pytest.approx(1272.0934930043616)
     assert summary["s_inv_kva"] == pytest.approx(3409.791790203582)
-    assert summary["correction_factor"] == pytest.approx(0.9784619708953294)
+    assert summary["correction_factor"] == pytest.approx(0.9785295710741883)
     assert summary["p_poc_refined_delivered_kw"] == pytest.approx(3000.0, rel=1e-6)
+
+
+def test_single_fleet_solve_meets_active_and_reactive_poc_duty():
+    result = client.post("/api/solve", json=_minimal()).json()
+    assert result["issues"] == []
+    summary = result["results"]["summary"]
+    required_q = 3000.0 * math.tan(math.acos(0.95))
+    assert summary["p_poc_refined_delivered_kw"] >= 3000.0 - 1e-6
+    assert summary["q_poc_delivered_kvar"] == pytest.approx(required_q, rel=1e-5)
+    station = result["results"]["nodes"]["s1"]
+    cable = result["results"]["edges"]["e_t1"]
+    assert station["loading"] == pytest.approx(summary["fleet_loading"])
+    assert cable["current_a"] == pytest.approx(
+        cable["s_kva"] / (math.sqrt(3.0) * 20.0))
+    rated = db.cables["AL_95_20kV"].rated_current_a
+    assert cable["utilization"] == pytest.approx(
+        cable["current_a"] * cable["n_parallel"] / rated)
+    assert cable["utilization"] <= 0.80
+    assert cable["p_kw"] - cable["dp_kw"] == pytest.approx(
+        result["results"]["nodes"]["bus"]["p_kw"])
+    assert cable["q_kvar"] - cable["dq_series_kvar"] == pytest.approx(
+        result["results"]["nodes"]["bus"]["q_kvar"])
+    assert result["results"]["nodes"]["bus"]["p_kw"] - 50.0 == pytest.approx(
+        summary["p_poc_delivered_kw"])
+    assert result["results"]["nodes"]["bus"]["q_kvar"] - 10.0 == pytest.approx(
+        summary["q_poc_delivered_kvar"])
+    assert summary["power_balance_ok"] is True
+
+
+def test_single_fleet_refinement_reselects_cable_after_pq_threshold_crossing():
+    diagram = _minimal()
+    diagram["nodes"][0]["props"]["p_target_mw"] = 6.0
+    result = client.post("/api/solve", json=diagram).json()
+    assert result["issues"] == []
+    cable = result["results"]["edges"]["e_t1"]
+    # The initial active-only pass fits AL_95; converged P/Q flow requires the
+    # next catalogue size, proving the final selection was revalidated.
+    assert cable["cable_label"] == "Al_3x1x120_20kV"
+    assert cable["current_a"] == pytest.approx(
+        cable["s_kva"] / (math.sqrt(3.0) * 20.0))
 
 
 def test_unknown_keys_are_ignored():
@@ -692,6 +732,7 @@ def _auto_reference():
         hv_cable_candidates=[], hv_cable_length_km=0.0, v_hv_kv=V_HV_KV,
         export_loss_percent_per_km=0.10,
         aux_p_kw=AUX_P_KW, aux_q_kvar=AUX_Q_KVAR, p_poc_target_kw=P_POC_KW,
+        q_poc_target_kvar=P_POC_KW * math.tan(math.acos(PF_TARGET)),
     )
     return stage1, layout, arch
 
@@ -759,7 +800,8 @@ def test_golden_45mw_example_drawn_equals_the_auto_path():
 
     # Stage 2: every plant-level figure, exactly.
     assert summary["circuit_sizes"] == layout.circuit_sizes
-    assert summary["fleet_loading"] == layout.fleet_loading
+    assert summary["fleet_loading"] == pytest.approx(
+        summary["s_inv_refined_kva"] / layout.s_fleet_kva)
     refinement = arch.branch_refinements[0]
     assert summary["p_poc_delivered_kw"] == arch.p_poc_delivered_kw
     assert summary["q_poc_delivered_kvar"] == arch.q_poc_delivered_kvar

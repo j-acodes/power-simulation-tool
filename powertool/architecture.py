@@ -29,6 +29,10 @@ from .components import DEFAULT_AMBIENT_C, Cable, Transformer, current_a
 from .sizing import SizingResult, format_cable_label
 
 
+class StationOverloadError(ValueError):
+    """The requested operating point exceeds a station's calculable range."""
+
+
 @dataclass
 class StationPlan:
     """Planned electrical figures for ONE MV/LV station, before cable sizing.
@@ -161,7 +165,7 @@ def station_mv_output(
     dp, dq = transformer.losses(s_lv)
     p_mv = p_lv_kw - dp
     if p_mv <= 0:
-        raise ValueError(
+        raise StationOverloadError(
             f"Transformer '{transformer.name}' losses ({dp:,.1f} kW) exceed the station "
             f"input ({p_lv_kw:,.1f} kW) — check the transformer data or the station share."
         )
@@ -690,6 +694,7 @@ def recompute_branch(
     branch: BranchArchitecture,
     stage1: SizingResult,
     correction_factor: float,
+    q_correction_factor: float | None = None,
 ) -> BranchArchitecture:
     """Rebuild one branch's complete detail rows at an operating point.
 
@@ -699,7 +704,9 @@ def recompute_branch(
     the continuous operating point is being recomputed.
     """
     p_inv = stage1.p_inv_kw * correction_factor
-    q_inv = stage1.q_inv_kvar * correction_factor
+    q_inv = stage1.q_inv_kvar * (
+        correction_factor if q_correction_factor is None else q_correction_factor
+    )
     s_fleet = branch.layout.s_fleet_kva
     plans: list[list[StationPlan]] = []
     for circuit in branch.layout.circuit_plans:
@@ -960,6 +967,7 @@ def size_plant(
     v_hv_kv: float | None = None,
     export_loss_percent_per_km: float = 0.1,
     p_poc_targets_kw: list[float] | None = None,
+    q_poc_targets_kvar: list[float] | None = None,
 ) -> PlantArchitecture:
     """Size the shared HV transformer and export cable ONCE, on the combined
     result of every already-sized branch — the plant-level half of Stage 2.
@@ -1004,6 +1012,10 @@ def size_plant(
         raise ValueError(
             f"Need one POC target per branch (or None for the plant call), "
             f"got {len(p_poc_targets_kw)} for {len(branches)} branches."
+        )
+    if q_poc_targets_kvar is not None and len(q_poc_targets_kvar) != len(branches):
+        raise ValueError(
+            f"Need one reactive POC target per branch, got {len(q_poc_targets_kvar)}."
         )
 
     p = sum(b.p_busbar_kw for b in branches)
@@ -1121,6 +1133,102 @@ def size_plant(
     targets: list[float | None] = (
         list(p_poc_targets_kw) if p_poc_targets_kw is not None else [None] * len(branches)
     )
+    q_targets: list[float | None] = (
+        list(q_poc_targets_kvar) if q_poc_targets_kvar is not None
+        else [None] * len(branches)
+    )
+
+    # A single fleet has one POC duty, so its correction must satisfy both
+    # coordinates of that duty.  Rebuild the branch and shared export at each
+    # pass: this keeps station/cable/loss rows on the same operating point and
+    # lets automatic cable choices respond to the corrected apparent flow.
+    if (len(branches) == 1 and targets[0] is not None
+            and q_poc_targets_kvar is not None):
+        target_p = targets[0]
+        target_q = q_targets[0]
+        if target_q is None:
+            target_q = 0.0
+        reactive_target = target_q > 1e-9
+        base_branch = branches[0]
+        k_p = k_q = 1.0
+        final_branch = base_branch
+        final_probe: PlantArchitecture | None = None
+        final_p = final_q = 0.0
+        for _ in range(_MAX_REFINE_ITERATIONS):
+            try:
+                recomputed = recompute_branch(
+                    base_branch, stage1s[0], k_p,
+                    k_q if reactive_target else None,
+                )
+            except StationOverloadError:
+                # A physically overloaded station can no longer supply the
+                # requested P/Q duty, but remains a valid design result: the
+                # loading/energy gates must be shown to the engineer.
+                if final_probe is not None:
+                    break
+                raise
+            recomputed = size_branch(
+                recomputed.layout, recomputed.cable_candidates or [],
+                max_utilization=recomputed.max_utilization,
+                max_loss_percent_base=recomputed.max_loss_percent_base,
+                max_loss_percent_per_km=recomputed.max_loss_percent_per_km,
+                max_vdrop_percent=recomputed.max_vdrop_percent,
+                max_parallel=recomputed.max_parallel,
+                segment_lengths=recomputed.segment_lengths,
+                segment_candidates=recomputed.segment_candidates,
+                aux_p_kw=recomputed.aux_p_kw,
+                aux_q_kvar=recomputed.aux_q_kvar,
+            )
+            probe = size_plant(
+                [recomputed], stage1s,
+                max_utilization=max_utilization,
+                max_vdrop_percent=max_vdrop_percent,
+                max_parallel=max_parallel,
+                hv_transformer=hv_transformer,
+                auto_hv=auto_hv,
+                hv_n_parallel=hv_n_parallel,
+                hv_cable_candidates=hv_cable_candidates,
+                hv_cable_length_km=hv_cable_length_km,
+                v_hv_kv=v_hv_kv,
+                export_loss_percent_per_km=export_loss_percent_per_km,
+            )
+            final_branch, final_probe = recomputed, probe
+            final_p, final_q = probe.p_poc_delivered_kw, probe.q_poc_delivered_kvar
+            p_short = target_p - final_p
+            q_short = target_q - final_q
+            if p_short <= 0.0 and (not reactive_target or abs(q_short) <= 1e-7):
+                break
+            if final_p <= 0:
+                raise ValueError("Active POC duty cannot be met by the fleet.")
+            if reactive_target and final_q <= 0:
+                # A heavily loaded BESS can consume more reactive power in
+                # losses than its initial PCS duty supplies. Increase Q until
+                # the output crosses zero; this remains a calculable result so
+                # loading/energy compliance can still be reported.
+                k_q *= 2.0
+                continue
+            k_p *= (target_p / final_p) ** 0.5
+            if reactive_target:
+                k_q *= (target_q / final_q) ** 0.5
+        else:
+            raise ValueError(
+                f"P/Q refinement did not converge within {_MAX_REFINE_ITERATIONS} "
+                f"iterations ({final_p:,.1f} kW, {final_q:,.1f} kvar delivered; "
+                f"targets {target_p:,.1f} kW, {target_q:,.1f} kvar)."
+            )
+        assert final_probe is not None
+        refinement = BranchRefinement(
+            p_poc_target_kw=target_p,
+            p_poc_delivered_kw=final_probe.p_poc_delivered_kw,
+            correction_factor=k_p,
+            p_inv_refined_kw=stage1s[0].p_inv_kw * k_p,
+            q_inv_refined_kvar=stage1s[0].q_inv_kvar * (k_q if reactive_target else k_p),
+            s_inv_refined_kva=math.hypot(stage1s[0].p_inv_kw * k_p,
+                                         stage1s[0].q_inv_kvar * (k_q if reactive_target else k_p)),
+            p_poc_refined_delivered_kw=final_probe.p_poc_delivered_kw,
+        )
+        return replace(final_probe, branches=[final_branch],
+                        branch_refinements=[refinement])
 
     # Unrefined per-branch delivered figures (k=1 for everyone): each
     # branch's busbar contribution pro-rated through the ONE shared export
@@ -1230,6 +1338,7 @@ def size_architecture(
     aux_p_kw: float = 0.0,
     aux_q_kvar: float = 0.0,
     p_poc_target_kw: float | None = None,
+    q_poc_target_kvar: float | None = None,
 ) -> PlantArchitecture:
     """Size the full plant architecture and recompute the delivered POC power.
 
@@ -1269,5 +1378,8 @@ def size_architecture(
         export_loss_percent_per_km=export_loss_percent_per_km,
         p_poc_targets_kw=(
             [p_poc_target_kw] if p_poc_target_kw is not None else None
+        ),
+        q_poc_targets_kvar=(
+            [q_poc_target_kvar] if q_poc_target_kvar is not None else None
         ),
     )
