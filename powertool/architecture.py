@@ -677,6 +677,7 @@ def recompute_branch(
     stage1: SizingResult,
     correction_factor: float,
     q_correction_factor: float | None = None,
+    q_inv_override_kvar: float | None = None,
 ) -> BranchArchitecture:
     """Rebuild one branch's complete detail rows at an operating point.
 
@@ -685,9 +686,10 @@ def recompute_branch(
     point; forced sections retain their original one-element restrictions.
     """
     p_inv = stage1.p_inv_kw * correction_factor
-    q_inv = stage1.q_inv_kvar * (
-        correction_factor if q_correction_factor is None else q_correction_factor
-    )
+    q_inv = (q_inv_override_kvar if q_inv_override_kvar is not None else
+             stage1.q_inv_kvar * (
+                 correction_factor if q_correction_factor is None else q_correction_factor
+             ))
     s_fleet = branch.layout.s_fleet_kva
     plans: list[list[StationPlan]] = []
     for circuit in branch.layout.circuit_plans:
@@ -1135,9 +1137,11 @@ def size_plant(
         target_q = q_targets[0]
         if target_q is None:
             target_q = 0.0
-        reactive_target = target_q > 1e-9
+        reactive_target = True
+        zero_reactive_target = abs(target_q) <= 1e-9
         base_branch = branches[0]
         k_p = k_q = 1.0
+        q_inv_refined = stage1s[0].q_inv_kvar
         final_branch = base_branch
         final_probe: PlantArchitecture | None = None
         final_p = final_q = 0.0
@@ -1146,6 +1150,7 @@ def size_plant(
                 recomputed = recompute_branch(
                     base_branch, stage1s[0], k_p,
                     k_q if reactive_target else None,
+                    q_inv_override_kvar=q_inv_refined if zero_reactive_target else None,
                 )
             except StationOverloadError:
                 # Keep the existing diagnostic result for a station-only
@@ -1174,7 +1179,7 @@ def size_plant(
                 break
             if final_p <= 0:
                 raise ValueError("Active POC duty cannot be met by the fleet.")
-            if reactive_target and final_q <= 0:
+            if not zero_reactive_target and final_q <= 0:
                 # A heavily loaded BESS can consume more reactive power in
                 # losses than its initial PCS duty supplies. Increase Q until
                 # the output crosses zero; this remains a calculable result so
@@ -1182,7 +1187,9 @@ def size_plant(
                 k_q *= 2.0
                 continue
             k_p *= (target_p / final_p) ** 0.5
-            if reactive_target:
+            if zero_reactive_target:
+                q_inv_refined += q_short
+            else:
                 k_q *= (target_q / final_q) ** 0.5
         else:
             raise ValueError(
@@ -1196,9 +1203,11 @@ def size_plant(
             p_poc_delivered_kw=p,
             correction_factor=k_p,
             p_inv_refined_kw=stage1s[0].p_inv_kw * k_p,
-            q_inv_refined_kvar=stage1s[0].q_inv_kvar * (k_q if reactive_target else k_p),
+            q_inv_refined_kvar=(q_inv_refined if zero_reactive_target else
+                                stage1s[0].q_inv_kvar * k_q),
             s_inv_refined_kva=math.hypot(stage1s[0].p_inv_kw * k_p,
-                                         stage1s[0].q_inv_kvar * (k_q if reactive_target else k_p)),
+                                         q_inv_refined if zero_reactive_target else
+                                         stage1s[0].q_inv_kvar * k_q),
             p_poc_refined_delivered_kw=final_probe.p_poc_delivered_kw,
         )
         return replace(final_probe, branches=[final_branch],
@@ -1213,6 +1222,7 @@ def size_plant(
         q_targets_hybrid = [q or 0.0 for q in q_targets]
         kp = [1.0] * len(branches)
         kq = [1.0] * len(branches)
+        q_inv_refined = [stage1.q_inv_kvar for stage1 in stage1s]
         final_probe: PlantArchitecture | None = None
         final_branches = branches
         final_p_delivered: list[float] = []
@@ -1222,8 +1232,15 @@ def size_plant(
         )
         for _ in range(_MAX_REFINE_ITERATIONS):
             recomputed_branches = []
-            for branch, stage1, p_factor, q_factor in zip(branches, stage1s, kp, kq):
-                recomputed = recompute_branch(branch, stage1, p_factor, q_factor)
+            for i, (branch, stage1, p_factor, q_factor) in enumerate(
+                zip(branches, stage1s, kp, kq)
+            ):
+                zero_reactive_target = abs(q_targets_hybrid[i]) <= 1e-9
+                recomputed = recompute_branch(
+                    branch, stage1, p_factor, q_factor,
+                    q_inv_override_kvar=(q_inv_refined[i]
+                                         if zero_reactive_target else None),
+                )
                 recomputed_branches.append(recomputed)
             probe = size_plant(
                 recomputed_branches, stage1s,
@@ -1259,9 +1276,9 @@ def size_plant(
                 ) > 1e-5:
                     kp[i] *= (target / p_delivered[i]) ** 0.5
                 q_target = q_targets_hybrid[i]
-                if q_target > 1e-9 and q_delivered[i] > 0 and abs(
-                    q_target - q_delivered[i]
-                ) > 1e-5:
+                if abs(q_target) <= 1e-9:
+                    q_inv_refined[i] += q_target - q_delivered[i]
+                elif q_delivered[i] > 0 and abs(q_target - q_delivered[i]) > 1e-5:
                     kq[i] *= (q_target / q_delivered[i]) ** 0.5
         else:
             raise ValueError(
@@ -1275,9 +1292,12 @@ def size_plant(
                 p_poc_delivered_kw=unrefined_p_delivered[i],
                 correction_factor=kp[i],
                 p_inv_refined_kw=stage1s[i].p_inv_kw * kp[i],
-                q_inv_refined_kvar=stage1s[i].q_inv_kvar * kq[i],
+                q_inv_refined_kvar=(q_inv_refined[i] if abs(q_targets_hybrid[i]) <= 1e-9
+                                    else stage1s[i].q_inv_kvar * kq[i]),
                 s_inv_refined_kva=math.hypot(
-                    stage1s[i].p_inv_kw * kp[i], stage1s[i].q_inv_kvar * kq[i]
+                    stage1s[i].p_inv_kw * kp[i],
+                    q_inv_refined[i] if abs(q_targets_hybrid[i]) <= 1e-9
+                    else stage1s[i].q_inv_kvar * kq[i]
                 ),
                 p_poc_refined_delivered_kw=(
                     final_p_delivered[i] if target is not None else None

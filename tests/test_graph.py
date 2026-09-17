@@ -137,6 +137,19 @@ def test_single_fleet_solve_meets_active_and_reactive_poc_duty():
     assert summary["power_balance_ok"] is True
 
 
+def test_single_pv_fleet_at_unity_pf_delivers_zero_reactive_power():
+    diagram = _minimal()
+    diagram["nodes"][0]["props"]["pf"] = 1.0
+    result = client.post("/api/solve", json=diagram).json()
+
+    assert result["issues"] == []
+    assert result["results"] is not None
+    summary = result["results"]["summary"]
+    assert summary["p_poc_refined_delivered_kw"] == pytest.approx(3000.0, abs=1e-3)
+    assert summary["q_poc_delivered_kvar"] == pytest.approx(0.0, abs=1e-3)
+    assert summary["power_balance_ok"] is True
+
+
 def test_single_fleet_refinement_reselects_cable_after_pq_threshold_crossing():
     diagram = _minimal()
     diagram["nodes"][0]["props"]["p_target_mw"] = 6.0

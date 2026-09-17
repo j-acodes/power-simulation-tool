@@ -127,6 +127,34 @@ def test_active_hybrid_meets_one_combined_poc_reactive_duty():
     )
 
 
+def test_active_hybrid_at_unity_pf_delivers_zero_combined_reactive_power():
+    diagram = _hybrid_with_drawn_bess(p_target_bess_mw=2.0)
+    diagram["nodes"][0]["props"]["pf"] = 1.0
+    body = client.post("/api/solve", json=diagram).json()
+
+    assert body["issues"] == []
+    assert body["results"] is not None
+    summary = body["results"]["summary"]
+    assert summary["p_poc_refined_delivered_kw"] == pytest.approx(5000.0, abs=1e-3)
+    assert summary["q_poc_delivered_kvar"] == pytest.approx(0.0, abs=1e-3)
+    fleets = {branch["kind"]: branch for branch in summary["branches"]}
+    assert fleets["pv"]["p_poc_refined_delivered_kw"] == pytest.approx(3000.0, abs=1e-3)
+    assert fleets["bess"]["p_poc_refined_delivered_kw"] == pytest.approx(2000.0, abs=1e-3)
+
+
+def test_single_bess_fleet_at_unity_pf_delivers_zero_reactive_power():
+    diagram = _bess_only(duration=4.0)
+    diagram["nodes"][0]["props"]["pf"] = 1.0
+    body = client.post("/api/solve", json=diagram).json()
+
+    assert body["issues"] == []
+    assert body["results"] is not None
+    summary = body["results"]["summary"]
+    assert summary["p_poc_refined_delivered_kw"] == pytest.approx(3000.0, abs=1e-3)
+    assert summary["q_poc_delivered_kvar"] == pytest.approx(0.0, abs=1e-3)
+    assert summary["power_balance_ok"] is True
+
+
 def test_split_reactive_always_divides_pro_rata_by_active_power():
     """Ticket 01: the reactive split has no share argument any more — pro-rata
     by active power is the only behaviour, not just the default. A lone branch
