@@ -1,6 +1,10 @@
 # Spec: Calculation correctness at the converged operating point
 
-Status: ready-for-agent
+Status: done
+
+Implementation evidence: tickets 01–03 shipped in commits 307cc14, aed0f34,
+89b80e8, fdc9326, and 2bc935e. The final Python and frontend suites, production
+build, lint, compile, and two-axis code review pass.
 
 ## Problem Statement
 

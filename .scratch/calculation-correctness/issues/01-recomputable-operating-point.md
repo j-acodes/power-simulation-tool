@@ -7,20 +7,19 @@ current path before any convergence behavior changes.
 
 **Blocked by:** None (can start immediately)
 
-**Status:** ready-for-agent
+**Status:** done (307cc14)
 
-- [ ] A valid single-fleet diagram can be recomputed from its operating point
+- [x] A valid single-fleet diagram can be recomputed from its operating point
       without changing any externally observable solve result.
-- [ ] A valid hybrid diagram can be recomputed without changing its shared
+- [x] A valid hybrid diagram can be recomputed without changing its shared
       export topology, fleet attribution, node/edge mapping, or solve result.
-- [ ] Recomputed results include station P/Q/S and loading, circuit and cable
+- [x] Recomputed results include station P/Q/S and loading, circuit and cable
       flow/utilization/losses, fleet totals, export equipment, and power balance
       as one internally consistent result rather than a mixture of passes.
-- [ ] The existing diagram schema, solve response envelope, result field names,
+- [x] The existing diagram schema, solve response envelope, result field names,
       issue behavior, auxiliary-load semantics, and ambient-rating behavior are
       unchanged.
-- [ ] Parity is verified primarily through complete diagram solves; lower-level
+- [x] Parity is verified primarily through complete diagram solves; lower-level
       tests are used only where a numerical case cannot be expressed as a valid
       diagram.
-- [ ] The full existing Python and frontend verification suites remain green.
-
+- [x] The full existing Python and frontend verification suites remain green.
