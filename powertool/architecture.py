@@ -763,7 +763,8 @@ def _delivered_with_frozen_cables(
     branches: list[BranchArchitecture],
     export: "ExportResult | None",
     k: list[float],
-) -> tuple[float, float, list[float]]:
+    q_k: list[float] | None = None,
+) -> tuple[float, float, list[float], list[float]]:
     """Delivered POC (P [kW], Q [kvar], per-branch P [kW]) when each branch's
     collection output is scaled by its own ``k[i]``, keeping every cable
     selection FROZEN.
@@ -793,16 +794,22 @@ def _delivered_with_frozen_cables(
             f"Need one correction scalar per branch, got {len(k)} for "
             f"{len(branches)} branches."
         )
+    if q_k is not None and len(q_k) != len(branches):
+        raise ValueError(
+            f"Need one reactive correction scalar per branch, got {len(q_k)}."
+        )
     p_branches: list[float] = []
+    q_branches: list[float] = []
     p_total = q_total = 0.0
     for branch, k_i in zip(branches, k):
         p_branch = q_branch = 0.0
+        q_factor = k_i if q_k is None else q_k[len(p_branches)]
         for circuit, plans in zip(branch.circuits, branch.layout.circuit_plans):
             p = q = 0.0
             # Far station first; stations may be heterogeneous (mixed fleet).
             for seg, plan in zip(reversed(circuit.segments), reversed(plans)):
                 p_mv, q_mv = station_mv_output(
-                    plan.p_lv_kw * k_i, plan.q_lv_kvar * k_i, plan.transformer
+                    plan.p_lv_kw * k_i, plan.q_lv_kvar * q_factor, plan.transformer
                 )
                 p += p_mv
                 q += q_mv
@@ -816,6 +823,7 @@ def _delivered_with_frozen_cables(
         p_branch -= branch.aux_p_kw
         q_branch -= branch.aux_q_kvar
         p_branches.append(p_branch)
+        q_branches.append(q_branch)
         p_total += p_branch
         q_total += q_branch
 
@@ -837,10 +845,16 @@ def _delivered_with_frozen_cables(
     if p_total_before_export > 0:
         export_ratio = p_total / p_total_before_export
         p_delivered_per_branch = [p_i * export_ratio for p_i in p_branches]
+        q_export_loss = sum(q_branches) - q_total
+        q_delivered_per_branch = [
+            q_i - q_export_loss * (p_i / p_total_before_export)
+            for p_i, q_i in zip(p_branches, q_branches)
+        ]
     else:
         p_delivered_per_branch = list(p_branches)
+        q_delivered_per_branch = list(q_branches)
 
-    return p_total, q_total, p_delivered_per_branch
+    return p_total, q_total, p_delivered_per_branch, q_delivered_per_branch
 
 
 @dataclass
@@ -1230,11 +1244,106 @@ def size_plant(
         return replace(final_probe, branches=[final_branch],
                         branch_refinements=[refinement])
 
+    # Hybrid plants have one coupled POC duty: active targets remain separate,
+    # while the reactive target is the single plant requirement split pro-rata
+    # by those active targets. Rebuild every branch and the shared export on
+    # every pass so all detail rows describe the same final P/Q operating point.
+    if (len(branches) > 1 and q_poc_targets_kvar is not None
+            and any(t is not None for t in targets)):
+        q_targets_hybrid = [q or 0.0 for q in q_targets]
+        kp = [1.0] * len(branches)
+        kq = [1.0] * len(branches)
+        final_probe: PlantArchitecture | None = None
+        final_branches = branches
+        final_p_delivered: list[float] = []
+        final_q_delivered: list[float] = []
+        for _ in range(_MAX_REFINE_ITERATIONS):
+            recomputed_branches = []
+            for branch, stage1, p_factor, q_factor in zip(branches, stage1s, kp, kq):
+                recomputed = recompute_branch(branch, stage1, p_factor, q_factor)
+                # Auto selections are re-evaluated at the corrected operating
+                # point; forced sections remain constrained by their candidate.
+                recomputed = size_branch(
+                    recomputed.layout, recomputed.cable_candidates or [],
+                    max_utilization=recomputed.max_utilization,
+                    max_loss_percent_base=recomputed.max_loss_percent_base,
+                    max_loss_percent_per_km=recomputed.max_loss_percent_per_km,
+                    max_vdrop_percent=recomputed.max_vdrop_percent,
+                    max_parallel=recomputed.max_parallel,
+                    segment_lengths=recomputed.segment_lengths,
+                    segment_candidates=recomputed.segment_candidates,
+                    aux_p_kw=recomputed.aux_p_kw,
+                    aux_q_kvar=recomputed.aux_q_kvar,
+                )
+                recomputed_branches.append(recomputed)
+            probe = size_plant(
+                recomputed_branches, stage1s,
+                max_utilization=max_utilization,
+                max_vdrop_percent=max_vdrop_percent,
+                max_parallel=max_parallel,
+                hv_transformer=hv_transformer,
+                auto_hv=auto_hv,
+                hv_n_parallel=hv_n_parallel,
+                hv_cable_candidates=hv_cable_candidates,
+                hv_cable_length_km=hv_cable_length_km,
+                v_hv_kv=v_hv_kv,
+                export_loss_percent_per_km=export_loss_percent_per_km,
+            )
+            _, _, p_delivered, q_delivered = _delivered_with_frozen_cables(
+                recomputed_branches, probe.export, [1.0] * len(branches)
+            )
+            final_probe, final_branches = probe, recomputed_branches
+            final_p_delivered, final_q_delivered = p_delivered, q_delivered
+            p_short = [
+                t - value for t, value in zip(targets, p_delivered)
+                if t is not None
+            ]
+            q_short = [
+                t - value for t, value in zip(q_targets_hybrid, q_delivered)
+                if t is not None
+            ]
+            if all(abs(short) <= 1e-5 for short in p_short + q_short):
+                break
+            for i, target in enumerate(targets):
+                if target is not None and p_delivered[i] > 0 and abs(
+                    target - p_delivered[i]
+                ) > 1e-5:
+                    kp[i] *= (target / p_delivered[i]) ** 0.5
+                q_target = q_targets_hybrid[i]
+                if q_target > 1e-9 and q_delivered[i] > 0 and abs(
+                    q_target - q_delivered[i]
+                ) > 1e-5:
+                    kq[i] *= (q_target / q_delivered[i]) ** 0.5
+        else:
+            raise ValueError(
+                f"P/Q refinement did not converge within {_MAX_REFINE_ITERATIONS} "
+                "iterations for the hybrid plant."
+            )
+        assert final_probe is not None
+        refinements = [
+            BranchRefinement(
+                p_poc_target_kw=target,
+                p_poc_delivered_kw=final_p_delivered[i],
+                correction_factor=kp[i],
+                p_inv_refined_kw=stage1s[i].p_inv_kw * kp[i],
+                q_inv_refined_kvar=stage1s[i].q_inv_kvar * kq[i],
+                s_inv_refined_kva=math.hypot(
+                    stage1s[i].p_inv_kw * kp[i], stage1s[i].q_inv_kvar * kq[i]
+                ),
+                p_poc_refined_delivered_kw=(
+                    final_p_delivered[i] if target is not None else None
+                ),
+            )
+            for i, target in enumerate(targets)
+        ]
+        return replace(final_probe, branches=final_branches,
+                       branch_refinements=refinements)
+
     # Unrefined per-branch delivered figures (k=1 for everyone): each
     # branch's busbar contribution pro-rated through the ONE shared export
     # step. Always computed — it seeds the per-branch scalars below and is
     # reported on every branch's refinement, refined or not.
-    _, _, p_delivered_unrefined = _delivered_with_frozen_cables(
+    _, _, p_delivered_unrefined, _ = _delivered_with_frozen_cables(
         branches, export, [1.0] * len(branches)
     )
 
@@ -1254,7 +1363,7 @@ def size_plant(
     if any(t is not None for t in targets):
         shortfalls: list[tuple[int, float, float]] = []
         for _ in range(_MAX_REFINE_ITERATIONS):  # geometric convergence; a handful suffice
-            _, _, p_refined_delivered_per_branch = _delivered_with_frozen_cables(
+            _, _, p_refined_delivered_per_branch, _ = _delivered_with_frozen_cables(
                 branches, export, k
             )
             shortfalls = [

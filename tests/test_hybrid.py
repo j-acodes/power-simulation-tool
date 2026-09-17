@@ -17,6 +17,7 @@ would show up here, and nowhere else.
 """
 
 import pytest
+import math
 
 from fastapi.testclient import TestClient
 
@@ -100,6 +101,29 @@ def test_a_real_hybrid_sizes_both_fleets_independently():
     assert hybrid["results"]["nodes"]["s_b1"]["kind"] == "station"
     assert hybrid["results"]["nodes"]["s_b1"]["fleet_kind"] == "bess"
     assert hybrid["results"]["nodes"]["s1"]["fleet_kind"] == "pv"
+
+
+def test_active_hybrid_meets_one_combined_poc_reactive_duty():
+    body = client.post("/api/solve",
+                       json=_hybrid_with_drawn_bess(p_target_bess_mw=2.0)).json()
+    assert body["issues"] == [], body["issues"]
+    summary = body["results"]["summary"]
+    required_q = 5000.0 * math.tan(math.acos(0.95))
+
+    assert summary["p_poc_refined_delivered_kw"] == pytest.approx(5000.0, abs=1e-3)
+    assert summary["q_poc_delivered_kvar"] == pytest.approx(required_q, rel=1e-5)
+    assert summary["p_poc_delivered_kw"] == pytest.approx(
+        summary["p_poc_refined_delivered_kw"], abs=1e-3)
+
+    fleets = {branch["kind"]: branch for branch in summary["branches"]}
+    assert fleets["pv"]["p_poc_refined_delivered_kw"] == pytest.approx(3000.0, abs=1e-3)
+    assert fleets["bess"]["p_poc_refined_delivered_kw"] == pytest.approx(2000.0, abs=1e-3)
+    # The fleets do not each carry an independent PF obligation; their
+    # internal reactive requirements differ slightly because their station
+    # losses differ, while the plant-level duty above is exact.
+    assert fleets["pv"]["q_inv_refined_kvar"] / fleets["pv"]["p_inv_refined_kw"] != pytest.approx(
+        fleets["bess"]["q_inv_refined_kvar"] / fleets["bess"]["p_inv_refined_kw"], rel=1e-5
+    )
 
 
 def test_split_reactive_always_divides_pro_rata_by_active_power():
