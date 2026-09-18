@@ -944,12 +944,7 @@ def _check_props(nodes, tree, db, diagram, issues) -> None:
                 inverter_key = props.get("pv_inverter")
                 inverter = (db.pv_inverters.get(inverter_key)
                             if isinstance(inverter_key, str) else None)
-                # During the staged rollout, a legacy station with neither
-                # inverter field remains solvable. Once a selection is
-                # present, however, the new contract is strict. Ticket 06
-                # removes this temporary omission allowance after seeding and
-                # saved projects have been cut over.
-                if inverter is None and inverter_key is not None:
+                if inverter is None:
                     issues.append(GraphIssue(
                         "unknown_pv_inverter",
                         f"Station '{nid}' names no known PV inverter: pick one "
@@ -1146,9 +1141,8 @@ class BranchInputs:
     containers_by_station: dict[str, int] = field(default_factory=dict)
     e_delivered_kwh: float | None = None
     e_required_kwh: float | None = None
-    # PV-only. Legacy stations without the ticket-02 selection are omitted
-    # during the staged rollout and retain transformer-weighted allocation.
-    # Ticket 06 removes that temporary compatibility path.
+    # PV-only. Validation requires one installation for every PV station;
+    # BESS branches leave this mapping empty.
     pv_inverters_by_station: dict[str, PvInverterInstallation] = field(default_factory=dict)
     # Direct MV interconnection run for this fleet. HV designs keep the
     # shared export on GraphInputs instead.
@@ -1380,18 +1374,15 @@ def graph_to_inputs(diagram: dict, db) -> GraphInputs:
                 for sid in ids:
                     props = _props(nodes[sid])
                     mode = props.get("mode") or ("catalogue" if props.get("model") else None)
-                    inverter_key = props.get("pv_inverter")
                     inverter = (_custom_pv_inverter(props) if mode == "custom" else
-                                db.pv_inverters.get(inverter_key)
-                                if isinstance(inverter_key, str) else None)
-                    count = props.get("inverter_count")
-                    if inverter is not None and isinstance(count, (int, float)):
-                        pv_inverters_by_station[sid] = PvInverterInstallation(
-                            inverter=inverter,
-                            count=int(count),
-                            unit_capability=inverter.capability_at(ambient_c),
-                            custom=mode == "custom",
-                        )
+                                db.pv_inverters[props["pv_inverter"]])
+                    count = int(props["inverter_count"])
+                    pv_inverters_by_station[sid] = PvInverterInstallation(
+                        inverter=inverter,
+                        count=count,
+                        unit_capability=inverter.capability_at(ambient_c),
+                        custom=mode == "custom",
+                    )
         if kind == "bess":
             hours = _rule_opt(diagram, "discharge_hours")
             per_station = [
@@ -1586,7 +1577,10 @@ def map_results(inputs: GraphInputs, stage1s: list[SizingResult],
                 edges[edge_id] = _segment_payload(
                     segment, forced=key in branch_inputs.segment_candidates)
             for station, plan, node_id in zip(circuit.stations, plans, ids):
-                installation = branch_inputs.pv_inverters_by_station.get(node_id)
+                installation = (
+                    branch_inputs.pv_inverters_by_station[node_id]
+                    if branch_inputs.kind == "pv" else None
+                )
                 station_payload = {
                     # "kind" is the CANVAS node type, the discriminator the
                     # editor keys every node payload on — it stays "station".
@@ -1721,7 +1715,7 @@ def map_results(inputs: GraphInputs, stage1s: list[SizingResult],
                     edge_id=branch_inputs.export_edge_id))
 
         if not layout.loading_ok:
-            if branch_inputs.pv_inverters_by_station:
+            if branch_inputs.kind == "pv":
                 overload_message = (
                     "One or more drawn transformer stations exceed the fleet's "
                     f"{branch_inputs.max_loading * 100:.0f} % transformer loading "
@@ -1729,9 +1723,7 @@ def map_results(inputs: GraphInputs, stage1s: list[SizingResult],
                     "Add stations or pick bigger units."
                 )
             else:
-                # Preserve the established BESS and transitional legacy-PV
-                # response byte-for-byte; their allocation contract did not
-                # change in this ticket.
+                # BESS allocation remains proportional to transformer rating.
                 overload_message = (
                     f"The drawn stations carry {layout.fleet_loading * 100:.0f} % of "
                     "their combined rating — the required inverter power exceeds "

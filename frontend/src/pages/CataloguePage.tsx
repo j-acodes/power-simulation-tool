@@ -89,7 +89,7 @@ export function CataloguePage() {
 
           <section>
             <h2>PV Inverters</h2>
-            {(catalogue.pv_inverters ?? []).map((inverter: PvInverterInfo) => (
+            {catalogue.pv_inverters.map((inverter: PvInverterInfo) => (
               <ClickableRow key={inverter.key} target={{ kind: 'pv_inverter', item: inverter }} onSelect={setSpecTarget} />
             ))}
           </section>

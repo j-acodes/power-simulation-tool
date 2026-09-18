@@ -54,7 +54,7 @@ export function SeedWizard({ onClose }: SeedWizardProps) {
 
   const eligibleStations = useMemo(
     () => (catalogue?.transformers ?? []).filter(
-      (station) => Object.keys(station.paired_inverters ?? {}).length > 0,
+      (station) => Object.keys(station.paired_inverters).length > 0,
     ),
     [catalogue],
   )

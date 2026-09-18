@@ -25,6 +25,12 @@ designs persisted with optimistic locking, a seed wizard that proposes a plant f
 POC target, auto-arrange, full result tables and a PDF report download. See
 **Running the app** below.
 
+PV stations explicitly select a catalogue or custom inverter and an integer count. Installed
+inverter power at the design ambient governs PV station count, duty allocation, and active /
+apparent conversion warnings; transformer-station loading remains a separate check. An inverter
+is contained by a station and is never a standalone canvas node. See
+[ADR-0005](docs/adr/0005-inverter-power-governs-pv-conversion.md).
+
 **Removed** — the original Streamlit UI (`app/streamlit_app.py`) and the Markdown
 report and Graphviz diagram it alone consumed (`powertool/report.py`,
 `powertool/diagram.py`). The diagram builder replaced it and the engine is now tested
@@ -107,9 +113,9 @@ stands down and Vite proxies to that process.
 ### Resetting the database
 
 There is no migration mechanism — `backend/models.py` builds the schema wholesale with
-`Base.metadata.create_all` at startup. Adding a non-nullable column (as the design
-`technology` field did) means an existing `powertool.db` can't be upgraded in place; it
-has to be deleted and rebuilt empty, which loses every project and design in it.
+`Base.metadata.create_all` at startup. Incompatible stored contracts, such as a diagram saved
+before PV inverter selection became required, are not inferred or upgraded. Resetting the
+database deletes every project and design in it.
 
 ```bash
 python scripts/reset_db.py

@@ -7,7 +7,7 @@ BESS or accepted topology. Review findings are fixed before the branch is handed
 
 **Blocked by:** 04: Generate and customize inverter-based PV stations; 05: Complete the Sungrow and Huawei PV catalogue.
 
-**Status:** ready-for-agent
+**Status:** claimed
 
 - [ ] No production fallback synthesizes an inverter for a station that lacks one
 - [ ] The glossary and project status describe inverter composition, pairing, ambient power, loading and provenance

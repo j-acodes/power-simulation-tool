@@ -359,7 +359,8 @@ export interface TransformerInfo {
   /** BESS solution key -> containers per station: the solutions this station
    *  transformer is sold with. Always empty for a PV transformer. */
   paired_solutions: Record<string, number>
-  paired_inverters?: Record<string, PvInverterPairingInfo>
+  /** PV inverter products this station accepts. Empty for BESS stations. */
+  paired_inverters: Record<string, PvInverterPairingInfo>
 }
 
 export interface PvInverterPairingInfo {
@@ -487,7 +488,7 @@ export interface CatalogueResponse {
   defaults: CatalogueDefaults
   bess_solutions: BessSolutionInfo[]
   bess_transformers: TransformerInfo[]
-  pv_inverters?: PvInverterInfo[]
+  pv_inverters: PvInverterInfo[]
 }
 
 // --- Projects / Designs (M4 persistence) ------------------------------------

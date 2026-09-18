@@ -37,8 +37,8 @@ class StationOverloadError(ValueError):
 class StationPlan:
     """Planned electrical figures for ONE MV/LV station, before cable sizing.
 
-    A PV station's LV share may be proportional to installed inverter power;
-    legacy PV and BESS allocation remains proportional to transformer rating.
+    A PV station's LV share is proportional to installed inverter power;
+    BESS allocation remains proportional to transformer rating.
     """
 
     transformer: Transformer
@@ -53,8 +53,8 @@ class StationPlan:
     v_lv_kv: float  # the station's own transformer LV rating
     kind: str = "pv"  # fleet kind ("pv" or "bess"); see powertool.graph
     # The conversion capacity used only to allocate P/Q between stations.
-    # For PV this is installed inverter power; legacy PV and BESS retain the
-    # transformer-rating allocation until their own contracts say otherwise.
+    # For PV this is installed inverter power; BESS retains transformer-rating
+    # allocation until its own contract says otherwise.
     allocation_capacity_kw: float | None = None
 
 

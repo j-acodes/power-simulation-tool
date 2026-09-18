@@ -32,11 +32,11 @@ _Avoid_: feeder, string (string is reserved for PV DC strings, a concept this to
 
 **Station**:
 One MV/LV conversion point on the diagram: a transformer station, plus — depending on fleet
-kind — the inverters or PCS units behind it. The generation or storage equipment behind a
-station is accounted for through the fleet's aggregate power rather than as a thing of its
-own, so a station's identity in this project is carried by the transformer station it names.
-A station is the instance drawn on the canvas; the transformer station is the product it
-names, and the two are never the same word.
+kind — the selected inverter fleet or PCS units behind it. A PV station names one inverter
+product and an integer count; that composition establishes its conversion capacity without
+adding separate inverter nodes to the diagram. A station is the instance drawn on the canvas;
+the transformer station and inverter are the products it names, and neither product is itself
+a station.
 _Avoid_: substation (substation refers to the shared HV/MV transformer block, a different
 node on the diagram), MV/LV transformer, transformer station (that is the product, not the
 node)
@@ -97,11 +97,13 @@ explicitly rather than relying on the bare word.
 _Avoid_: plant (plant means the whole design, both fleets together)
 
 **Loading**:
-A station's or a fleet's power drawn as a fraction of its rated power. Every station within
-a fleet runs at the same per-unit loading — the fleet's rating is shared out among its
-stations in proportion to each one's own rating. A maximum loading limit is a compliance
-threshold; a fleet that would need to run above it fails the loading check. PV and BESS
-fleets can carry different maximum loading limits, reflecting their different duty cycles.
+A station's or a fleet's power drawn as a fraction of the applicable equipment rating. PV
+duty is shared among stations in proportion to installed inverter power, then each transformer
+station is checked separately against its own AC power at ambient and the PV maximum-loading
+limit. Inverter active and apparent loading are independent checks against 100% of installed
+inverter power; the transformer loading setting never derates the inverter. BESS allocation
+remains proportional to transformer-station rating. PV and BESS fleets can carry different
+transformer maximum-loading limits, reflecting their different duty cycles.
 _Avoid_: utilization (utilization is used for a different, cable-current-based check),
 load factor
 
@@ -133,11 +135,12 @@ container count is a judgement rather than a supplier's figure.
 _Avoid_: battery unit, pack
 
 **Pairing**:
-The record, carried by a BESS station transformer, of which BESS solutions it is actually sold
-with and how many containers it serves for each. It exists because a container is not a
-complete station: a transformerless product emits LV and reaches the MV busbar only through a
-station transformer its own datasheet says nothing about. A solution and a station transformer
-that are not paired cannot be combined, however well their voltages happen to agree.
+The product-composition record carried by a transformer station. For BESS it names the solutions
+the station is sold with and how many containers it serves. For PV it names the allowed inverter
+products plus each pairing's maximum and default inverter count. Pairing is authoritative: the
+tool does not infer compatibility by comparing nominal voltages, and products not named by the
+station cannot be combined. The PV default is the maximum physical-input interpretation recorded
+in the catalogue; an engineer may reduce the count within the declared range.
 _Avoid_: compatibility, match, association
 
 **PCS**:
@@ -148,7 +151,11 @@ language of the asset it describes.
 _Avoid_: inverter, when the fleet kind is BESS
 
 **Inverter**:
-The PV-fleet name for the same conversion-level role that a BESS fleet calls the PCS. See PCS.
+The PV-fleet conversion product selected and counted inside a station. Its explicit inverter
+power at ambient establishes installed active and apparent conversion capacity, governs how PV
+duty is allocated among stations, and supplies its own minimum-power-factor check when published.
+It is a catalogue product and part of station composition, never a standalone canvas node. A
+BESS fleet calls the equivalent conversion-level role the PCS.
 _Avoid_: PCS, when the fleet kind is PV
 
 **Discharge duration**:
@@ -171,7 +178,8 @@ _Avoid_: stored energy, capacity
 **Simulated parameter / typed parameter**:
 The two tiers every catalogue parameter falls into, and the distinction the catalogue is built
 around. A **simulated** parameter is one the sizing engine reads — nominal energy, PCS rating
-and LV voltage, discharge duration, auxiliary draw, AC power at ambient. A **typed** parameter
+and LV voltage, discharge duration, auxiliary draw, AC power at ambient, inverter power at
+ambient, inverter count and minimum power factor. A **typed** parameter
 is structured, stored and shown, but never computed with: cell chemistry, dimensions, ingress
 protection, the operating envelope, a ring main unit's protection functions. Both are
 transcribed from a datasheet with equal care; only one of them can change a number in a design

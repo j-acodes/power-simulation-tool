@@ -64,7 +64,10 @@ def _minimal() -> dict:
         "nodes": [
             _node("poc", "poc", p_target_mw=3.0, pf=0.95),
             _node("bus", "busbar"),
-            _node("s1", "station", mode="catalogue", model="HUAWEI_JUPITER3000"),
+            _node(
+                "s1", "station", mode="catalogue", model="HUAWEI_JUPITER3000",
+                pv_inverter="huawei-sun2000-330ktl-h1", inverter_count=11,
+            ),
             _node("aux", "aux", p_kw=50.0, q_kvar=10.0),
         ],
         "edges": [
@@ -88,6 +91,13 @@ def test_minimal_drawing_is_valid():
 def test_pv_station_rejects_unknown_unpaired_and_out_of_range_inverters():
     diagram = _minimal()
     station = diagram["nodes"][2]["props"]
+    station.pop("pv_inverter")
+    station.pop("inverter_count")
+    assert "unknown_pv_inverter" in _codes(validate_graph(diagram, db))
+    rejected = client.post("/api/solve", json=diagram).json()
+    assert rejected["results"] is None
+    assert "unknown_pv_inverter" in {issue["code"] for issue in rejected["issues"]}
+
     station.update({"model": "SUNGROW_MVS3200", "pv_inverter": "missing", "inverter_count": 10})
     assert "unknown_pv_inverter" in _codes(validate_graph(diagram, db))
 
@@ -719,9 +729,12 @@ def _hv_diagram() -> dict:
             _node("poc", "poc", p_target_mw=20.0, pf=0.95),
             _node("hv", "hv_tx", mode="auto", n_parallel=1),
             _node("bus", "busbar"),
-            _node("a1", "station", mode="catalogue", model="HUAWEI_JUPITER3000"),
-            _node("b1", "station", mode="catalogue", model="HUAWEI_JUPITER9000"),
-            _node("b2", "station", mode="catalogue", model="HUAWEI_JUPITER3000"),
+            _node("a1", "station", mode="catalogue", model="HUAWEI_JUPITER3000",
+                  pv_inverter="huawei-sun2000-330ktl-h1", inverter_count=11),
+            _node("b1", "station", mode="catalogue", model="HUAWEI_JUPITER9000",
+                  pv_inverter="huawei-sun2000-330ktl-h1", inverter_count=30),
+            _node("b2", "station", mode="catalogue", model="HUAWEI_JUPITER3000",
+                  pv_inverter="huawei-sun2000-330ktl-h1", inverter_count=11),
             _node("aux", "aux", p_kw=120.0, q_kvar=40.0),
         ],
         "edges": [
@@ -838,7 +851,8 @@ def test_mv_interconnection_sizes_the_drawn_export_run():
     diagram["nodes"][0]["props"]["p_target_mw"] = 6.0
     diagram["edges"][0]["length_m"] = 2500.0
     diagram["nodes"].append(
-        _node("s2", "station", mode="catalogue", model="HUAWEI_JUPITER3000"))
+        _node("s2", "station", mode="catalogue", model="HUAWEI_JUPITER3000",
+              pv_inverter="huawei-sun2000-330ktl-h1", inverter_count=11))
     diagram["edges"].append(_edge("e_t2", "s1", "s2", length_m=400.0))
     assert validate_graph(diagram, db) == []
 
@@ -1059,6 +1073,8 @@ def _drawn_example(layout) -> tuple[dict, list[list[str]], dict]:
             edge_id = f"c{c_idx}_seg{s_idx}"
             nodes.append(_node(node_id, "station", mode="catalogue",
                                model=key_of[id(plan.transformer)],
+                               pv_inverter="huawei-sun2000-330ktl-h1",
+                               inverter_count=(30 if plan.transformer.s_rated_kva_at_40c == 9000 else 11),
                                x=float(c_idx), y=float(s_idx)))
             edges.append(_edge(edge_id, "bus" if s_idx == 1 else ids[-1], node_id,
                                length_m=TRUNK_M if s_idx == 1 else SPACING_M))

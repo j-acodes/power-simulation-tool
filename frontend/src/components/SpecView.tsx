@@ -428,9 +428,9 @@ function PairingsSection({
     title = 'Sold with these station transformers'
   } else if (target.kind === 'pv_inverter') {
     rows = pvTransformers
-      .filter((tx) => target.item.key in (tx.paired_inverters ?? {}))
+      .filter((tx) => target.item.key in tx.paired_inverters)
       .map((tx) => {
-        const pairing = tx.paired_inverters![target.item.key]
+        const pairing = tx.paired_inverters[target.item.key]
         return <Row key={tx.key} label={tx.display_name} value={`1–${pairing.maximum_count} inverter(s); default ${pairing.default_count}`} />
       })
     title = 'Paired PV Transformer Stations'
@@ -441,7 +441,7 @@ function PairingsSection({
         })
     title = 'Sold with these solutions'
   } else {
-    rows = Object.entries(target.item.paired_inverters ?? {}).map(([inverterKey, pairing]) => {
+    rows = Object.entries(target.item.paired_inverters).map(([inverterKey, pairing]) => {
       const inverter = pvInverters.find((candidate) => candidate.key === inverterKey)
       return <Row key={inverterKey} label={inverter?.display_name ?? inverterKey} value={`1–${pairing.maximum_count} inverter(s); default ${pairing.default_count}`} />
     })

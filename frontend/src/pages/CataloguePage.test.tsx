@@ -34,7 +34,7 @@ const bessTransformer: TransformerInfo = {
   corrosion_class: null, temp_min_c: null, temp_max_c: null, humidity_min_pct: null,
   humidity_max_pct: null, altitude_max_m: null, communication: null, standards: null,
   datasheet_version: null, preliminary: false,
-  paired_solutions: { [bessSolution.key]: 1 },
+  paired_solutions: { [bessSolution.key]: 1 }, paired_inverters: {},
 }
 
 const pvTransformer: TransformerInfo = {
@@ -53,7 +53,7 @@ const pvTransformer: TransformerInfo = {
   corrosion_class: null, temp_min_c: null, temp_max_c: null, humidity_min_pct: null,
   humidity_max_pct: null, altitude_max_m: null, communication: null, standards: null,
   datasheet_version: null, preliminary: false,
-  paired_solutions: {},
+  paired_solutions: {}, paired_inverters: {},
 }
 
 const cable: CableInfo = { name: '3x1x240 Al', cross_section_mm2: 240, rated_current_a: 420 }

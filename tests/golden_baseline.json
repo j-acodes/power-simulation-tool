@@ -815,6 +815,17 @@
           "dq_tx_kvar": 269.1572227874376,
           "fleet_kind": "pv",
           "i_a": 92.87760397214636,
+          "inverter_active_loading": 0.9380880540688072,
+          "inverter_active_ok": true,
+          "inverter_apparent_loading": 1.0137034205940367,
+          "inverter_apparent_ok": false,
+          "inverter_capacity_kw": 3300,
+          "inverter_count": 11,
+          "inverter_minimum_power_factor": 0.8,
+          "inverter_model": "SUN2000 \u2014 SUN2000-330KTL-H1",
+          "inverter_power_factor": 0.9254068152587288,
+          "inverter_power_factor_ok": true,
+          "inverter_unit_power_kw": 300,
           "kind": "station",
           "loading": 1.0137034205940367,
           "model": "3300 kVA - Huawei",
@@ -934,9 +945,15 @@
       },
       "warnings": [
         {
+          "code": "inverter_apparent_capacity_exceeded",
+          "edge_id": null,
+          "message": "Station 's1' needs 3,345 kVA from its inverters, above the installed 3,300 kVA apparent-power limit.",
+          "node_id": "s1"
+        },
+        {
           "code": "fleet_overloaded",
           "edge_id": null,
-          "message": "The drawn stations carry 101 % of their combined rating \u2014 the required inverter power exceeds the installed station capacity. Add stations or pick bigger units.",
+          "message": "One or more drawn transformer stations exceed the fleet's 100 % transformer loading limit (aggregate loading is 101 %). Add stations or pick bigger units.",
           "node_id": "bus"
         },
         {
@@ -1009,6 +1026,17 @@
           "dq_tx_kvar": 40378.02182341169,
           "fleet_kind": "pv",
           "i_a": 296.1194913108316,
+          "inverter_active_loading": 4.572871308213425,
+          "inverter_active_ok": false,
+          "inverter_apparent_loading": 12.415963063099506,
+          "inverter_apparent_ok": false,
+          "inverter_capacity_kw": 3300,
+          "inverter_count": 11,
+          "inverter_minimum_power_factor": 0.8,
+          "inverter_model": "SUN2000 \u2014 SUN2000-330KTL-H1",
+          "inverter_power_factor": 0.36830580801291934,
+          "inverter_power_factor_ok": false,
+          "inverter_unit_power_kw": 300,
           "kind": "station",
           "loading": 12.415963063099506,
           "model": "3300 kVA - Huawei",
@@ -1087,9 +1115,27 @@
       },
       "warnings": [
         {
+          "code": "inverter_active_capacity_exceeded",
+          "edge_id": null,
+          "message": "Station 's1' needs 15,090 kW from its inverters, above the installed 3,300 kW active-power limit.",
+          "node_id": "s1"
+        },
+        {
+          "code": "inverter_apparent_capacity_exceeded",
+          "edge_id": null,
+          "message": "Station 's1' needs 40,973 kVA from its inverters, above the installed 3,300 kVA apparent-power limit.",
+          "node_id": "s1"
+        },
+        {
+          "code": "inverter_power_factor_below_minimum",
+          "edge_id": null,
+          "message": "Station 's1' operates at power factor 0.368, below SUN2000 \u2014 SUN2000-330KTL-H1's published minimum of 0.800.",
+          "node_id": "s1"
+        },
+        {
           "code": "fleet_overloaded",
           "edge_id": null,
-          "message": "The drawn stations carry 1242 % of their combined rating \u2014 the required inverter power exceeds the installed station capacity. Add stations or pick bigger units.",
+          "message": "One or more drawn transformer stations exceed the fleet's 100 % transformer loading limit (aggregate loading is 1242 %). Add stations or pick bigger units.",
           "node_id": "bus"
         }
       ]
@@ -1150,6 +1196,17 @@
           "dq_tx_kvar": 269.15722118452345,
           "fleet_kind": "pv",
           "i_a": 92.87760371314685,
+          "inverter_active_loading": 0.9380880517044986,
+          "inverter_active_ok": true,
+          "inverter_apparent_loading": 1.0137034175755788,
+          "inverter_apparent_ok": false,
+          "inverter_capacity_kw": 3300,
+          "inverter_count": 11,
+          "inverter_minimum_power_factor": 0.8,
+          "inverter_model": "SUN2000 \u2014 SUN2000-330KTL-H1",
+          "inverter_power_factor": 0.9254068156819226,
+          "inverter_power_factor_ok": true,
+          "inverter_unit_power_kw": 300,
           "kind": "station",
           "loading": 1.0137034175755788,
           "model": "3300 kVA - Huawei",
@@ -1228,9 +1285,15 @@
       },
       "warnings": [
         {
+          "code": "inverter_apparent_capacity_exceeded",
+          "edge_id": null,
+          "message": "Station 's1' needs 3,345 kVA from its inverters, above the installed 3,300 kVA apparent-power limit.",
+          "node_id": "s1"
+        },
+        {
           "code": "fleet_overloaded",
           "edge_id": null,
-          "message": "The drawn stations carry 101 % of their combined rating \u2014 the required inverter power exceeds the installed station capacity. Add stations or pick bigger units.",
+          "message": "One or more drawn transformer stations exceed the fleet's 100 % transformer loading limit (aggregate loading is 101 %). Add stations or pick bigger units.",
           "node_id": "bus"
         }
       ]
@@ -1291,6 +1354,17 @@
           "dq_tx_kvar": 231.08937413122356,
           "fleet_kind": "pv",
           "i_a": 88.26772804621902,
+          "inverter_active_loading": 0.9363859327713328,
+          "inverter_active_ok": true,
+          "inverter_apparent_loading": 0.9392860684042877,
+          "inverter_apparent_ok": true,
+          "inverter_capacity_kw": 3300,
+          "inverter_count": 11,
+          "inverter_minimum_power_factor": 0.8,
+          "inverter_model": "SUN2000 \u2014 SUN2000-330KTL-H1",
+          "inverter_power_factor": 0.9969124042924623,
+          "inverter_power_factor_ok": true,
+          "inverter_unit_power_kw": 300,
           "kind": "station",
           "loading": 0.9392860684042877,
           "model": "3300 kVA - Huawei",
@@ -1420,6 +1494,17 @@
           "dq_tx_kvar": 260.4332671773727,
           "fleet_kind": "pv",
           "i_a": 91.40805630680313,
+          "inverter_active_loading": 0.9225227976500098,
+          "inverter_active_ok": true,
+          "inverter_apparent_loading": 0.9971399635440533,
+          "inverter_apparent_ok": true,
+          "inverter_capacity_kw": 3300,
+          "inverter_count": 11,
+          "inverter_minimum_power_factor": 0.8,
+          "inverter_model": "SUN2000 \u2014 SUN2000-330KTL-H1",
+          "inverter_power_factor": 0.9251688141864881,
+          "inverter_power_factor_ok": true,
+          "inverter_unit_power_kw": 300,
           "kind": "station",
           "loading": 0.9971399635440533,
           "model": "3300 kVA - Huawei",

@@ -252,7 +252,10 @@ def test_a_legacy_bess_plant_can_gain_a_pv_busbar():
     # looks like. Add a declared PV busbar with a station of its own.
     diagram["nodes"] += [
         _node("bus_pv", "busbar", fleet_kind="pv"),
-        _node("s_pv", "station", mode="catalogue", model="HUAWEI_JUPITER3000"),
+        _node(
+            "s_pv", "station", mode="catalogue", model="HUAWEI_JUPITER3000",
+            pv_inverter="huawei-sun2000-330ktl-h1", inverter_count=11,
+        ),
     ]
     diagram["edges"] += [
         _edge("e_poc_pv", "poc", "bus_pv", length_m=0.0),

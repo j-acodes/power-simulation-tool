@@ -19,9 +19,19 @@ not a second source of requirements.
   one busbar/cascade per fleet. Technology is declared at design creation and changed by
   cloning; these are accepted decisions in [ADR-0001](adr/0001-hybrid-pv-bess-topology.md)
   and [ADR-0002](adr/0002-technology-declared-not-derived.md).
-- YAML catalogues include PV and BESS station transformers, cables, and datasheet-backed
-  BESS solutions with pairing, typed fields, auxiliary notices, and ambient-rated station
-  power. Ambient lookup follows [ADR-0004](adr/0004-ac-power-per-ambient-temperature.md).
+- YAML catalogues include PV and BESS transformer stations, cables, datasheet-backed BESS
+  solutions, and Sungrow/Huawei PV inverters. Supported PV transformer stations declare their
+  inverter pairings and count bounds; every PV station must select one paired inverter and a
+  whole-number count. TBEA stations are no longer selectable.
+- PV conversion duty is allocated by installed inverter power at the selected ambient and is
+  checked independently for active power, apparent power, and published minimum power factor.
+  Transformer-station loading remains a separate check. Ambient lookup and provenance follow
+  [ADR-0004](adr/0004-ac-power-per-ambient-temperature.md) and
+  [ADR-0005](adr/0005-inverter-power-governs-pv-conversion.md).
+- Catalogue, setup, and station-inspector views expose separate full specifications for PV
+  transformer stations and inverters, with simulated parameters, typed supplier facts,
+  pairings, missing-data notices, and source provenance. Inverters remain contained products,
+  not draggable canvas nodes.
 
 ## Deferred and operational gaps
 
@@ -34,6 +44,8 @@ not a second source of requirements.
 - Saved-design import/export and automated database backup are not provided. PDF export is
   implemented, while the local SQLite file remains runtime state rather than a portable
   project archive.
+- Existing diagrams that omit a PV inverter selection and count are intentionally invalid;
+  there is no synthetic legacy inverter or payload migration path.
 
 ## Architecture and decisions
 

@@ -64,7 +64,7 @@ function transformer(overrides: Partial<TransformerInfo> = {}): TransformerInfo 
     corrosion_class: null, temp_min_c: null, temp_max_c: null, humidity_min_pct: null,
     humidity_max_pct: null, altitude_max_m: null, communication: null, standards: null,
     datasheet_version: null, preliminary: false,
-    paired_solutions: {},
+    paired_solutions: {}, paired_inverters: {},
     ...overrides,
   }
 }
