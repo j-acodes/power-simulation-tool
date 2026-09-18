@@ -227,6 +227,29 @@ describe('Inspector — expand control for a placed station (ticket 06)', () => 
     expect(screen.getByText('DC side')).toBeTruthy()
   })
 
+  it('edits one generated station without changing its peers', () => {
+    const first: DiagramNode = {
+      id: 'n1', kind: 'station', x: 0, y: 0,
+      props: {
+        fleet_kind: 'pv', mode: 'catalogue', model: pvTransformer.key,
+        pv_inverter: pvInverter.key, inverter_count: 10,
+      },
+    }
+    const second: DiagramNode = {
+      ...first, id: 'n2', x: 100, props: { ...first.props },
+    }
+    useStore.setState({
+      diagram: { ...EMPTY_DIAGRAM, nodes: [first, second] },
+      selection: { type: 'node', id: 'n1' },
+    })
+    render(<Inspector />)
+
+    fireEvent.change(screen.getByLabelText('Inverters'), { target: { value: '4' } })
+
+    expect(useStore.getState().diagram.nodes[0].props.inverter_count).toBe(4)
+    expect(useStore.getState().diagram.nodes[1].props.inverter_count).toBe(10)
+  })
+
   it('hides the expand control for a custom PV station', () => {
     withNode({
       id: 'n1', kind: 'station', x: 0, y: 0,
@@ -238,6 +261,32 @@ describe('Inspector — expand control for a placed station (ticket 06)', () => 
     render(<Inspector />)
 
     expect(screen.queryByRole('button', { name: 'Station transformer specification' })).toBeNull()
+  })
+
+  it('edits a one-off custom inverter without offering a supplier specification', () => {
+    withNode({
+      id: 'n1', kind: 'station', x: 0, y: 0,
+      props: {
+        fleet_kind: 'pv', mode: 'custom', name: 'Custom station',
+        s_rated_kva: 1000, uk_percent: 6, pk_kw: 8, p0_kw: 1, i0_percent: 0.5,
+      },
+    })
+    render(<Inspector />)
+
+    fireEvent.change(screen.getByLabelText('Custom inverter name'), { target: { value: 'Prototype 500' } })
+    fireEvent.change(screen.getByLabelText('Inverter power at 40 °C (kW/kVA)'), { target: { value: '500' } })
+    fireEvent.change(screen.getByLabelText('Inverter nominal AC voltage (kV)'), { target: { value: '0.4' } })
+    fireEvent.change(screen.getByLabelText('Inverters'), { target: { value: '3' } })
+
+    expect(useStore.getState().diagram.nodes[0].props).toMatchObject({
+      custom_inverter_name: 'Prototype 500',
+      custom_inverter_power_kw_at_40c: 500,
+      custom_inverter_nominal_ac_voltage_kv: 0.4,
+      inverter_count: 3,
+    })
+    expect(screen.getByLabelText('Inverter power at 30 °C (kW/kVA, optional)')).toBeTruthy()
+    expect(screen.getByLabelText('Minimum power factor (optional)')).toBeTruthy()
+    expect(screen.queryByRole('button', { name: 'PV inverter specification' })).toBeNull()
   })
 
   it('hides the BESS solution control for a catalogue-backed BESS station that names no solution yet', () => {

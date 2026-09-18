@@ -197,6 +197,49 @@ def _custom_transformer(props: dict, name: str, hv_kv: float | None,
     return tx
 
 
+def _custom_pv_inverter(props: dict) -> PvInverter | None:
+    """Build the one-off inverter contained by a custom PV station.
+
+    Voltage is deliberately only stored: catalogue pairings and custom
+    engineering judgment are authoritative, so no LV compatibility check is
+    performed here or by validation.
+    """
+    name = props.get("custom_inverter_name")
+    power_40 = _num(props.get("custom_inverter_power_kw_at_40c"))
+    voltage = _num(props.get("custom_inverter_nominal_ac_voltage_kv"))
+    count = props.get("inverter_count")
+    if (not isinstance(name, str) or not name.strip()
+            or power_40 is None or power_40 <= 0
+            or voltage is None or voltage <= 0
+            or isinstance(count, bool) or not isinstance(count, (int, float))
+            or count != int(count) or count < 1):
+        return None
+
+    power_30 = None
+    if "custom_inverter_power_kw_at_30c" in props:
+        power_30 = _num(props.get("custom_inverter_power_kw_at_30c"))
+        if power_30 is None or power_30 <= 0:
+            return None
+
+    minimum_pf = None
+    if "custom_inverter_minimum_power_factor" in props:
+        minimum_pf = _num(props.get("custom_inverter_minimum_power_factor"))
+        if minimum_pf is None or not 0 < minimum_pf <= 1:
+            return None
+
+    clean_name = name.strip()
+    return PvInverter(
+        name=clean_name,
+        brand="Custom",
+        series="Custom",
+        model=clean_name,
+        power_kw_at_40c=power_40,
+        power_kw_at_30c=power_30,
+        nominal_ac_voltage_kv=voltage,
+        minimum_power_factor=minimum_pf,
+    )
+
+
 def _fleet_kind(props: dict) -> str:
     """A station's fleet kind: ``pv`` or ``bess``. Absent parses as ``pv`` —
     the backward-compatibility guarantee for every design already saved.
@@ -882,7 +925,19 @@ def _check_props(nodes, tree, db, diagram, issues) -> None:
                             f"Station '{nid}' has containers_override "
                             f"{override!r}; it must be a positive whole number.",
                             node_id=nid))
-            elif fleet_kind == "pv" and mode == "catalogue":
+            elif fleet_kind == "pv":
+                if mode == "custom":
+                    if _custom_pv_inverter(props) is None:
+                        issues.append(GraphIssue(
+                            "bad_custom_pv_inverter",
+                            f"Station '{nid}' needs a custom inverter name, positive "
+                            f"40 °C power, nominal AC voltage and whole-number count; "
+                            f"optional 30 °C power must be positive and optional minimum "
+                            f"power factor must be in (0, 1].",
+                            node_id=nid,
+                        ))
+                    continue
+
                 station_key = props.get("model")
                 pairings = db.pv_inverter_pairings.get(station_key, {})
                 inverter_key = props.get("pv_inverter")
@@ -1028,6 +1083,7 @@ class PvInverterInstallation:
     inverter: PvInverter
     count: int
     unit_capability: PvInverterCapability
+    custom: bool = False
 
     @property
     def installed_power_kw(self) -> float:
@@ -1322,8 +1378,10 @@ def graph_to_inputs(diagram: dict, db) -> GraphInputs:
             for ids in station_ids:
                 for sid in ids:
                     props = _props(nodes[sid])
+                    mode = props.get("mode") or ("catalogue" if props.get("model") else None)
                     inverter_key = props.get("pv_inverter")
-                    inverter = (db.pv_inverters.get(inverter_key)
+                    inverter = (_custom_pv_inverter(props) if mode == "custom" else
+                                db.pv_inverters.get(inverter_key)
                                 if isinstance(inverter_key, str) else None)
                     count = props.get("inverter_count")
                     if inverter is not None and isinstance(count, (int, float)):
@@ -1331,6 +1389,7 @@ def graph_to_inputs(diagram: dict, db) -> GraphInputs:
                             inverter=inverter,
                             count=int(count),
                             unit_capability=inverter.capability_at(ambient_c),
+                            custom=mode == "custom",
                         )
         if kind == "bess":
             hours = _rule_opt(diagram, "discharge_hours")
@@ -1603,11 +1662,19 @@ def map_results(inputs: GraphInputs, stage1s: list[SizingResult],
                             f"minimum of {minimum_pf:.3f}.",
                             node_id=node_id,
                         ))
+                    if installation.custom and minimum_pf is None:
+                        warnings.append(GraphIssue(
+                            "inverter_minimum_power_factor_not_provided",
+                            f"No minimum power factor was entered for "
+                            f"{installation.inverter.display_name}; that check is "
+                            f"unavailable for station '{node_id}'.",
+                            node_id=node_id,
+                        ))
                     if installation.unit_capability.used_fallback:
                         warnings.append(GraphIssue(
                             "inverter_ambient_power_not_published",
                             f"No {installation.unit_capability.requested_ambient_c:g} °C "
-                            f"power is published for "
+                            f"power is {'entered' if installation.custom else 'published'} for "
                             f"{installation.inverter.display_name} — using its "
                             f"{installation.unit_capability.source_ambient_c:g} °C "
                             f"power for station '{node_id}'.",

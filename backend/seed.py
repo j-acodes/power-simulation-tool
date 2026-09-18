@@ -89,6 +89,7 @@ def seed_diagram(params: dict, db: ComponentDatabase) -> dict:
     ``params`` (see backend.schemas.SeedRequest): ``p_poc_mw``, ``pf_target``,
     ``interconnection`` ("HV"|"MV"), ``v_hv_kv`` (required for HV),
     ``export_m``, ``v_mv_kv``, ``station_model`` (a catalogue key),
+    ``pv_inverter`` (a paired catalogue key), ``inverter_count``,
     ``max_loading``, ``trunk_m``, ``spacing_m``, ``max_circuit_current_a``,
     optional ``aux_p_kw``/``aux_q_kvar``.
     """
@@ -97,17 +98,41 @@ def seed_diagram(params: dict, db: ComponentDatabase) -> dict:
     v_hv_kv = params.get("v_hv_kv")
     v_export_kv = v_hv_kv if interconnection == "HV" else v_mv_kv
 
-    station = db.transformer(params["station_model"])
-    rated_kva = station.rating_at(DEFAULT_AMBIENT_C)
+    station_key = params["station_model"]
+    station = db.transformer(station_key)
+    inverter_key = params["pv_inverter"]
+    inverter = db.pv_inverters.get(inverter_key)
+    pairing = db.pv_inverter_pairings.get(station_key, {}).get(inverter_key)
+    inverter_count = params["inverter_count"]
+    if inverter is None or pairing is None:
+        raise ValueError(
+            f"PV inverter {inverter_key!r} is not paired with station {station_key!r}."
+        )
+    if (isinstance(inverter_count, bool) or not isinstance(inverter_count, int)
+            or not 1 <= inverter_count <= pairing.maximum_count):
+        raise ValueError(
+            f"inverter_count must be a whole number from 1 to {pairing.maximum_count}."
+        )
+    per_station_capacity = (
+        inverter.capability_at(DEFAULT_AMBIENT_C).power_kw * inverter_count
+    )
     max_loading = params["max_loading"]
     p_poc_kw = params["p_poc_mw"] * 1000.0
     pf_target = params["pf_target"]
 
-    n = max(1, math.ceil((p_poc_kw / pf_target) / (rated_kva * max_loading)))
+    n = max(
+        1,
+        math.ceil(p_poc_kw / per_station_capacity),
+        math.ceil((p_poc_kw / pf_target) / per_station_capacity),
+    )
     stage1 = None
     for _ in range(_MAX_ITERATIONS):
         stage1 = _stage1_for_count(n, params, db, v_export_kv)
-        next_n = max(1, math.ceil(stage1.s_inv_kva / (rated_kva * max_loading)))
+        next_n = max(
+            1,
+            math.ceil(stage1.p_inv_kw / per_station_capacity),
+            math.ceil(stage1.s_inv_kva / per_station_capacity),
+        )
         if next_n == n:
             break
         n = next_n
@@ -138,6 +163,8 @@ def _layout_to_diagram(layout: PlantLayout, params: dict, v_export_kv: float) ->
     trunk_m = params["trunk_m"]
     spacing_m = params["spacing_m"]
     station_model = params["station_model"]
+    pv_inverter = params["pv_inverter"]
+    inverter_count = params["inverter_count"]
     aux_p_kw = params.get("aux_p_kw") or 0.0
     aux_q_kvar = params.get("aux_q_kvar") or 0.0
 
@@ -179,7 +206,13 @@ def _layout_to_diagram(layout: PlantLayout, params: dict, v_export_kv: float) ->
             nodes.append({
                 "id": node_id, "kind": "station",
                 "x": x, "y": _STATION_Y0 + (s_idx - 1) * _STATION_DY,
-                "props": {"mode": "catalogue", "model": station_model},
+                "props": {
+                    "mode": "catalogue",
+                    "model": station_model,
+                    "fleet_kind": "pv",
+                    "pv_inverter": pv_inverter,
+                    "inverter_count": inverter_count,
+                },
             })
             edges.append({
                 "id": edge_id,

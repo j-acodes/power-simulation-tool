@@ -8,17 +8,17 @@ data to participate in the same sizing and warning behavior without becoming a c
 
 **Blocked by:** 03: Make inverter capacity govern PV solving.
 
-**Status:** ready-for-agent
+**Status:** done
 
-- [ ] PV setup selects station, paired inverter and bounded count in that order
-- [ ] Count defaults to the pairing maximum
-- [ ] Generated station quantity is sufficient for both loss-adjusted active and apparent inverter duty
-- [ ] Transformer loading is reported separately and does not determine inverter-based station quantity
-- [ ] Generated stations persist the selected inverter and count and can diverge after individual edits
-- [ ] Custom inverter requires name, 40 °C power, nominal AC voltage and positive integer count
-- [ ] Custom 30 °C power and minimum PF are optional
-- [ ] Missing custom 30 °C power uses 40 °C power and returns a notice
-- [ ] Catalogue and custom voltage are stored/displayed but never validated
-- [ ] Custom inverter values do not create reusable catalogue entries or supplier specification views
-- [ ] Seed/API/diagram and focused setup/inspector tests pass
-- [ ] Python and frontend typechecking pass
+- [x] PV setup selects station, paired inverter and bounded count in that order
+- [x] Count defaults to the pairing maximum
+- [x] Generated station quantity is sufficient for both loss-adjusted active and apparent inverter duty
+- [x] Transformer loading is reported separately and does not determine inverter-based station quantity
+- [x] Generated stations persist the selected inverter and count and can diverge after individual edits
+- [x] Custom inverter requires name, 40 °C power, nominal AC voltage and positive integer count
+- [x] Custom 30 °C power and minimum PF are optional
+- [x] Missing custom 30 °C power uses 40 °C power and returns a notice
+- [x] Catalogue and custom voltage are stored/displayed but never validated
+- [x] Custom inverter values do not create reusable catalogue entries or supplier specification views
+- [x] Seed/API/diagram and focused setup/inspector tests pass
+- [x] Python and frontend typechecking pass

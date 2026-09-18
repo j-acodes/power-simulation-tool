@@ -322,7 +322,10 @@ def post_seed(req: SeedRequest) -> dict:
     not a wrapped response — the editor loads it onto the canvas exactly as it
     would load a saved design.
     """
-    return seed_diagram(req.model_dump(), db)
+    try:
+        return seed_diagram(req.model_dump(), db)
+    except (KeyError, ValueError) as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
 @app.get("/api/projects", response_model=list[ProjectSummary])

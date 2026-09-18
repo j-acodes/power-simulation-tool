@@ -282,7 +282,8 @@ def _example_diagram() -> dict:
 
     return seed_diagram(
         {"p_poc_mw": 45, "pf_target": 0.95, "interconnection": "HV", "v_hv_kv": 132,
-         "export_m": 0, "v_mv_kv": 20, "station_model": "HUAWEI_JUPITER9000",
+         "export_m": 0, "v_mv_kv": 20, "station_model": "SUNGROW_MVS8960",
+         "pv_inverter": "sungrow-sg350hx-20", "inverter_count": 28,
          "max_loading": 0.9, "trunk_m": 400, "spacing_m": 200,
          "max_circuit_current_a": 600, "aux_p_kw": 120, "aux_q_kvar": 40},
         db,

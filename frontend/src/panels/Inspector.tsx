@@ -57,6 +57,96 @@ function CustomTransformerFields({
   )
 }
 
+function OptionalNumberField({
+  label,
+  value,
+  onChange,
+  step = 1,
+  min,
+  max,
+}: {
+  label: string
+  value: unknown
+  onChange: (v: number | undefined) => void
+  step?: number
+  min?: number
+  max?: number
+}) {
+  const numeric = typeof value === 'number' && Number.isFinite(value) ? value : ''
+  return (
+    <label className="field">
+      <span>{label}</span>
+      <input
+        type="number"
+        step={step}
+        min={min}
+        max={max}
+        value={numeric}
+        onChange={(e) => onChange(e.target.value === '' ? undefined : e.target.valueAsNumber)}
+      />
+    </label>
+  )
+}
+
+function CustomPvInverterFields({
+  props,
+  onChange,
+}: {
+  props: Record<string, unknown>
+  onChange: (patch: Record<string, unknown>) => void
+}) {
+  return (
+    <>
+      <label className="field">
+        <span>Custom inverter name</span>
+        <input
+          type="text"
+          value={String(props.custom_inverter_name ?? '')}
+          onChange={(e) => onChange({ custom_inverter_name: e.target.value })}
+        />
+      </label>
+      <NumberField
+        label="Inverter power at 40 °C (kW/kVA)"
+        value={Number(props.custom_inverter_power_kw_at_40c ?? 0)}
+        min={0}
+        onChange={(value) => onChange({ custom_inverter_power_kw_at_40c: value })}
+      />
+      <OptionalNumberField
+        label="Inverter power at 30 °C (kW/kVA, optional)"
+        value={props.custom_inverter_power_kw_at_30c}
+        min={0}
+        onChange={(value) => onChange({ custom_inverter_power_kw_at_30c: value })}
+      />
+      <NumberField
+        label="Inverter nominal AC voltage (kV)"
+        value={Number(props.custom_inverter_nominal_ac_voltage_kv ?? 0)}
+        step={0.01}
+        min={0}
+        onChange={(value) => onChange({ custom_inverter_nominal_ac_voltage_kv: value })}
+      />
+      <NumberField
+        label="Inverters"
+        value={Number(props.inverter_count ?? 1)}
+        min={1}
+        onChange={(value) => onChange({
+          inverter_count: Number.isFinite(value) ? Math.max(1, Math.round(value)) : 1,
+        })}
+      />
+      <OptionalNumberField
+        label="Minimum power factor (optional)"
+        value={props.custom_inverter_minimum_power_factor}
+        step={0.01}
+        min={0}
+        max={1}
+        onChange={(value) => onChange({ custom_inverter_minimum_power_factor: value })}
+      />
+      <p className="panel-hint">
+        Nominal AC voltage is recorded for review; compatibility is assumed and is not validated.
+      </p>
+    </>
+  )
+}
+
 /** Read-only preview of a catalogue transformer, shown in the Inspector when
  * a palette item is clicked (not dragged) — see Palette.tsx. Shared by the PV
  * and BESS station transformer catalogues (ticket 06): both are
@@ -218,6 +308,9 @@ function NodeProperties({ node }: { node: DiagramNode }) {
             </button>
           )}
           {props.mode === 'custom' && <CustomTransformerFields props={props} onChange={patch} />}
+          {props.fleet_kind !== 'bess' && props.mode === 'custom' && (
+            <CustomPvInverterFields props={props} onChange={patch} />
+          )}
           {props.fleet_kind === 'bess' && (
             <>
               <label className="field">

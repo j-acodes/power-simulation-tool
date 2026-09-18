@@ -507,6 +507,8 @@ export interface SeedParams {
   export_m: number
   v_mv_kv: number
   station_model: string
+  pv_inverter: string
+  inverter_count: number
   max_loading: number
   trunk_m: number
   spacing_m: number

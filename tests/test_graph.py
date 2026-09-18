@@ -424,6 +424,8 @@ def test_custom_station_transformer_accepted_and_checked():
     diagram["nodes"][2]["props"] = {
         "mode": "custom", "name": "Custom 3 MVA", "s_rated_kva": 3000.0,
         "uk_percent": 6.0, "pk_kw": 30.0, "p0_kw": 3.0, "i0_percent": 0.5,
+        "custom_inverter_name": "Custom 3 MW", "custom_inverter_power_kw_at_40c": 3000.0,
+        "custom_inverter_nominal_ac_voltage_kv": 0.8, "inverter_count": 1,
     }
     assert validate_graph(diagram, db) == []
     inputs = graph_to_inputs(diagram, db)
@@ -432,6 +434,74 @@ def test_custom_station_transformer_accepted_and_checked():
     # uk% below the resistive share implied by Pk: the loss model rejects it.
     diagram["nodes"][2]["props"]["uk_percent"] = 0.5
     assert "bad_props" in _codes(validate_graph(diagram, db))
+
+
+def test_custom_pv_inverter_uses_40c_fallback_and_does_not_validate_voltage():
+    diagram = _minimal()
+    diagram["settings"]["rules"]["ambient_temp_c"] = 30
+    diagram["nodes"][0]["props"].update({"p_target_mw": 1.0, "pf": 0.95})
+    diagram["nodes"][2]["props"] = {
+        "mode": "custom",
+        "fleet_kind": "pv",
+        "name": "One-off station",
+        "s_rated_kva": 3000.0,
+        "uk_percent": 6.0,
+        "pk_kw": 30.0,
+        "custom_inverter_name": "Prototype 500",
+        "custom_inverter_power_kw_at_40c": 500.0,
+        # Deliberately different from the diagram LV tier. Voltage is recorded,
+        # never treated as a compatibility gate.
+        "custom_inverter_nominal_ac_voltage_kv": 0.4,
+        "inverter_count": 3,
+    }
+
+    assert validate_graph(diagram, db) == []
+    inputs = graph_to_inputs(diagram, db)
+    installation = inputs.branches[0].pv_inverters_by_station["s1"]
+    assert installation.inverter.nominal_ac_voltage_kv == 0.4
+    assert installation.unit_capability.power_kw == 500.0
+    assert installation.unit_capability.used_fallback is True
+
+    result = solve_diagram(diagram, db)
+    assert result["issues"] == []
+    station = result["results"]["nodes"]["s1"]
+    assert station["inverter_count"] == 3
+    assert station["inverter_unit_power_kw"] == 500.0
+    codes = {warning["code"] for warning in result["results"]["warnings"]}
+    assert "inverter_ambient_power_not_published" in codes
+    assert "inverter_minimum_power_factor_not_provided" in codes
+
+
+@pytest.mark.parametrize(
+    "patch",
+    [
+        {"custom_inverter_name": ""},
+        {"custom_inverter_power_kw_at_40c": 0},
+        {"custom_inverter_nominal_ac_voltage_kv": 0},
+        {"inverter_count": 0},
+        {"inverter_count": 1.5},
+        {"custom_inverter_power_kw_at_30c": 0},
+        {"custom_inverter_minimum_power_factor": 1.1},
+    ],
+)
+def test_custom_pv_inverter_rejects_incomplete_or_invalid_values(patch):
+    diagram = _minimal()
+    props = {
+        "mode": "custom",
+        "fleet_kind": "pv",
+        "name": "One-off station",
+        "s_rated_kva": 3000.0,
+        "uk_percent": 6.0,
+        "pk_kw": 30.0,
+        "custom_inverter_name": "Prototype 500",
+        "custom_inverter_power_kw_at_40c": 500.0,
+        "custom_inverter_nominal_ac_voltage_kv": 0.8,
+        "inverter_count": 3,
+    }
+    props.update(patch)
+    diagram["nodes"][2]["props"] = props
+
+    assert "bad_custom_pv_inverter" in _codes(validate_graph(diagram, db))
 
 
 def test_bess_station_without_solution_is_rejected():
@@ -588,6 +658,10 @@ def test_bess_single_fleet_design_validates_and_solves_like_pv():
     identical_tx = {
         "mode": "custom", "name": "Identical station", "s_rated_kva": 3000.0,
         "uk_percent": 6.0, "pk_kw": 30.0, "p0_kw": 3.0, "i0_percent": 0.5,
+        "custom_inverter_name": "Identical inverter",
+        "custom_inverter_power_kw_at_40c": 3000.0,
+        "custom_inverter_nominal_ac_voltage_kv": 0.69,
+        "inverter_count": 1,
     }
 
     pv = _minimal()
@@ -617,6 +691,11 @@ def test_bess_single_fleet_design_validates_and_solves_like_pv():
     pv_station = dict(pv_result["results"]["nodes"]["s1"])
     assert bess_station.pop("fleet_kind") == "bess"
     assert pv_station.pop("fleet_kind") == "pv"
+    # PV additionally reports the custom inverter's independent compliance;
+    # remove those presentation-only fields before comparing shared station
+    # conversion physics with the BESS result.
+    for key in [key for key in pv_station if key.startswith("inverter_")]:
+        pv_station.pop(key)
     assert bess_station == pv_station
 
     # Every sized number still matches, including after ticket 07 gave BESS

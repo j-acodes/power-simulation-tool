@@ -29,7 +29,9 @@ REFERENCE_PARAMS = {
     "v_hv_kv": 132.0,
     "export_m": 0.0,
     "v_mv_kv": 20.0,
-    "station_model": "HUAWEI_JUPITER9000",
+    "station_model": "SUNGROW_MVS8960",
+    "pv_inverter": "sungrow-sg350hx-20",
+    "inverter_count": 28,
     "max_loading": 1.0,
     "trunk_m": 800.0,
     "spacing_m": 350.0,
@@ -50,7 +52,49 @@ def test_seed_reference_plant_is_valid():
     assert station_ids
     for node in diagram["nodes"]:
         if node["kind"] == "station":
-            assert node["props"]["model"] == "HUAWEI_JUPITER9000"
+            assert node["props"]["model"] == REFERENCE_PARAMS["station_model"]
+
+
+def test_seed_station_count_uses_selected_inverter_active_and_apparent_capacity():
+    params = dict(REFERENCE_PARAMS)
+    params.update({"p_poc_mw": 4.5, "pf_target": 0.8, "inverter_count": 5})
+
+    diagram = seed_diagram(params, db)
+    stations = [node for node in diagram["nodes"] if node["kind"] == "station"]
+
+    # Five 320 kW inverters give 1.6 MW/MVA per station. Active duty alone
+    # needs three stations, while the 0.8-PF apparent duty needs four. The
+    # 8.96 MVA transformer station could carry the target in one unit, proving
+    # transformer loading is not the station-count authority.
+    assert len(stations) == 4
+    assert all(node["props"]["pv_inverter"] == "sungrow-sg350hx-20" for node in stations)
+    assert all(node["props"]["inverter_count"] == 5 for node in stations)
+
+    result = solve_diagram(diagram, db)
+    assert result["issues"] == []
+    assert result["results"]["summary"]["loading_ok"] is True
+    assert all(
+        result["results"]["nodes"][node["id"]]["inverter_apparent_ok"] is True
+        for node in stations
+    )
+
+
+def test_seed_station_count_uses_active_capacity_at_unity_power_factor():
+    params = dict(REFERENCE_PARAMS)
+    params.update({"p_poc_mw": 4.0, "pf_target": 1.0, "inverter_count": 5})
+
+    diagram = seed_diagram(params, db)
+    stations = [node for node in diagram["nodes"] if node["kind"] == "station"]
+
+    # Three 1.6 MW station inverter fleets are needed after losses. The same
+    # transformer station could carry the full target in one unit.
+    assert len(stations) == 3
+    result = solve_diagram(diagram, db)
+    assert result["issues"] == []
+    assert all(
+        result["results"]["nodes"][node["id"]]["inverter_active_ok"] is True
+        for node in stations
+    )
 
 
 def test_seed_reference_plant_solves_within_target_and_loading():
@@ -78,6 +122,8 @@ def test_seed_via_api_matches_direct_call():
         "export_m": REFERENCE_PARAMS["export_m"],
         "v_mv_kv": REFERENCE_PARAMS["v_mv_kv"],
         "station_model": REFERENCE_PARAMS["station_model"],
+        "pv_inverter": REFERENCE_PARAMS["pv_inverter"],
+        "inverter_count": REFERENCE_PARAMS["inverter_count"],
         "max_loading": REFERENCE_PARAMS["max_loading"],
         "trunk_m": REFERENCE_PARAMS["trunk_m"],
         "spacing_m": REFERENCE_PARAMS["spacing_m"],
@@ -92,6 +138,16 @@ def test_seed_via_api_matches_direct_call():
     assert solve_resp.status_code == 200
     body = solve_resp.json()
     assert body["issues"] == []
+
+
+def test_seed_api_rejects_count_above_the_station_pairing_maximum():
+    payload = dict(REFERENCE_PARAMS)
+    payload["inverter_count"] = 29
+
+    resp = client.post("/api/seed", json=payload)
+
+    assert resp.status_code == 400
+    assert "1 to 28" in resp.json()["detail"]
 
 
 def test_seeding_is_deterministic_and_circuits_respect_the_current_cap():

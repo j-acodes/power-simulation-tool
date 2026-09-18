@@ -84,6 +84,8 @@ class SeedRequest(BaseModel):
     export_m: float = 0.0
     v_mv_kv: float
     station_model: str
+    pv_inverter: str
+    inverter_count: int = Field(ge=1)
     max_loading: float = 1.0
     trunk_m: float
     spacing_m: float

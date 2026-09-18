@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import type { FormEvent } from 'react'
 import { seedDiagram } from '../api'
 import { useCatalogue } from '../hooks/useCatalogue'
@@ -40,6 +40,8 @@ export function SeedWizard({ onClose }: SeedWizardProps) {
   const [exportM, setExportM] = useState(0)
   const [vMvKv, setVMvKv] = useState(0)
   const [stationModel, setStationModel] = useState('')
+  const [pvInverter, setPvInverter] = useState('')
+  const [inverterCount, setInverterCount] = useState<number | null>(null)
   const [maxLoading, setMaxLoading] = useState(0)
   const [trunkM, setTrunkM] = useState(REFERENCE.trunk_m)
   const [spacingM, setSpacingM] = useState(REFERENCE.spacing_m)
@@ -50,14 +52,34 @@ export function SeedWizard({ onClose }: SeedWizardProps) {
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
+  const eligibleStations = useMemo(
+    () => (catalogue?.transformers ?? []).filter(
+      (station) => Object.keys(station.paired_inverters ?? {}).length > 0,
+    ),
+    [catalogue],
+  )
+  const effectiveStationModel = stationModel || eligibleStations[0]?.key || ''
+  const selectedStation = eligibleStations.find((station) => station.key === effectiveStationModel)
+  const pairings = selectedStation?.paired_inverters ?? {}
+  const effectivePvInverter = pvInverter in pairings
+    ? pvInverter
+    : Object.keys(pairings)[0] ?? ''
+  const inverterOptions = (catalogue?.pv_inverters ?? []).filter(
+    (inverter) => inverter.key in pairings,
+  )
+  const selectedPairing = pairings[effectivePvInverter]
+  const effectiveInverterCount = inverterCount ?? selectedPairing?.default_count ?? 0
+
   // Fill catalogue-derived defaults once they arrive, without clobbering
   // anything the user has already changed.
   useEffect(() => {
     if (!catalogue) return
+    // Catalogue data arrives asynchronously; these are one-time form defaults,
+    // not state derived from state. User-entered non-zero values remain intact.
+    // oxlint-disable-next-line react/set-state-in-effect
     setVMvKv((v) => v || catalogue.defaults.tiers.mv_kv)
     setMaxLoading((v) => v || catalogue.defaults.rules.max_utilization)
     setMaxCircuitCurrentA((v) => v || catalogue.defaults.rules.max_circuit_current_a)
-    setStationModel((k) => k || catalogue.transformers[0]?.key || '')
   }, [catalogue])
 
   const submit = async (e: FormEvent) => {
@@ -72,7 +94,9 @@ export function SeedWizard({ onClose }: SeedWizardProps) {
         v_hv_kv: interconnection === 'HV' ? vHvKv : null,
         export_m: exportM,
         v_mv_kv: vMvKv,
-        station_model: stationModel,
+        station_model: effectiveStationModel,
+        pv_inverter: effectivePvInverter,
+        inverter_count: effectiveInverterCount,
         max_loading: maxLoading,
         trunk_m: trunkM,
         spacing_m: spacingM,
@@ -142,15 +166,62 @@ export function SeedWizard({ onClose }: SeedWizardProps) {
               <input type="number" step={0.1} min={0} value={vMvKv} onChange={(e) => setVMvKv(e.target.valueAsNumber)} required />
             </label>
             <label className="field">
-              <span>Station model</span>
-              <select value={stationModel} onChange={(e) => setStationModel(e.target.value)} required>
+              <span>PV Transformer Station</span>
+              <select
+                value={effectiveStationModel}
+                onChange={(e) => {
+                  const key = e.target.value
+                  const station = eligibleStations.find((candidate) => candidate.key === key)
+                  const nextInverter = Object.keys(station?.paired_inverters ?? {})[0] ?? ''
+                  setStationModel(key)
+                  setPvInverter(nextInverter)
+                  setInverterCount(station?.paired_inverters?.[nextInverter]?.default_count ?? null)
+                }}
+                required
+              >
                 <option value="">— select —</option>
-                {catalogue?.transformers.map((tx) => (
+                {eligibleStations.map((tx) => (
                   <option key={tx.key} value={tx.key}>
-                    {tx.key}
+                    {tx.display_name}
                   </option>
                 ))}
               </select>
+            </label>
+
+            <label className="field">
+              <span>PV inverter</span>
+              <select
+                value={effectivePvInverter}
+                onChange={(e) => {
+                  const key = e.target.value
+                  setPvInverter(key)
+                  setInverterCount(pairings[key]?.default_count ?? null)
+                }}
+                required
+              >
+                <option value="">— select —</option>
+                {inverterOptions.map((inverter) => (
+                  <option key={inverter.key} value={inverter.key}>{inverter.display_name}</option>
+                ))}
+              </select>
+            </label>
+
+            <label className="field">
+              <span>Inverters per station</span>
+              <input
+                type="number"
+                step={1}
+                min={1}
+                max={selectedPairing?.maximum_count}
+                value={effectiveInverterCount || ''}
+                onChange={(e) => {
+                  const value = e.target.valueAsNumber
+                  setInverterCount(selectedPairing && Number.isFinite(value)
+                    ? Math.min(selectedPairing.maximum_count, Math.max(1, Math.round(value)))
+                    : selectedPairing?.default_count ?? null)
+                }}
+                required
+              />
             </label>
 
             <label className="field">
@@ -193,7 +264,7 @@ export function SeedWizard({ onClose }: SeedWizardProps) {
             <button type="button" onClick={onClose}>
               Cancel
             </button>
-            <button type="submit" disabled={submitting || !stationModel}>
+            <button type="submit" disabled={submitting || !effectiveStationModel || !effectivePvInverter || !selectedPairing}>
               {submitting ? 'Seeding…' : 'Seed diagram'}
             </button>
           </div>
