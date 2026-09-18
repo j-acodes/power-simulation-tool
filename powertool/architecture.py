@@ -38,7 +38,7 @@ class StationPlan:
     """Planned electrical figures for ONE MV/LV station, before cable sizing.
 
     A PV station's LV share is proportional to installed inverter power;
-    BESS allocation remains proportional to transformer rating.
+    BESS allocation remains proportional to transformer-station AC power at ambient.
     """
 
     transformer: Transformer
@@ -53,8 +53,8 @@ class StationPlan:
     v_lv_kv: float  # the station's own transformer LV rating
     kind: str = "pv"  # fleet kind ("pv" or "bess"); see powertool.graph
     # The conversion capacity used only to allocate P/Q between stations.
-    # For PV this is installed inverter power; BESS retains transformer-rating
-    # allocation until its own contract says otherwise.
+    # For PV this is installed inverter power; BESS retains transformer-station
+    # AC-power-at-ambient allocation until its own contract says otherwise.
     allocation_capacity_kw: float | None = None
 
 
@@ -270,8 +270,8 @@ def arrange_plant_manual(
     Same per-station physics as :func:`arrange_plant`, with an optional explicit
     conversion-capacity map. When supplied, a station's LV share of inverter P
     and Q is proportional to that capacity; otherwise it remains proportional
-    to its transformer rating. Its MV-side output (that share minus its own
-    transformer losses, see
+    to its transformer station's AC power at ambient. Its MV-side output (that
+    share minus its own transformer losses, see
     :func:`station_mv_output`) sets its current. What is dropped is all the
     planning: no circuit assignment, no sorting by rating, no reordering of the
     circuits. ``circuits[c][k]`` becomes ``circuit_plans[c][k]`` verbatim, with
@@ -284,9 +284,9 @@ def arrange_plant_manual(
     every cable and station on the drawing.
 
     ``allocation_capacities_kw`` mirrors ``circuits`` positionally. ``None`` at
-    a position preserves transformer-weighted allocation for transitional
-    diagram contracts; a positive value makes that station use explicit
-    conversion capacity.
+    a position preserves allocation weighted by transformer-station AC power
+    at ambient for transitional diagram contracts; a positive value makes that
+    station use explicit conversion capacity.
 
     Nothing raises when the drawing exceeds a limit: a circuit above the current
     cap is flagged downstream by ``CircuitResult.current_ok`` and an undersized

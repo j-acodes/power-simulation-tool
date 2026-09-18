@@ -1,5 +1,6 @@
 import { fmt, ratingAtAmbients } from '../format'
 import { Row, SectionTitle } from './DetailRows'
+import type { ReactNode } from 'react'
 import type { BessSolutionInfo, FleetKind, PvInverterInfo, TransformerInfo } from '../types'
 
 /** The catalogue-backed product SpecView is showing. The transformer-station
@@ -41,6 +42,9 @@ export function SpecView({
   const preliminary = item.preliminary
   const datasheetUrl = item.datasheet_url
   const datasheetVersion = item.datasheet_version
+  const presentation = targetPresentation(
+    target, solutions, transformers, pvInverters, pvTransformers,
+  )
 
   return (
     <div className="spec-view">
@@ -52,30 +56,17 @@ export function SpecView({
 
       <SectionTitle>What the simulation uses</SectionTitle>
       <div className="spec-view-simulated">
-        {target.kind === 'bess_solution' ? (
-          <SimulatedBessSolution item={target.item} />
-        ) : target.kind === 'pv_inverter' ? (
-          <SimulatedPvInverter item={target.item} />
-        ) : (
-          <SimulatedTransformerStation item={target.item} />
-        )}
+        {presentation.simulated}
       </div>
 
-      {target.kind === 'bess_solution' ? (
-        <BessSolutionSpec item={target.item} />
-      ) : target.kind === 'pv_inverter' ? (
-        <PvInverterSpec item={target.item} />
-      ) : (
-        <TransformerStationSpec item={target.item} showMissing={target.fleet_kind === 'pv'} />
-      )}
+      {presentation.typed}
 
-      <PairingsSection
-        target={target}
-        solutions={solutions}
-        transformers={transformers}
-        pvInverters={pvInverters}
-        pvTransformers={pvTransformers}
-      />
+      {presentation.pairingRows.length > 0 && (
+        <>
+          <SectionTitle>{presentation.pairingTitle}</SectionTitle>
+          {presentation.pairingRows}
+        </>
+      )}
 
       {/* Provenance shows whenever there is any of it. A transcription with a
         * version but no public URL — which is the shipped Sungrow entry — still
@@ -85,10 +76,8 @@ export function SpecView({
         <>
           <SectionTitle>Datasheet</SectionTitle>
           {datasheetVersion && <Row label="Version" value={datasheetVersion} />}
-          {target.kind === 'pv_inverter' && target.item.datasheet_date && <Row label="Date" value={target.item.datasheet_date} />}
-          {target.kind === 'pv_inverter' && target.item.market && <Row label="Market" value={target.item.market} />}
-          {target.kind === 'transformer_station' && target.item.datasheet_date && <Row label="Date" value={target.item.datasheet_date} />}
-          {target.kind === 'transformer_station' && target.item.market && <Row label="Market" value={target.item.market} />}
+          {presentation.datasheetDate && <Row label="Date" value={presentation.datasheetDate} />}
+          {presentation.market && <Row label="Market" value={presentation.market} />}
           {datasheetUrl && (
             <p>
               <a href={datasheetUrl} target="_blank" rel="noreferrer">
@@ -400,60 +389,85 @@ function TransformerStationSpec({ item, showMissing }: { item: TransformerInfo; 
   )
 }
 
-function PairingsSection({
-  target,
-  solutions,
-  transformers,
-  pvInverters,
-  pvTransformers,
-}: {
-  target: SpecViewTarget
-  solutions: BessSolutionInfo[]
-  transformers: TransformerInfo[]
-  pvInverters: PvInverterInfo[]
-  pvTransformers: TransformerInfo[]
-}) {
-  let rows
-  let title
+interface TargetPresentation {
+  simulated: ReactNode
+  typed: ReactNode
+  pairingTitle: string
+  pairingRows: ReactNode[]
+  datasheetDate?: string | null
+  market?: string | null
+}
+
+function pairingValue(maximumCount: number, defaultCount: number, provenance: string) {
+  return `1–${maximumCount} inverter(s); default ${defaultCount}. ${provenance}`
+}
+
+/** Keep the product-kind switch in one place so the shared page structure
+ * cannot drift between its simulated, typed, pairing, and provenance blocks. */
+function targetPresentation(
+  target: SpecViewTarget,
+  solutions: BessSolutionInfo[],
+  transformers: TransformerInfo[],
+  pvInverters: PvInverterInfo[],
+  pvTransformers: TransformerInfo[],
+): TargetPresentation {
   if (target.kind === 'bess_solution') {
-    rows = transformers
-          .filter((tx) => target.item.key in tx.paired_solutions)
-          .map((tx) => (
-            <Row
-              key={tx.key}
-              label={tx.display_name}
-              value={`${tx.paired_solutions[target.item.key]} container(s)`}
-            />
-          ))
-    title = 'Sold with these station transformers'
-  } else if (target.kind === 'pv_inverter') {
-    rows = pvTransformers
-      .filter((tx) => target.item.key in tx.paired_inverters)
-      .map((tx) => {
-        const pairing = tx.paired_inverters[target.item.key]
-        return <Row key={tx.key} label={tx.display_name} value={`1–${pairing.maximum_count} inverter(s); default ${pairing.default_count}`} />
-      })
-    title = 'Paired PV Transformer Stations'
-  } else if (target.fleet_kind === 'bess') {
-    rows = Object.entries(target.item.paired_solutions).map(([solutionKey, count]) => {
-          const sol = solutions.find((s) => s.key === solutionKey)
-          return <Row key={solutionKey} label={sol?.display_name ?? solutionKey} value={`${count} container(s)`} />
-        })
-    title = 'Sold with these solutions'
-  } else {
-    rows = Object.entries(target.item.paired_inverters).map(([inverterKey, pairing]) => {
-      const inverter = pvInverters.find((candidate) => candidate.key === inverterKey)
-      return <Row key={inverterKey} label={inverter?.display_name ?? inverterKey} value={`1–${pairing.maximum_count} inverter(s); default ${pairing.default_count}`} />
-    })
-    title = 'Paired PV inverters'
+    return {
+      simulated: <SimulatedBessSolution item={target.item} />,
+      typed: <BessSolutionSpec item={target.item} />,
+      pairingTitle: 'Sold with these station transformers',
+      pairingRows: transformers
+        .filter((tx) => target.item.key in tx.paired_solutions)
+        .map((tx) => (
+          <Row
+            key={tx.key}
+            label={tx.display_name}
+            value={`${tx.paired_solutions[target.item.key]} container(s)`}
+          />
+        )),
+    }
   }
-
-  if (rows.length === 0) return null
-
-  return (
-    <>
-      <SectionTitle>{title}</SectionTitle>
-      {rows}
-    </>
-  )
+  if (target.kind === 'pv_inverter') {
+    return {
+      simulated: <SimulatedPvInverter item={target.item} />,
+      typed: <PvInverterSpec item={target.item} />,
+      pairingTitle: 'Paired PV Transformer Stations',
+      pairingRows: pvTransformers
+        .filter((tx) => target.item.key in tx.paired_inverters)
+        .map((tx) => {
+          const pairing = tx.paired_inverters[target.item.key]
+          return <Row key={tx.key} label={tx.display_name} value={pairingValue(
+            pairing.maximum_count, pairing.default_count, pairing.count_provenance,
+          )} />
+        }),
+      datasheetDate: target.item.datasheet_date,
+      market: target.item.market,
+    }
+  }
+  if (target.fleet_kind === 'bess') {
+    return {
+      simulated: <SimulatedTransformerStation item={target.item} />,
+      typed: <TransformerStationSpec item={target.item} showMissing={false} />,
+      pairingTitle: 'Sold with these solutions',
+      pairingRows: Object.entries(target.item.paired_solutions).map(([solutionKey, count]) => {
+        const sol = solutions.find((s) => s.key === solutionKey)
+        return <Row key={solutionKey} label={sol?.display_name ?? solutionKey} value={`${count} container(s)`} />
+      }),
+      datasheetDate: target.item.datasheet_date,
+      market: target.item.market,
+    }
+  }
+  return {
+    simulated: <SimulatedTransformerStation item={target.item} />,
+    typed: <TransformerStationSpec item={target.item} showMissing />,
+    pairingTitle: 'Paired PV inverters',
+    pairingRows: Object.entries(target.item.paired_inverters).map(([inverterKey, pairing]) => {
+      const inverter = pvInverters.find((candidate) => candidate.key === inverterKey)
+      return <Row key={inverterKey} label={inverter?.display_name ?? inverterKey} value={pairingValue(
+        pairing.maximum_count, pairing.default_count, pairing.count_provenance,
+      )} />
+    }),
+    datasheetDate: target.item.datasheet_date,
+    market: target.item.market,
+  }
 }

@@ -9,7 +9,10 @@ const seedDiagram = vi.fn()
 const catalogue = {
   transformers: [{
     key: 'SUNGROW_MVS3200', display_name: 'MVS3200-LV',
-    paired_inverters: { 'sungrow-sg350hx-20': { maximum_count: 10, default_count: 10 } },
+    paired_inverters: { 'sungrow-sg350hx-20': {
+      maximum_count: 10, default_count: 10,
+      count_provenance: 'Engineering interpretation of published LV disconnector quantities',
+    } },
   }],
   pv_inverters: [
     { key: 'sungrow-sg350hx-20', display_name: 'SG350HX — SG350HX-20' },

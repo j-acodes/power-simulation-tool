@@ -482,6 +482,32 @@ def test_custom_pv_inverter_uses_40c_fallback_and_does_not_validate_voltage():
     assert "inverter_minimum_power_factor_not_provided" in codes
 
 
+def test_custom_inverter_minimum_power_factor_warning_calls_it_configured():
+    diagram = _minimal()
+    diagram["nodes"][0]["props"].update({"p_target_mw": 1.0, "pf": 0.7})
+    diagram["nodes"][2]["props"] = {
+        "mode": "custom",
+        "fleet_kind": "pv",
+        "name": "One-off station",
+        "s_rated_kva": 3000.0,
+        "uk_percent": 6.0,
+        "pk_kw": 30.0,
+        "custom_inverter_name": "Prototype 2 MW",
+        "custom_inverter_power_kw_at_40c": 2000.0,
+        "custom_inverter_nominal_ac_voltage_kv": 0.8,
+        "custom_inverter_minimum_power_factor": 0.8,
+        "inverter_count": 1,
+    }
+
+    result = solve_diagram(diagram, db)
+    warning = next(
+        item for item in result["results"]["warnings"]
+        if item["code"] == "inverter_power_factor_below_minimum"
+    )
+    assert "configured minimum" in warning["message"]
+    assert "published minimum" not in warning["message"]
+
+
 @pytest.mark.parametrize(
     "patch",
     [

@@ -23,7 +23,7 @@ from .architecture import (
 from .cable_sizing import AutoCable, CableSelection, select_cable
 from .chain import Chain, ChainElement
 from .components import AuxLoad, BessSolution, Cable, PvInverter, PvInverterPairing, Transformer, TransformerGroup, current_a
-from .database import ComponentDatabase
+from .database import CatalogueDataWarning, ComponentDatabase
 from .pdf_report import build_pdf_report
 from .sizing import (
     ElementLoss,
@@ -42,6 +42,7 @@ __all__ = [
     "PvInverterPairing",
     "current_a",
     "ComponentDatabase",
+    "CatalogueDataWarning",
     "Chain",
     "ChainElement",
     "AutoCable",

@@ -194,6 +194,9 @@ def test_catalogue_serves_sungrow_pv_inverter_and_station_pairings():
         assert stations[key]["paired_inverters"]["sungrow-sg350hx-20"] == {
             "maximum_count": count,
             "default_count": count,
+            "count_provenance": (
+                "Engineering interpretation of published LV disconnector quantities"
+            ),
         }
 
 
@@ -229,6 +232,7 @@ def test_catalogue_serves_only_supported_pv_products_with_complete_huawei_proven
         assert stations[key]["paired_inverters"][inverter["key"]] == {
             "maximum_count": count,
             "default_count": count,
+            "count_provenance": "Supplier-published maximum LV AC inputs",
         }
         assert stations[key]["s_rated_kva_at_30c"] is None
         assert stations[key]["lv_panel_segregation"] == "Form 2b"

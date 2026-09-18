@@ -6,6 +6,7 @@ dataclasses in :mod:`powertool.components`) separate from how it is stored on di
 
 from __future__ import annotations
 
+import warnings
 from pathlib import Path
 
 import yaml
@@ -14,6 +15,10 @@ from .components import BessSolution, Cable, PvInverter, PvInverterPairing, Tran
 
 # data/ lives next to the powertool/ package, one level up from this file.
 DATA_DIR = Path(__file__).resolve().parent.parent / "data"
+
+
+class CatalogueDataWarning(UserWarning):
+    """A catalogue product was skipped because its simulated data is invalid."""
 
 
 def load_cables(path: str | Path | None = None) -> dict[str, Cable]:
@@ -67,7 +72,13 @@ def load_pv_inverters(path: str | Path | None = None) -> dict[str, PvInverter]:
         try:
             inverters[name] = PvInverter(name=name, **params)
         except (TypeError, ValueError) as exc:
-            raise ValueError(f"PV inverter {name!r} has invalid simulated data: {exc}") from exc
+            warnings.warn(
+                CatalogueDataWarning(
+                    f"PV inverter {name!r} is unavailable because its simulated data "
+                    f"is invalid: {exc}"
+                ),
+                stacklevel=2,
+            )
     return inverters
 
 

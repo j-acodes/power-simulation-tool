@@ -236,6 +236,28 @@ describe('SpecView — PV transformer station', () => {
     expect(screen.getByText('Europe')).toBeTruthy()
     expect(screen.queryByText(/BESS/i)).toBeNull()
   })
+
+  it('shows the inverter-count provenance beside the station pairing', () => {
+    const pairedInverter = inverter()
+    const tx = transformer({
+      paired_inverters: {
+        [pairedInverter.key]: {
+          maximum_count: 11,
+          default_count: 11,
+          count_provenance: 'Supplier-published maximum LV AC inputs',
+        },
+      },
+    })
+    render(
+      <SpecView
+        target={{ kind: 'transformer_station', fleet_kind: 'pv', item: tx }}
+        solutions={[]}
+        transformers={[]}
+        pvInverters={[pairedInverter]}
+      />,
+    )
+    expect(screen.getByText(/Supplier-published maximum LV AC inputs/)).toBeTruthy()
+  })
 })
 
 describe('SpecView — PV inverter provenance and missing supplier facts', () => {
@@ -252,5 +274,27 @@ describe('SpecView — PV inverter provenance and missing supplier facts', () =>
     render(<SpecView target={{ kind: 'pv_inverter', item: inverter() }} solutions={[]} transformers={[]} />)
     const row = screen.getByText('European efficiency').closest('.kv-row')
     expect(row?.textContent).toContain('Not published')
+  })
+
+  it('shows the inverter-count provenance from the station pairing', () => {
+    const item = inverter({ key: 'sungrow-sg350hx-20' })
+    const tx = transformer({
+      paired_inverters: {
+        [item.key]: {
+          maximum_count: 10,
+          default_count: 10,
+          count_provenance: 'Engineering interpretation of published LV disconnector quantities',
+        },
+      },
+    })
+    render(
+      <SpecView
+        target={{ kind: 'pv_inverter', item }}
+        solutions={[]}
+        transformers={[]}
+        pvTransformers={[tx]}
+      />,
+    )
+    expect(screen.getByText(/Engineering interpretation of published LV disconnector quantities/)).toBeTruthy()
   })
 })

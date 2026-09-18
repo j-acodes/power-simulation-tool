@@ -1649,11 +1649,12 @@ def map_results(inputs: GraphInputs, stage1s: list[SizingResult],
                             node_id=node_id,
                         ))
                     if not pf_ok:
+                        minimum_source = "configured" if installation.custom else "published"
                         warnings.append(GraphIssue(
                             "inverter_power_factor_below_minimum",
                             f"Station '{node_id}' operates at power factor "
                             f"{inverter_pf:.3f}, below "
-                            f"{installation.inverter.display_name}'s published "
+                            f"{installation.inverter.display_name}'s {minimum_source} "
                             f"minimum of {minimum_pf:.3f}.",
                             node_id=node_id,
                         ))

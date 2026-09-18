@@ -83,7 +83,7 @@ transformers:
   SUNGROW_MVS3200:
     <<: *sungrow_common
     paired_inverters:
-      sungrow-sg350hx-20: {maximum_count: 10, default_count: 10}
+      sungrow-sg350hx-20: {maximum_count: 10, default_count: 10, count_provenance: Engineering interpretation of published LV disconnector quantities}
     s_rated_kva_at_40c: 3200
     s_rated_kva_at_30c: 3520
     pk_kw: 32.0
@@ -111,7 +111,7 @@ transformers:
   SUNGROW_MVS4480:
     <<: *sungrow_common
     paired_inverters:
-      sungrow-sg350hx-20: {maximum_count: 14, default_count: 14}
+      sungrow-sg350hx-20: {maximum_count: 14, default_count: 14, count_provenance: Engineering interpretation of published LV disconnector quantities}
     s_rated_kva_at_40c: 4480
     s_rated_kva_at_30c: 4928
     pk_kw: 44.8
@@ -139,7 +139,7 @@ transformers:
   SUNGROW_MVS6400:
     <<: *sungrow_common
     paired_inverters:
-      sungrow-sg350hx-20: {maximum_count: 20, default_count: 20}
+      sungrow-sg350hx-20: {maximum_count: 20, default_count: 20, count_provenance: Engineering interpretation of published LV disconnector quantities}
     s_rated_kva_at_40c: 6400
     s_rated_kva_at_30c: 7040
     pk_kw: 64.0
@@ -167,7 +167,7 @@ transformers:
   SUNGROW_MVS7040:
     <<: *sungrow_common
     paired_inverters:
-      sungrow-sg350hx-20: {maximum_count: 22, default_count: 22}
+      sungrow-sg350hx-20: {maximum_count: 22, default_count: 22, count_provenance: Engineering interpretation of published LV disconnector quantities}
     s_rated_kva_at_40c: 7040
     s_rated_kva_at_30c: 7744
     pk_kw: 70.4
@@ -197,7 +197,7 @@ transformers:
   SUNGROW_MVS8960:
     <<: *sungrow_common
     paired_inverters:
-      sungrow-sg350hx-20: {maximum_count: 28, default_count: 28}
+      sungrow-sg350hx-20: {maximum_count: 28, default_count: 28, count_provenance: Engineering interpretation of published LV disconnector quantities}
     s_rated_kva_at_40c: 8960
     s_rated_kva_at_30c: 9856
     pk_kw: 89.6
@@ -226,7 +226,7 @@ transformers:
   HUAWEI_JUPITER3000:
     <<: *huawei_common
     paired_inverters:
-      huawei-sun2000-330ktl-h1: {maximum_count: 11, default_count: 11}
+      huawei-sun2000-330ktl-h1: {maximum_count: 11, default_count: 11, count_provenance: Supplier-published maximum LV AC inputs}
     s_rated_kva_at_40c: 3300
     pk_kw: 33.0
     p0_kw: 3.3
@@ -241,7 +241,7 @@ transformers:
   HUAWEI_JUPITER6000:
     <<: *huawei_common
     paired_inverters:
-      huawei-sun2000-330ktl-h1: {maximum_count: 22, default_count: 22}
+      huawei-sun2000-330ktl-h1: {maximum_count: 22, default_count: 22, count_provenance: Supplier-published maximum LV AC inputs}
     s_rated_kva_at_40c: 6600
     pk_kw: 66.0
     p0_kw: 6.6
@@ -256,7 +256,7 @@ transformers:
   HUAWEI_JUPITER9000:
     <<: *huawei_common
     paired_inverters:
-      huawei-sun2000-330ktl-h1: {maximum_count: 30, default_count: 30}
+      huawei-sun2000-330ktl-h1: {maximum_count: 30, default_count: 30, count_provenance: Supplier-published maximum LV AC inputs}
     s_rated_kva_at_40c: 9000
     pk_kw: 90.0
     p0_kw: 9.0

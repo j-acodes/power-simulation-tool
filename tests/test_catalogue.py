@@ -8,7 +8,7 @@ from dataclasses import replace
 
 import pytest
 
-from powertool import ComponentDatabase
+from powertool import CatalogueDataWarning, ComponentDatabase
 from powertool.database import load_pv_inverters
 
 # Expected PV transformer stations: key -> (rated kVA, brand, dropdown label).
@@ -169,6 +169,9 @@ def test_sungrow_pv_inverter_and_station_pairings_load(db):
         pairing = db.pv_inverter_pairings[station]["sungrow-sg350hx-20"]
         assert pairing.maximum_count == count
         assert pairing.default_count == count
+        assert pairing.count_provenance == (
+            "Engineering interpretation of published LV disconnector quantities"
+        )
 
 
 def test_supported_pv_catalogue_is_complete_and_excludes_rejected_products(db):
@@ -236,12 +239,22 @@ def test_huawei_h1_inverter_and_station_pairings_load_with_distinct_provenance(d
         assert station.weight_specification.startswith("<")
         pairing = db.pv_inverter_pairings[station_key][inverter.name]
         assert pairing.maximum_count == pairing.default_count == count
+        assert pairing.count_provenance == "Supplier-published maximum LV AC inputs"
 
 
-def test_missing_inverter_simulation_data_fails_catalogue_load_clearly(tmp_path):
+def test_invalid_inverter_simulation_data_skips_only_that_product_and_warns(tmp_path):
     path = tmp_path / "pv_inverters.yaml"
     path.write_text(
         """pv_inverters:
+  usable:
+    brand: Example
+    series: Working
+    model: Complete-Power
+    power_kw_at_40c: 500
+    power_kw_at_30c: null
+    nominal_ac_voltage_kv: 0.8
+    minimum_power_factor: null
+    power_provenance: Supplier datasheet
   broken:
     brand: Example
     series: Broken
@@ -253,8 +266,9 @@ def test_missing_inverter_simulation_data_fails_catalogue_load_clearly(tmp_path)
     power_provenance: Supplier datasheet
 """
     )
-    with pytest.raises(ValueError, match="broken.*power_kw_at_40c"):
-        load_pv_inverters(path)
+    with pytest.warns(CatalogueDataWarning, match="broken.*power_kw_at_40c"):
+        products = load_pv_inverters(path)
+    assert set(products) == {"usable"}
 
 
 def test_pv_inverter_power_resolves_explicit_ambients_without_interpolation(db):

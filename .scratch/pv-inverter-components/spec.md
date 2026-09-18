@@ -6,11 +6,11 @@ Status: ready-for-agent
 
 A sizing engineer can select a PV transformer station, but cannot select the inverter product
 or say how many inverters sit behind that station. The sizing engine therefore treats the
-transformer station's ambient-rated power as the source of PV fleet capacity and distributes
-fleet duty between stations by transformer rating. That confuses two pieces of equipment with
-different responsibilities: the inverter fleet establishes how much active and reactive power
-can be converted, while the transformer station carries that operating point subject to its
-own loading, loss and voltage characteristics.
+transformer station's AC power at ambient as the source of PV fleet capacity and distributes
+fleet duty between stations by transformer-station rating. That confuses two pieces of
+equipment with different responsibilities: the inverter fleet establishes how much active and
+reactive power can be converted, while the transformer station carries that operating point
+subject to its own loading, loss and voltage characteristics.
 
 PV catalogue entries also lag behind the BESS catalogue contract. They are presented as compact
 rows rather than complete supplier products, most of their typed datasheet fields are absent,
@@ -18,7 +18,7 @@ their compatible inverters and physical input counts are not represented, and an
 cannot open a consistent specification view that distinguishes parameters used by the sizing
 engine from parameters transcribed only for review.
 
-The result is a material sizing risk. Two stations with the same transformer rating but
+The result is a material sizing risk. Two stations with the same transformer-station rating but
 different installed inverter capacity are currently treated as equivalent. A design can appear
 to have adequate PV conversion capacity without naming any inverter at all, and the catalogue
 does not expose enough provenance for that assumption to be defended in a design review.
@@ -37,7 +37,7 @@ conversion duty by each station's installed ambient-rated inverter capacity. It 
 active power and apparent power against that capacity, checks the selected inverter's published
 minimum power factor when available, and reports prominent non-blocking warnings when the
 operating point exceeds those limits. Transformer loading remains a separate compliance check
-against the transformer station's own ambient-rated power.
+against the transformer station's own AC power at ambient.
 
 PV transformer stations and PV inverters adopt the complete catalogue format already established
 for BESS: stable product identity, a leading “What the simulation uses” section, grouped typed
@@ -69,7 +69,7 @@ backup.
 8. As a sizing engineer, I want inverter count to default to the station's maximum physical
    inputs, so that a fully populated station is the fast path.
 9. As a sizing engineer, I want setup to calculate the number of PV stations from installed
-   inverter capacity, so that generated layouts are not sized from transformer rating.
+   inverter capacity, so that generated layouts are not sized from transformer-station rating.
 10. As a sizing engineer, I want setup to account for both active and apparent inverter capacity,
     so that a reactive requirement can increase the number of stations needed.
 11. As a sizing engineer, I want setup to check transformer loading separately, so that a valid
@@ -201,9 +201,9 @@ in code comments.
 ### Model pairings on PV transformer stations
 
 A PV transformer station carries a pairing for each allowed inverter. A pairing provides the
-maximum integer count and the default integer count. The default equals the maximum physical
-input count. A catalogue station with an unknown inverter, a count below one or a count above
-the pairing maximum is invalid and does not solve.
+maximum integer count, the default integer count and the provenance of those counts. The default
+equals the maximum physical input count. A catalogue station with an unknown inverter, a count
+below one or a count above the pairing maximum is invalid and does not solve.
 
 Sungrow station pairings use SG350HX-20. Maximum/default counts are 10, 14, 20, 22 and 28 for
 MVS3200-LV, MVS4480-LV, MVS6400-LV, MVS7040-LV and MVS8960-LV respectively. These counts come
@@ -240,7 +240,7 @@ Missing optional custom minimum power factor produces an unavailable-check notic
 invented limit.
 
 Transformer losses, MV output and current continue to be calculated from the P/Q allocated to
-the station. Transformer loading is calculated against transformer-station ambient-rated power,
+the station. Transformer loading is calculated against transformer-station AC power at ambient,
 using the existing PV maximum-loading setting. Inverter limits always use 100% of their resolved
 ambient rating and do not inherit the transformer loading percentage.
 
@@ -251,7 +251,7 @@ station. The count defaults to the pairing maximum and is editable within the pa
 
 The setup flow derives station quantity from the number required to carry both the loss-adjusted
 active and apparent conversion duty with that inverter arrangement. It may use the existing
-bounded refinement strategy, but inverter capacity—not transformer rating—is the station-count
+bounded refinement strategy, but inverter capacity—not transformer-station rating—is the station-count
 authority. The generated transformer's loading is checked separately and surfaced if the chosen
 arrangement overloads it.
 
@@ -359,7 +359,7 @@ Required behavioral cases include:
 - Huawei at 30 °C and 40 °C, proving the declared engineering values and their provenance.
 - Missing 30 °C custom power, proving 40 °C fallback plus notice.
 - Mixed station counts/models, proving allocation follows aggregate inverter capacity rather
-  than transformer rating.
+  than transformer-station rating.
 - Active-capacity overload, apparent-capacity overload and minimum-power-factor violation,
   proving each warns while results remain available.
 - Transformer overload with adequate inverter capacity, proving the checks remain independent.

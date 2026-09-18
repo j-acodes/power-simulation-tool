@@ -530,9 +530,12 @@ class PvInverter:
 class PvInverterPairing:
     maximum_count: int
     default_count: int
+    count_provenance: str
 
     def __post_init__(self) -> None:
         if isinstance(self.maximum_count, bool) or not isinstance(self.maximum_count, int) or self.maximum_count < 1:
             raise ValueError("maximum_count must be a positive integer")
         if isinstance(self.default_count, bool) or not isinstance(self.default_count, int) or not 1 <= self.default_count <= self.maximum_count:
             raise ValueError("default_count must be between 1 and maximum_count")
+        if not isinstance(self.count_provenance, str) or not self.count_provenance.strip():
+            raise ValueError("count_provenance must be a non-empty string")
