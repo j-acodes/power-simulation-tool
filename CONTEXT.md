@@ -60,6 +60,16 @@ is warned and falls back to the figure for the nearest published ambient at or a
 hotter rating is a lower one, so the station is understated rather than invented.
 _Avoid_: rated power, nameplate rating (both drop the temperature, which is the whole point)
 
+**Inverter power at ambient**:
+The per-unit conversion power of a PV inverter at 30 °C or 40 °C. At each ambient one scalar is
+both the active limit in kW and apparent limit in kVA because the project interprets the
+datasheet power at power factor 1. Lookup is explicit and never interpolated; a missing 30 °C
+value falls back to the 40 °C value with a notice. An owner-declared engineering value may be
+used only when its non-supplier provenance remains visible. Installed station capacity is this
+power times inverter count and governs PV duty allocation and inverter compliance; it does not
+replace the transformer station's separate loading check.
+_Avoid_: inverter rating (drops the ambient), transformer capacity (names the wrong equipment)
+
 **Technology**:
 The set of fleet kinds a design is permitted to contain — `pv`, `bess` or `hybrid` — declared
 when the design is created and changed only by cloning the design into a new one. It is a

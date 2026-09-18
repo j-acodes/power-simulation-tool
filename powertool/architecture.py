@@ -37,8 +37,8 @@ class StationOverloadError(ValueError):
 class StationPlan:
     """Planned electrical figures for ONE MV/LV station, before cable sizing.
 
-    Every station runs at the fleet's uniform per-unit loading, so its LV share
-    of the inverter power is proportional to its rating.
+    A PV station's LV share may be proportional to installed inverter power;
+    legacy PV and BESS allocation remains proportional to transformer rating.
     """
 
     transformer: Transformer
@@ -49,9 +49,13 @@ class StationPlan:
     q_mv_kvar: float
     s_mv_kva: float
     i_a: float  # MV-side current at the layout's v_mv_kv
-    loading: float  # s_lv / s_rated (uniform across the fleet)
+    loading: float  # s_lv / transformer-station rating
     v_lv_kv: float  # the station's own transformer LV rating
     kind: str = "pv"  # fleet kind ("pv" or "bess"); see powertool.graph
+    # The conversion capacity used only to allocate P/Q between stations.
+    # For PV this is installed inverter power; legacy PV and BESS retain the
+    # transformer-rating allocation until their own contracts say otherwise.
+    allocation_capacity_kw: float | None = None
 
 
 @dataclass
@@ -224,6 +228,7 @@ def arrange_plant(
             loading=loading,
             v_lv_kv=tx.lv_kv if tx.lv_kv is not None else 0.0,
             kind=kind,
+            allocation_capacity_kw=tx.rating_at(ambient_c),
         )
         plans.extend([plan] * count)  # identical figures for every unit of a model
 
@@ -258,13 +263,15 @@ def arrange_plant_manual(
     max_loading: float = 1.0,
     kind: str = "pv",
     ambient_c: float = DEFAULT_AMBIENT_C,
+    allocation_capacities_kw: list[list[float | None]] | None = None,
 ) -> PlantLayout:
     """Arrange the plant from a DRAWN circuit layout — the given order is kept.
 
-    Same per-station physics as :func:`arrange_plant`: every station runs at the
-    fleet's uniform per-unit loading r = S_inv / S_fleet, so its LV share of the
-    inverter P and Q is proportional to its OWN rating, and its MV-side output
-    (that share minus its own transformer losses, see
+    Same per-station physics as :func:`arrange_plant`, with an optional explicit
+    conversion-capacity map. When supplied, a station's LV share of inverter P
+    and Q is proportional to that capacity; otherwise it remains proportional
+    to its transformer rating. Its MV-side output (that share minus its own
+    transformer losses, see
     :func:`station_mv_output`) sets its current. What is dropped is all the
     planning: no circuit assignment, no sorting by rating, no reordering of the
     circuits. ``circuits[c][k]`` becomes ``circuit_plans[c][k]`` verbatim, with
@@ -275,6 +282,11 @@ def arrange_plant_manual(
     maps every result back to a canvas element by (circuit index, position), so
     no engine-side identifier is needed. Reordering here would silently mislabel
     every cable and station on the drawing.
+
+    ``allocation_capacities_kw`` mirrors ``circuits`` positionally. ``None`` at
+    a position preserves transformer-weighted allocation for transitional
+    diagram contracts; a positive value makes that station use explicit
+    conversion capacity.
 
     Nothing raises when the drawing exceeds a limit: a circuit above the current
     cap is flagged downstream by ``CircuitResult.current_ok`` and an undersized
@@ -301,6 +313,33 @@ def arrange_plant_manual(
     s_fleet = sum(tx.rating_at(ambient_c) for tx in stations)
     loading = stage1.s_inv_kva / s_fleet
 
+    if allocation_capacities_kw is not None:
+        if len(allocation_capacities_kw) != len(circuits) or any(
+            len(capacities) != len(circuit)
+            for capacities, circuit in zip(allocation_capacities_kw, circuits)
+        ):
+            raise ValueError("Allocation capacities must match the drawn station layout")
+    else:
+        allocation_capacities_kw = [[None for _tx in circuit] for circuit in circuits]
+    uses_explicit_allocation = any(
+        capacity is not None for capacities in allocation_capacities_kw
+        for capacity in capacities
+    )
+    resolved_capacities_by_circuit = [
+        [
+            capacity if capacity is not None else tx.rating_at(ambient_c)
+            for tx, capacity in zip(circuit, capacities)
+        ]
+        for circuit, capacities in zip(circuits, allocation_capacities_kw)
+    ]
+    if any(capacity <= 0 for capacities in resolved_capacities_by_circuit
+           for capacity in capacities):
+        raise ValueError("Station allocation capacities must be positive")
+    allocation_total = sum(
+        capacity for capacities in resolved_capacities_by_circuit
+        for capacity in capacities
+    )
+
     # Fleet = (model, count) aggregated over the drawn stations, in order of
     # first appearance; identical models drawn apart still merge into one entry.
     fleet: list[tuple[Transformer, int]] = []
@@ -312,8 +351,8 @@ def arrange_plant_manual(
         else:
             fleet.append((tx, 1))
 
-    def _plan(tx: Transformer) -> StationPlan:
-        share = tx.rating_at(ambient_c) / s_fleet
+    def _plan(tx: Transformer, capacity_kw: float) -> StationPlan:
+        share = capacity_kw / allocation_total
         p_lv = stage1.p_inv_kw * share
         q_lv = stage1.q_inv_kvar * share
         p_mv, q_mv = station_mv_output(p_lv, q_lv, tx)
@@ -327,20 +366,29 @@ def arrange_plant_manual(
             q_mv_kvar=q_mv,
             s_mv_kva=s_mv,
             i_a=current_a(s_mv, v_mv_kv),
-            loading=loading,
+            loading=(math.hypot(p_lv, q_lv) / tx.rating_at(ambient_c)
+                     if uses_explicit_allocation else loading),
             v_lv_kv=tx.lv_kv if tx.lv_kv is not None else 0.0,
             kind=kind,
+            allocation_capacity_kw=capacity_kw,
         )
 
+    circuit_plans = [
+        [_plan(tx, capacity) for tx, capacity in zip(circuit, capacities)]
+        for circuit, capacities in zip(circuits, resolved_capacities_by_circuit)
+    ]
     return PlantLayout(
         fleet=fleet,
-        circuit_plans=[[_plan(tx) for tx in circuit] for circuit in circuits],
+        circuit_plans=circuit_plans,
         max_circuit_current_a=max_circuit_current_a,
         trunk_length_km=1.0,  # placeholder: drawn plants pass segment_lengths
         spacing_km=1.0,
         v_mv_kv=v_mv_kv,
         fleet_loading=loading,
-        loading_ok=loading <= max_loading + 1e-9,
+        loading_ok=all(
+            plan.loading <= max_loading + 1e-9
+            for circuit in circuit_plans for plan in circuit
+        ),
         ambient_c=ambient_c,
         max_loading=max_loading,
     )
@@ -742,11 +790,22 @@ def recompute_branch(
                  correction_factor if q_correction_factor is None else q_correction_factor
              ))
     s_fleet = branch.layout.s_fleet_kva
+    allocation_total = sum(
+        plan.allocation_capacity_kw
+        if plan.allocation_capacity_kw is not None
+        else plan.transformer.rating_at(branch.layout.ambient_c)
+        for circuit in branch.layout.circuit_plans for plan in circuit
+    )
     plans: list[list[StationPlan]] = []
     for circuit in branch.layout.circuit_plans:
         new_circuit: list[StationPlan] = []
         for old in circuit:
-            share = old.transformer.rating_at(branch.layout.ambient_c) / s_fleet
+            allocation_capacity = (
+                old.allocation_capacity_kw
+                if old.allocation_capacity_kw is not None
+                else old.transformer.rating_at(branch.layout.ambient_c)
+            )
+            share = allocation_capacity / allocation_total
             p_lv = p_inv * share
             q_lv = q_inv * share
             p_mv, q_mv = station_mv_output(p_lv, q_lv, old.transformer)
@@ -763,12 +822,15 @@ def recompute_branch(
                     branch.layout.ambient_c),
             ))
         plans.append(new_circuit)
+    loading_ok = all(
+        plan.loading <= branch.layout.max_loading + 1e-9
+        for circuit in plans for plan in circuit
+    )
     layout = replace(
         branch.layout,
         circuit_plans=plans,
         fleet_loading=math.hypot(p_inv, q_inv) / s_fleet,
-        loading_ok=(math.hypot(p_inv, q_inv) / s_fleet
-                    <= branch.layout.max_loading + 1e-9),
+        loading_ok=loading_ok,
         max_loading=branch.layout.max_loading,
     )
     return size_branch(

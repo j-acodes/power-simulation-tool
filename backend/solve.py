@@ -320,6 +320,14 @@ def solve_architecture(inputs: GraphInputs, db: ComponentDatabase):
             max_loading=branch.max_loading,
             kind=branch.kind,
             ambient_c=inputs.ambient_c,
+            allocation_capacities_kw=[
+                [
+                    (branch.pv_inverters_by_station[sid].installed_power_kw
+                     if sid in branch.pv_inverters_by_station else None)
+                    for sid in ids
+                ]
+                for ids in branch.station_ids
+            ],
         )
         branch_arch = size_branch(
             layout, db.cables_for_voltage(inputs.v_mv_kv),

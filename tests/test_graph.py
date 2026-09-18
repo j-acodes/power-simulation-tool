@@ -11,14 +11,16 @@ Two things are pinned here:
 """
 
 import math
+from dataclasses import replace
 
 import pytest
 
 from fastapi.testclient import TestClient
 
 from backend.main import app, db
-from backend.solve import build_chain
+from backend.solve import build_chain, solve_diagram
 from powertool import (
+    ComponentDatabase,
     arrange_plant,
     size_architecture,
     size_pv_inverters,
@@ -166,6 +168,104 @@ def test_single_pv_fleet_at_unity_pf_delivers_zero_reactive_power():
     assert summary["p_poc_refined_delivered_kw"] == pytest.approx(3000.0, abs=1e-3)
     assert summary["q_poc_delivered_kvar"] == pytest.approx(0.0, abs=1e-3)
     assert summary["power_balance_ok"] is True
+
+
+def test_pv_station_duty_is_shared_by_installed_inverter_capacity():
+    diagram = _minimal()
+    diagram["nodes"][2]["props"].update({
+        "model": "SUNGROW_MVS3200",
+        "pv_inverter": "sungrow-sg350hx-20",
+        "inverter_count": 10,
+    })
+    diagram["nodes"].append(_node(
+        "s2", "station", mode="catalogue", model="SUNGROW_MVS3200",
+        pv_inverter="sungrow-sg350hx-20", inverter_count=5,
+    ))
+    diagram["edges"].append(_edge("e_t2", "s1", "s2", length_m=400.0))
+
+    result = client.post("/api/solve", json=diagram).json()
+
+    assert result["issues"] == []
+    stations = result["results"]["nodes"]
+    assert stations["s1"]["p_lv_kw"] == pytest.approx(2 * stations["s2"]["p_lv_kw"])
+    assert stations["s1"]["q_lv_kvar"] == pytest.approx(2 * stations["s2"]["q_lv_kvar"])
+
+
+def test_pv_inverter_capacity_and_power_factor_violations_warn_but_return_results():
+    diagram = _minimal()
+    diagram["nodes"][0]["props"].update({"p_target_mw": 4.0, "pf": 0.75})
+    diagram["nodes"][2]["props"].update({
+        "model": "SUNGROW_MVS3200",
+        "pv_inverter": "sungrow-sg350hx-20",
+        "inverter_count": 10,
+    })
+
+    result = solve_diagram(diagram, db)
+
+    assert result["issues"] == []
+    assert result["results"] is not None
+    station = result["results"]["nodes"]["s1"]
+    assert station["inverter_capacity_kw"] == 3200
+    assert station["inverter_active_ok"] is False
+    assert station["inverter_apparent_ok"] is False
+    assert station["inverter_power_factor_ok"] is False
+    codes = {warning["code"] for warning in result["results"]["warnings"]}
+    assert "inverter_active_capacity_exceeded" in codes
+    assert "inverter_apparent_capacity_exceeded" in codes
+    assert "inverter_power_factor_below_minimum" in codes
+
+
+def test_inverter_apparent_limit_is_independent_of_active_and_transformer_limits():
+    diagram = _minimal()
+    diagram["settings"]["rules"]["max_loading_pv"] = 1.10
+    diagram["nodes"][0]["props"].update({"p_target_mw": 2.4, "pf": 0.8})
+    diagram["nodes"][2]["props"].update({
+        "model": "SUNGROW_MVS3200",
+        "pv_inverter": "sungrow-sg350hx-20",
+        "inverter_count": 10,
+    })
+
+    result = solve_diagram(diagram, db)
+
+    station = result["results"]["nodes"]["s1"]
+    codes = {warning["code"] for warning in result["results"]["warnings"]}
+    assert station["inverter_active_ok"] is True
+    assert station["inverter_apparent_ok"] is False
+    assert "inverter_active_capacity_exceeded" not in codes
+    assert "inverter_apparent_capacity_exceeded" in codes
+    assert "fleet_overloaded" not in codes
+
+
+def test_missing_30c_inverter_power_falls_back_to_40c_with_notice():
+    inverter_key = "sungrow-sg350hx-20"
+    inverter = replace(db.pv_inverters[inverter_key], power_kw_at_30c=None)
+    fallback_db = ComponentDatabase(
+        cables=db.cables,
+        transformers=db.transformers,
+        bess_solutions=db.bess_solutions,
+        bess_transformers=db.bess_transformers,
+        bess_pairings=db.bess_pairings,
+        pv_inverters={**db.pv_inverters, inverter_key: inverter},
+        pv_inverter_pairings=db.pv_inverter_pairings,
+    )
+    diagram = _minimal()
+    diagram["settings"]["rules"]["ambient_temp_c"] = 30
+    diagram["nodes"][2]["props"].update({
+        "model": "SUNGROW_MVS3200",
+        "pv_inverter": inverter_key,
+        "inverter_count": 10,
+    })
+
+    result = solve_diagram(diagram, fallback_db)
+
+    assert result["issues"] == []
+    station = result["results"]["nodes"]["s1"]
+    assert station["inverter_unit_power_kw"] == 320
+    assert any(
+        warning["code"] == "inverter_ambient_power_not_published"
+        and warning["node_id"] == "s1"
+        for warning in result["results"]["warnings"]
+    )
 
 
 def test_single_fleet_refinement_reselects_cable_after_pq_threshold_crossing():

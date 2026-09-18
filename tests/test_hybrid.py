@@ -104,6 +104,26 @@ def test_a_real_hybrid_sizes_both_fleets_independently():
     assert hybrid["results"]["nodes"]["s1"]["fleet_kind"] == "pv"
 
 
+def test_active_hybrid_uses_pv_inverter_capacity_without_changing_bess_contract():
+    diagram = _hybrid_with_drawn_bess(p_target_bess_mw=2.0)
+    pv_station = next(node for node in diagram["nodes"] if node["id"] == "s1")
+    pv_station["props"].update({
+        "model": "SUNGROW_MVS3200",
+        "pv_inverter": "sungrow-sg350hx-20",
+        "inverter_count": 10,
+    })
+
+    body = client.post("/api/solve", json=diagram).json()
+
+    assert body["issues"] == []
+    assert body["results"] is not None
+    assert body["results"]["nodes"]["s1"]["inverter_capacity_kw"] == 3200
+    assert "inverter_capacity_kw" not in body["results"]["nodes"]["s_b1"]
+    fleets = {branch["kind"]: branch for branch in body["results"]["summary"]["branches"]}
+    assert fleets["pv"]["p_poc_refined_delivered_kw"] == pytest.approx(3000.0, abs=1e-3)
+    assert fleets["bess"]["p_poc_refined_delivered_kw"] == pytest.approx(2000.0, abs=1e-3)
+
+
 def test_active_hybrid_meets_one_combined_poc_reactive_duty():
     body = client.post("/api/solve",
                        json=_hybrid_with_drawn_bess(p_target_bess_mw=2.0)).json()

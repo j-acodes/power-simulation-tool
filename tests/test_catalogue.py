@@ -4,6 +4,8 @@ Guards that the real YAML loads and that the PV transformer stations carry the
 agreed parameters and the 'POWER kVA - BRAND' display label.
 """
 
+from dataclasses import replace
+
 import pytest
 
 from powertool import ComponentDatabase
@@ -169,6 +171,23 @@ def test_sungrow_pv_inverter_and_station_pairings_load(db):
         pairing = db.pv_inverter_pairings[station]["sungrow-sg350hx-20"]
         assert pairing.maximum_count == count
         assert pairing.default_count == count
+
+
+def test_pv_inverter_power_resolves_explicit_ambients_without_interpolation(db):
+    inverter = db.pv_inverters["sungrow-sg350hx-20"]
+
+    at_30 = inverter.capability_at(30)
+    at_40 = inverter.capability_at(40)
+    assert at_30.active_power_kw == at_30.apparent_power_kva == 352
+    assert at_30.source_ambient_c == 30
+    assert at_30.used_fallback is False
+    assert at_40.active_power_kw == at_40.apparent_power_kva == 320
+    assert at_40.source_ambient_c == 40
+
+    without_30 = replace(inverter, power_kw_at_30c=None).capability_at(30)
+    assert without_30.power_kw == 320
+    assert without_30.source_ambient_c == 40
+    assert without_30.used_fallback is True
 
 
 def test_the_0_5c_sungrow_station_carries_its_confirmed_container_count(db):

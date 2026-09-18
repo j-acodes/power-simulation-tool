@@ -9,18 +9,18 @@ Transformer loading remains an independent check against the transformer station
 
 **Blocked by:** 02: Configure a Sungrow inverter inside a PV station.
 
-**Status:** ready-for-agent
+**Status:** done
 
-- [ ] Per-unit inverter power resolves explicitly at 30 °C and 40 °C with no interpolation
-- [ ] SG350HX-20 resolves to 352 kW/kVA at 30 °C and 320 kW/kVA at 40 °C
-- [ ] Missing 30 °C power falls back to 40 °C with an explicit notice
-- [ ] Mixed PV stations receive P/Q shares proportional to installed inverter power
-- [ ] Per-station active and apparent limits are checked independently
-- [ ] Inverter-side PF below a published minimum produces a warning
-- [ ] Capacity/PF violations return results and do not become solve errors
-- [ ] Transformer losses/loading still use allocated station duty and the transformer loading limit
-- [ ] Inverter capacity always uses 100% of its ambient rating
-- [ ] POC target, shared export equipment, hybrid reactive split and BESS behavior are unchanged
-- [ ] Domain documentation records inverter ambient power and explicit engineering provenance
-- [ ] Focused diagram-solve tests pass for PV-only, mixed-station and active hybrid cases
-- [ ] Full affected Python type/static checks pass
+- [x] Per-unit inverter power resolves explicitly at 30 °C and 40 °C with no interpolation
+- [x] SG350HX-20 resolves to 352 kW/kVA at 30 °C and 320 kW/kVA at 40 °C
+- [x] Missing 30 °C power falls back to 40 °C with an explicit notice
+- [x] Mixed PV stations receive P/Q shares proportional to installed inverter power
+- [x] Per-station active and apparent limits are checked independently
+- [x] Inverter-side PF below a published minimum produces a warning
+- [x] Capacity/PF violations return results and do not become solve errors
+- [x] Transformer losses/loading still use allocated station duty and the transformer loading limit
+- [x] Inverter capacity always uses 100% of its ambient rating
+- [x] POC target, shared export equipment, hybrid reactive split and BESS behavior are unchanged
+- [x] Domain documentation records inverter ambient power and explicit engineering provenance
+- [x] Focused diagram-solve tests pass for PV-only, mixed-station and active hybrid cases
+- [x] Full affected Python type/static checks pass

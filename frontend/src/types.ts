@@ -172,6 +172,19 @@ export interface StationNodeResult {
   q_mv_kvar: number
   s_mv_kva: number
   i_a: number
+  /** PV-only inverter compliance, present once the station has an explicit
+   * catalogue inverter selection. Limits use 100% of ambient-rated power. */
+  inverter_model?: string
+  inverter_count?: number
+  inverter_unit_power_kw?: number
+  inverter_capacity_kw?: number
+  inverter_active_loading?: number
+  inverter_apparent_loading?: number
+  inverter_power_factor?: number
+  inverter_minimum_power_factor?: number | null
+  inverter_active_ok?: boolean
+  inverter_apparent_ok?: boolean
+  inverter_power_factor_ok?: boolean
 }
 
 export interface BusbarNodeResult {

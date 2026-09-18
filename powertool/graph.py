@@ -56,7 +56,13 @@ import math
 from dataclasses import dataclass, field
 
 from .architecture import PlantArchitecture
-from .components import DEFAULT_AMBIENT_C, Cable, Transformer
+from .components import (
+    DEFAULT_AMBIENT_C,
+    Cable,
+    PvInverter,
+    PvInverterCapability,
+    Transformer,
+)
 from .sizing import SizingResult
 
 NODE_KINDS = ("poc", "hv_tx", "busbar", "station", "aux")
@@ -1016,6 +1022,19 @@ def validate_graph(diagram: dict, db) -> list[GraphIssue]:
 # --- diagram -> engine inputs ------------------------------------------------
 
 @dataclass
+class PvInverterInstallation:
+    """The resolved conversion capability installed inside one PV station."""
+
+    inverter: PvInverter
+    count: int
+    unit_capability: PvInverterCapability
+
+    @property
+    def installed_power_kw(self) -> float:
+        return self.unit_capability.power_kw * self.count
+
+
+@dataclass
 class BranchInputs:
     """One fleet's branch of a drawing: its own busbar, circuits and totals —
     everything :func:`powertool.architecture.size_branch` and
@@ -1070,6 +1089,10 @@ class BranchInputs:
     containers_by_station: dict[str, int] = field(default_factory=dict)
     e_delivered_kwh: float | None = None
     e_required_kwh: float | None = None
+    # PV-only. Legacy stations without the ticket-02 selection are omitted
+    # during the staged rollout and retain transformer-weighted allocation.
+    # Ticket 06 removes that temporary compatibility path.
+    pv_inverters_by_station: dict[str, PvInverterInstallation] = field(default_factory=dict)
     # Direct MV interconnection run for this fleet. HV designs keep the
     # shared export on GraphInputs instead.
     export_edge_id: str | None = None
@@ -1175,6 +1198,7 @@ def graph_to_inputs(diagram: dict, db) -> GraphInputs:
     v_lv = _tier_kv(diagram, "lv")
     v_mv = _tier_kv(diagram, "mv")
     v_hv = _tier_kv(diagram, "hv")
+    ambient_c = _rule(diagram, "ambient_temp_c")
 
     # Export step: the block hanging off the POC is either the MV/HV transformer
     # (HV interconnection) or a busbar directly (MV interconnection). Every
@@ -1293,6 +1317,21 @@ def graph_to_inputs(diagram: dict, db) -> GraphInputs:
         # chosen station transformer, overridable — feeding delivered energy.
         e_delivered_kwh: float | None = None
         unpublished_aux_solutions: list[str] = []
+        pv_inverters_by_station: dict[str, PvInverterInstallation] = {}
+        if kind == "pv":
+            for ids in station_ids:
+                for sid in ids:
+                    props = _props(nodes[sid])
+                    inverter_key = props.get("pv_inverter")
+                    inverter = (db.pv_inverters.get(inverter_key)
+                                if isinstance(inverter_key, str) else None)
+                    count = props.get("inverter_count")
+                    if inverter is not None and isinstance(count, (int, float)):
+                        pv_inverters_by_station[sid] = PvInverterInstallation(
+                            inverter=inverter,
+                            count=int(count),
+                            unit_capability=inverter.capability_at(ambient_c),
+                        )
         if kind == "bess":
             hours = _rule_opt(diagram, "discharge_hours")
             per_station = [
@@ -1351,6 +1390,7 @@ def graph_to_inputs(diagram: dict, db) -> GraphInputs:
                 None if e_delivered_kwh is None
                 else p_target_kw * (_rule_opt(diagram, "discharge_hours") or 0.0)
             ),
+            pv_inverters_by_station=pv_inverters_by_station,
             export_edge_id=busbar_edge["id"] if mv_export_applicable else None,
             export_length_km=mv_export_length_km if mv_export_applicable else 0.0,
             export_candidates=mv_export_candidates,
@@ -1369,7 +1409,7 @@ def graph_to_inputs(diagram: dict, db) -> GraphInputs:
         collection_loss_pct=_rule(diagram, "collection_loss_pct"),
         export_loss_pct_per_km=_rule(diagram, "export_loss_pct_per_km"),
         max_circuit_current_a=_rule(diagram, "max_circuit_current_a"),
-        ambient_c=_rule(diagram, "ambient_temp_c"),
+        ambient_c=ambient_c,
         hv_mode=hv_mode,
         hv_transformer=hv_transformer,
         hv_n_parallel=hv_n_parallel,
@@ -1486,7 +1526,8 @@ def map_results(inputs: GraphInputs, stage1s: list[SizingResult],
                 edges[edge_id] = _segment_payload(
                     segment, forced=key in branch_inputs.segment_candidates)
             for station, plan, node_id in zip(circuit.stations, plans, ids):
-                nodes[node_id] = {
+                installation = branch_inputs.pv_inverters_by_station.get(node_id)
+                station_payload = {
                     # "kind" is the CANVAS node type, the discriminator the
                     # editor keys every node payload on — it stays "station".
                     # The fleet the station belongs to is a separate axis and
@@ -1515,6 +1556,64 @@ def map_results(inputs: GraphInputs, stage1s: list[SizingResult],
                     "s_mv_kva": station.s_mv_kva,
                     "i_a": plan.i_a,
                 }
+                if installation is not None:
+                    capacity = installation.installed_power_kw
+                    inverter_pf = (abs(station.p_lv_kw) / station.s_lv_kva
+                                   if station.s_lv_kva > 0 else 1.0)
+                    active_ok = station.p_lv_kw <= capacity + 1e-9
+                    apparent_ok = station.s_lv_kva <= capacity + 1e-9
+                    minimum_pf = installation.inverter.minimum_power_factor
+                    pf_ok = (minimum_pf is None
+                             or inverter_pf >= minimum_pf - 1e-9)
+                    station_payload.update({
+                        "inverter_model": installation.inverter.display_name,
+                        "inverter_count": installation.count,
+                        "inverter_unit_power_kw": installation.unit_capability.power_kw,
+                        "inverter_capacity_kw": capacity,
+                        "inverter_active_loading": station.p_lv_kw / capacity,
+                        "inverter_apparent_loading": station.s_lv_kva / capacity,
+                        "inverter_power_factor": inverter_pf,
+                        "inverter_minimum_power_factor": minimum_pf,
+                        "inverter_active_ok": active_ok,
+                        "inverter_apparent_ok": apparent_ok,
+                        "inverter_power_factor_ok": pf_ok,
+                    })
+                    if not active_ok:
+                        warnings.append(GraphIssue(
+                            "inverter_active_capacity_exceeded",
+                            f"Station '{node_id}' needs {station.p_lv_kw:,.0f} kW "
+                            f"from its inverters, above the installed {capacity:,.0f} "
+                            f"kW active-power limit.",
+                            node_id=node_id,
+                        ))
+                    if not apparent_ok:
+                        warnings.append(GraphIssue(
+                            "inverter_apparent_capacity_exceeded",
+                            f"Station '{node_id}' needs {station.s_lv_kva:,.0f} kVA "
+                            f"from its inverters, above the installed {capacity:,.0f} "
+                            f"kVA apparent-power limit.",
+                            node_id=node_id,
+                        ))
+                    if not pf_ok:
+                        warnings.append(GraphIssue(
+                            "inverter_power_factor_below_minimum",
+                            f"Station '{node_id}' operates at power factor "
+                            f"{inverter_pf:.3f}, below "
+                            f"{installation.inverter.display_name}'s published "
+                            f"minimum of {minimum_pf:.3f}.",
+                            node_id=node_id,
+                        ))
+                    if installation.unit_capability.used_fallback:
+                        warnings.append(GraphIssue(
+                            "inverter_ambient_power_not_published",
+                            f"No {installation.unit_capability.requested_ambient_c:g} °C "
+                            f"power is published for "
+                            f"{installation.inverter.display_name} — using its "
+                            f"{installation.unit_capability.source_ambient_c:g} °C "
+                            f"power for station '{node_id}'.",
+                            node_id=node_id,
+                        ))
+                nodes[node_id] = station_payload
             if not circuit.current_ok:
                 warnings.append(GraphIssue(
                     "circuit_over_current",
@@ -1554,11 +1653,25 @@ def map_results(inputs: GraphInputs, stage1s: list[SizingResult],
                     edge_id=branch_inputs.export_edge_id))
 
         if not layout.loading_ok:
+            if branch_inputs.pv_inverters_by_station:
+                overload_message = (
+                    "One or more drawn transformer stations exceed the fleet's "
+                    f"{branch_inputs.max_loading * 100:.0f} % transformer loading "
+                    f"limit (aggregate loading is {layout.fleet_loading * 100:.0f} %). "
+                    "Add stations or pick bigger units."
+                )
+            else:
+                # Preserve the established BESS and transitional legacy-PV
+                # response byte-for-byte; their allocation contract did not
+                # change in this ticket.
+                overload_message = (
+                    f"The drawn stations carry {layout.fleet_loading * 100:.0f} % of "
+                    "their combined rating — the required inverter power exceeds "
+                    "the installed station capacity. Add stations or pick bigger units."
+                )
             warnings.append(GraphIssue(
                 "fleet_overloaded",
-                f"The drawn stations carry {layout.fleet_loading * 100:.0f} % of their "
-                f"combined rating — the required inverter power exceeds the installed "
-                f"station capacity. Add stations or pick bigger units.",
+                overload_message,
                 node_id=branch_inputs.busbar_id))
 
         if branch_inputs.unpublished_aux_solutions:

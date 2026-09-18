@@ -365,6 +365,33 @@ class BessSolution:
 
 
 @dataclass(frozen=True)
+class PvInverterCapability:
+    """One inverter unit's power resolved at a requested ambient.
+
+    The project interprets the datasheet power at power factor 1, so this one
+    scalar is both the active limit in kW and the apparent limit in kVA.  The
+    source ambient remains visible so callers can report a conservative
+    fallback instead of silently presenting it as published data.
+    """
+
+    power_kw: float
+    requested_ambient_c: float
+    source_ambient_c: float
+
+    @property
+    def used_fallback(self) -> bool:
+        return not math.isclose(self.requested_ambient_c, self.source_ambient_c)
+
+    @property
+    def active_power_kw(self) -> float:
+        return self.power_kw
+
+    @property
+    def apparent_power_kva(self) -> float:
+        return self.power_kw
+
+
+@dataclass(frozen=True)
 class PvInverter:
     """A curated PV inverter product selected inside a transformer station."""
 
@@ -409,6 +436,22 @@ class PvInverter:
     @property
     def display_name(self) -> str:
         return f"{self.series} — {self.model}"
+
+    def capability_at(self, ambient_c: float) -> PvInverterCapability:
+        """Resolve the published/declaration-backed power without interpolation.
+
+        The only supported design ambients are 30 and 40 °C.  A missing 30 °C
+        value falls back to the required 40 °C value, conservatively.  Keeping
+        the selected source ambient in the result makes that fallback
+        externally reportable.
+        """
+        if math.isclose(ambient_c, 30.0, rel_tol=1e-9, abs_tol=1e-9):
+            if self.power_kw_at_30c is not None:
+                return PvInverterCapability(self.power_kw_at_30c, ambient_c, 30.0)
+            return PvInverterCapability(self.power_kw_at_40c, ambient_c, 40.0)
+        if math.isclose(ambient_c, 40.0, rel_tol=1e-9, abs_tol=1e-9):
+            return PvInverterCapability(self.power_kw_at_40c, ambient_c, 40.0)
+        raise ValueError(f"Unsupported inverter ambient {ambient_c:g} °C; use 30 or 40 °C")
 
 
 @dataclass(frozen=True)
