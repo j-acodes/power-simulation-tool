@@ -35,6 +35,7 @@ from .schemas import (
     ProjectCreate,
     ProjectDetail,
     ProjectSummary,
+    PvInverterInfo,
     RulesDefaults,
     SeedRequest,
     SolveResponse,
@@ -82,7 +83,12 @@ def get_session() -> Iterator[Session]:
         session.close()
 
 
-def _transformer_info(key: str, tx, paired_solutions: dict[str, int] | None = None) -> TransformerInfo:
+def _transformer_info(
+    key: str,
+    tx,
+    paired_solutions: dict[str, int] | None = None,
+    paired_inverters=None,
+) -> TransformerInfo:
     return TransformerInfo(
         key=key,
         display_name=tx.display_name,
@@ -136,12 +142,22 @@ def _transformer_info(key: str, tx, paired_solutions: dict[str, int] | None = No
         datasheet_version=tx.datasheet_version,
         preliminary=tx.preliminary,
         paired_solutions=paired_solutions or {},
+        paired_inverters={
+            name: {
+                "maximum_count": pairing.maximum_count,
+                "default_count": pairing.default_count,
+            }
+            for name, pairing in (paired_inverters or {}).items()
+        },
     )
 
 
 @app.get("/api/catalogue", response_model=CatalogueResponse)
 def get_catalogue() -> CatalogueResponse:
-    transformers = [_transformer_info(key, tx) for key, tx in db.transformers.items()]
+    transformers = [
+        _transformer_info(key, tx, paired_inverters=db.pv_inverter_pairings.get(key))
+        for key, tx in db.transformers.items()
+    ]
     bess_transformers = [
         _transformer_info(key, tx, db.bess_pairings.get(key))
         for key, tx in db.bess_transformers.items()
@@ -189,6 +205,15 @@ def get_catalogue() -> CatalogueResponse:
         )
         for key, sol in db.bess_solutions.items()
     ]
+    pv_inverters = [
+        PvInverterInfo(
+            key=key,
+            display_name=inverter.display_name,
+            **{field: getattr(inverter, field) for field in PvInverterInfo.model_fields
+               if field not in {"key", "display_name"}},
+        )
+        for key, inverter in db.pv_inverters.items()
+    ]
 
     cables: dict[str, list[CableInfo]] = {}
     for cable in sorted(
@@ -219,6 +244,7 @@ def get_catalogue() -> CatalogueResponse:
     return CatalogueResponse(
         transformers=transformers, cables=cables, defaults=defaults,
         bess_solutions=bess_solutions, bess_transformers=bess_transformers,
+        pv_inverters=pv_inverters,
     )
 
 

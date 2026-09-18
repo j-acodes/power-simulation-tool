@@ -22,7 +22,7 @@ from .architecture import (
 )
 from .cable_sizing import AutoCable, CableSelection, select_cable
 from .chain import Chain, ChainElement
-from .components import AuxLoad, BessSolution, Cable, Transformer, TransformerGroup, current_a
+from .components import AuxLoad, BessSolution, Cable, PvInverter, PvInverterPairing, Transformer, TransformerGroup, current_a
 from .database import ComponentDatabase
 from .pdf_report import build_pdf_report
 from .sizing import (
@@ -38,6 +38,8 @@ __all__ = [
     "Transformer",
     "AuxLoad",
     "BessSolution",
+    "PvInverter",
+    "PvInverterPairing",
     "current_a",
     "ComponentDatabase",
     "Chain",

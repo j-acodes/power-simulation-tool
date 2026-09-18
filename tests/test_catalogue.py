@@ -145,6 +145,32 @@ def test_the_real_sungrow_station_carries_its_confirmed_container_count(db):
     assert db.bess_pairings["SUNGROW_MVS7400_LS"] == {"sungrow-st6900ux-4h": 4}
 
 
+def test_sungrow_pv_inverter_and_station_pairings_load(db):
+    inverter = db.pv_inverters["sungrow-sg350hx-20"]
+    assert inverter.display_name == "SG350HX — SG350HX-20"
+    assert inverter.power_kw_at_30c == 352
+    assert inverter.power_kw_at_40c == 320
+    assert inverter.minimum_power_factor == 0.8
+    assert inverter.maximum_efficiency_percent == 99.02
+    assert inverter.mppt_count == 6
+    assert inverter.strings_per_mppt == 5
+    assert inverter.input_current_per_mppt_a == 75
+    assert inverter.thdi_percent == 1
+    assert inverter.datasheet_url
+
+    expected_counts = {
+        "SUNGROW_MVS3200": 10,
+        "SUNGROW_MVS4480": 14,
+        "SUNGROW_MVS6400": 20,
+        "SUNGROW_MVS7040": 22,
+        "SUNGROW_MVS8960": 28,
+    }
+    for station, count in expected_counts.items():
+        pairing = db.pv_inverter_pairings[station]["sungrow-sg350hx-20"]
+        assert pairing.maximum_count == count
+        assert pairing.default_count == count
+
+
 def test_the_0_5c_sungrow_station_carries_its_confirmed_container_count(db):
     # 2 containers, confirmed by the project owner rather than by the
     # datasheet, which states no count at all — same standing as the

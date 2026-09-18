@@ -17,16 +17,20 @@ function NumberField({
   value,
   onChange,
   step = 1,
+  min,
+  max,
 }: {
   label: string
   value: number
   onChange: (v: number) => void
   step?: number
+  min?: number
+  max?: number
 }) {
   return (
     <label className="field">
       <span>{label}</span>
-      <input type="number" step={step} value={Number.isFinite(value) ? value : ''} onChange={(e) => onChange(e.target.valueAsNumber)} />
+      <input type="number" step={step} min={min} max={max} value={Number.isFinite(value) ? value : ''} onChange={(e) => onChange(e.target.valueAsNumber)} />
     </label>
   )
 }
@@ -117,6 +121,10 @@ function NodeProperties({ node }: { node: DiagramNode }) {
     : catalogue?.transformers.find((tx) => tx.key === props.model)
   const stationTransformer = props.fleet_kind === 'bess' ? bessTransformer : pvTransformer
   const selectedBessSolution = catalogue?.bess_solutions.find((sol) => sol.key === props.bess_solution)
+  const pvPairings = pvTransformer?.paired_inverters ?? {}
+  const pvInverterOptions = (catalogue?.pv_inverters ?? []).filter((inverter) => inverter.key in pvPairings)
+  const selectedPvInverter = (catalogue?.pv_inverters ?? []).find((inverter) => inverter.key === props.pv_inverter)
+  const selectedPvPairing = pvPairings[String(props.pv_inverter)]
 
   return (
     <div>
@@ -181,7 +189,10 @@ function NodeProperties({ node }: { node: DiagramNode }) {
           {props.mode !== 'custom' && (
             <label className="field">
               <span>Model</span>
-              <select value={String(props.model ?? '')} onChange={(e) => patch({ model: e.target.value })}>
+              <select value={String(props.model ?? '')} onChange={(e) => patch({
+                model: e.target.value,
+                ...(props.fleet_kind !== 'bess' ? { pv_inverter: '', inverter_count: undefined } : {}),
+              })}>
                 <option value="">— select —</option>
                 {(props.fleet_kind === 'bess' ? catalogue?.bess_transformers : catalogue?.transformers)?.map((tx) => (
                   <option key={tx.key} value={tx.key}>
@@ -241,6 +252,43 @@ function NodeProperties({ node }: { node: DiagramNode }) {
               )}
             </>
           )}
+          {props.fleet_kind !== 'bess' && props.mode !== 'custom' && pvTransformer && (
+            <>
+              <label className="field">
+                <span>PV inverter</span>
+                <select
+                  value={String(props.pv_inverter ?? '')}
+                  onChange={(e) => {
+                    const pairing = pvPairings[e.target.value]
+                    patch({ pv_inverter: e.target.value, inverter_count: pairing?.default_count })
+                  }}
+                >
+                  <option value="">— select —</option>
+                  {pvInverterOptions.map((inverter) => (
+                    <option key={inverter.key} value={inverter.key}>{inverter.display_name}</option>
+                  ))}
+                </select>
+              </label>
+              {selectedPvPairing && (
+                <NumberField
+                  label="Inverters"
+                  value={Number(props.inverter_count ?? selectedPvPairing.default_count)}
+                  min={1}
+                  max={selectedPvPairing.maximum_count}
+                  onChange={(value) => patch({
+                    inverter_count: Number.isFinite(value)
+                      ? Math.min(selectedPvPairing.maximum_count, Math.max(1, Math.round(value)))
+                      : selectedPvPairing.default_count,
+                  })}
+                />
+              )}
+              {selectedPvInverter && (
+                <button type="button" onClick={() => setSpecTarget({ kind: 'pv_inverter', item: selectedPvInverter })}>
+                  PV inverter specification
+                </button>
+              )}
+            </>
+          )}
         </>
       )}
       {node.kind === 'aux' && (
@@ -275,6 +323,8 @@ function NodeProperties({ node }: { node: DiagramNode }) {
             target={specTarget}
             solutions={catalogue?.bess_solutions ?? []}
             transformers={catalogue?.bess_transformers ?? []}
+            pvInverters={catalogue?.pv_inverters ?? []}
+            pvTransformers={catalogue?.transformers ?? []}
           />
         </ModalShell>
       )}

@@ -30,6 +30,8 @@ transformers:
 
   # Sungrow MVS-LV series (1500 Vdc string inverter SG350HX), Dy11 / Dy11y11
   SUNGROW_MVS3200:        # MVS3200-LV, 3200 kVA @40C, datasheet uk 7%
+    paired_inverters:
+      sungrow-sg350hx-20: {maximum_count: 10, default_count: 10}
     s_rated_kva_at_40c: 3200
     uk_percent: 8.0
     pk_kw: 32.0
@@ -41,6 +43,8 @@ transformers:
     datasheet_url: https://info-support.sungrowpower.com/application/pdf/2025/04/23/DS_20250418_MVS3200-LV_4480-LV_Datasheet_V4_EN%EF%BC%88EUR%EF%BC%89.pdf
 
   SUNGROW_MVS4480:        # MVS4480-LV, 4480 kVA @40C, datasheet uk 8%
+    paired_inverters:
+      sungrow-sg350hx-20: {maximum_count: 14, default_count: 14}
     s_rated_kva_at_40c: 4480
     uk_percent: 8.0
     pk_kw: 44.8
@@ -52,6 +56,8 @@ transformers:
     datasheet_url: https://info-support.sungrowpower.com/application/pdf/2025/04/23/DS_20250418_MVS3200-LV_4480-LV_Datasheet_V4_EN%EF%BC%88EUR%EF%BC%89.pdf
 
   SUNGROW_MVS6400:        # MVS6400-LV, 6400 kVA @40C, dual-LV, datasheet uk 8%
+    paired_inverters:
+      sungrow-sg350hx-20: {maximum_count: 20, default_count: 20}
     s_rated_kva_at_40c: 6400
     uk_percent: 8.0
     pk_kw: 64.0
@@ -63,6 +69,8 @@ transformers:
     datasheet_url: https://info-support.sungrowpower.com/application/pdf/2025/04/23/DS_20250418_MVS6400-LV_Datasheet_V4_EN%EF%BC%88EUR%EF%BC%89.pdf
 
   SUNGROW_MVS7040:        # MVS7040-LV, 7040 kVA @40C, dual-LV, datasheet uk 8%
+    paired_inverters:
+      sungrow-sg350hx-20: {maximum_count: 22, default_count: 22}
     s_rated_kva_at_40c: 7040
     uk_percent: 8.0
     pk_kw: 70.4
@@ -74,6 +82,8 @@ transformers:
     datasheet_url: https://info-support.sungrowpower.com/application/pdf/2024/07/01/DS_20240419_MVS7040-LV_Datasheet_V3_EN.pdf
 
   SUNGROW_MVS8960:        # MVS8960-LV, 8960 kVA @40C, dual-LV, datasheet uk 9.5% (MV 20-35kV)
+    paired_inverters:
+      sungrow-sg350hx-20: {maximum_count: 28, default_count: 28}
     s_rated_kva_at_40c: 8960
     uk_percent: 8.0
     pk_kw: 89.6

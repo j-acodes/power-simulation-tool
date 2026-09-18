@@ -173,6 +173,31 @@ def test_catalogue_serves_the_bess_station_transformer_pairing():
     assert pv["paired_solutions"] == {}
 
 
+def test_catalogue_serves_sungrow_pv_inverter_and_station_pairings():
+    data = client.get("/api/catalogue").json()
+    inverter = next(item for item in data["pv_inverters"] if item["key"] == "sungrow-sg350hx-20")
+    assert inverter["display_name"] == "SG350HX — SG350HX-20"
+    assert inverter["power_kw_at_30c"] == 352
+    assert inverter["power_kw_at_40c"] == 320
+    assert inverter["minimum_power_factor"] == 0.8
+    assert inverter["maximum_efficiency_percent"] == 99.02
+    assert inverter["datasheet_url"]
+
+    expected_counts = {
+        "SUNGROW_MVS3200": 10,
+        "SUNGROW_MVS4480": 14,
+        "SUNGROW_MVS6400": 20,
+        "SUNGROW_MVS7040": 22,
+        "SUNGROW_MVS8960": 28,
+    }
+    stations = {item["key"]: item for item in data["transformers"]}
+    for key, count in expected_counts.items():
+        assert stations[key]["paired_inverters"]["sungrow-sg350hx-20"] == {
+            "maximum_count": count,
+            "default_count": count,
+        }
+
+
 def test_stage1_example_plant_matches_direct_engine_computation():
     resp = client.post("/api/stage1", json=EXAMPLE_PAYLOAD)
     assert resp.status_code == 200

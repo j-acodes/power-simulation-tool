@@ -10,7 +10,7 @@ import type { SpecViewTarget } from '../components/SpecView'
 import { useCatalogue } from '../hooks/useCatalogue'
 import { fmt } from '../format'
 import { LABEL } from '../labels'
-import type { BessSolutionInfo, CableInfo } from '../types'
+import type { BessSolutionInfo, CableInfo, PvInverterInfo } from '../types'
 
 function CableRow({ cable }: { cable: CableInfo }) {
   return (
@@ -88,6 +88,13 @@ export function CataloguePage() {
           </section>
 
           <section>
+            <h2>PV Inverters</h2>
+            {(catalogue.pv_inverters ?? []).map((inverter: PvInverterInfo) => (
+              <ClickableRow key={inverter.key} target={{ kind: 'pv_inverter', item: inverter }} onSelect={setSpecTarget} />
+            ))}
+          </section>
+
+          <section>
             <h2>BESS solutions</h2>
             {catalogue.bess_solutions.map((sol: BessSolutionInfo) => (
               <ClickableRow key={sol.key} target={{ kind: 'bess_solution', item: sol }} onSelect={setSpecTarget} />
@@ -118,6 +125,8 @@ export function CataloguePage() {
             target={specTarget}
             solutions={catalogue?.bess_solutions ?? []}
             transformers={catalogue?.bess_transformers ?? []}
+            pvInverters={catalogue?.pv_inverters ?? []}
+            pvTransformers={catalogue?.transformers ?? []}
           />
         </ModalShell>
       )}

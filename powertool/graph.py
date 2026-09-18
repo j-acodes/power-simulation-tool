@@ -876,6 +876,39 @@ def _check_props(nodes, tree, db, diagram, issues) -> None:
                             f"Station '{nid}' has containers_override "
                             f"{override!r}; it must be a positive whole number.",
                             node_id=nid))
+            elif fleet_kind == "pv" and mode == "catalogue":
+                station_key = props.get("model")
+                pairings = db.pv_inverter_pairings.get(station_key, {})
+                inverter_key = props.get("pv_inverter")
+                inverter = (db.pv_inverters.get(inverter_key)
+                            if isinstance(inverter_key, str) else None)
+                # During the staged rollout, a legacy station with neither
+                # inverter field remains solvable. Once a selection is
+                # present, however, the new contract is strict. Ticket 06
+                # removes this temporary omission allowance after seeding and
+                # saved projects have been cut over.
+                if inverter is None and inverter_key is not None:
+                    issues.append(GraphIssue(
+                        "unknown_pv_inverter",
+                        f"Station '{nid}' names no known PV inverter: pick one "
+                        f"from the station's catalogue pairings.", node_id=nid))
+                elif inverter is not None:
+                    pairing = pairings.get(inverter_key)
+                    if pairing is None:
+                        issues.append(GraphIssue(
+                            "unpaired_pv_inverter",
+                            f"Station '{nid}' selects {inverter.display_name!r}, "
+                            f"which {station_key!r} is not paired with.", node_id=nid))
+                    else:
+                        count = props.get("inverter_count")
+                        if (isinstance(count, bool) or not isinstance(count, (int, float))
+                                or count != int(count) or count < 1
+                                or count > pairing.maximum_count):
+                            issues.append(GraphIssue(
+                                "bad_inverter_count",
+                                f"Station '{nid}' has inverter_count {count!r}; it "
+                                f"must be a whole number from 1 to "
+                                f"{pairing.maximum_count}.", node_id=nid))
         elif kind == "hv_tx":
             mode = props.get("mode") or "auto"
             n_parallel = _num(props.get("n_parallel", 1))

@@ -2,7 +2,7 @@ import { fireEvent, render, screen } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { Inspector } from './Inspector'
 import { EMPTY_DIAGRAM, useStore } from '../store'
-import type { BessSolutionInfo, CatalogueResponse, DiagramNode, TransformerInfo } from '../types'
+import type { BessSolutionInfo, CatalogueResponse, DiagramNode, PvInverterInfo, TransformerInfo } from '../types'
 
 const bessSolution: BessSolutionInfo = {
   key: 'sungrow-st6900ux-4h', display_name: 'PowerTitan 3.0 — ST6900UX-4H',
@@ -54,6 +54,21 @@ const pvTransformer: TransformerInfo = {
   humidity_max_pct: null, altitude_max_m: null, communication: null, standards: null,
   datasheet_version: null, preliminary: false,
   paired_solutions: {},
+  paired_inverters: { 'sungrow-sg350hx-20': { maximum_count: 10, default_count: 10 } },
+}
+
+const pvInverter: PvInverterInfo = {
+  key: 'sungrow-sg350hx-20', display_name: 'SG350HX — SG350HX-20', brand: 'Sungrow',
+  series: 'SG350HX', model: 'SG350HX-20', power_kw_at_40c: 320, power_kw_at_30c: 352,
+  nominal_ac_voltage_kv: 0.8, minimum_power_factor: 0.8, datasheet_url: 'https://example.invalid/sg350.pdf',
+  datasheet_version: 'Version 12', datasheet_date: '2025-03-12', market: 'Europe', preliminary: false,
+  maximum_efficiency_percent: 99.02, european_efficiency_percent: 98.8, dc_voltage_max_v: 1500,
+  dc_voltage_min_v: 500, dc_voltage_nominal_v: 1160, mppt_count: 12, strings_per_mppt: 2,
+  input_current_per_mppt_a: 40, short_circuit_current_per_mppt_a: 60, rated_ac_power_kw: 320,
+  max_ac_apparent_power_kva: 352, max_ac_current_a: 254.1, thdi_percent: 3,
+  protection: 'Surge protection', width_mm: 1163, height_mm: 1051, depth_mm: 366,
+  weight_kg: 162, ip_rating: 'IP66', temp_min_c: -30, temp_max_c: 60, altitude_max_m: 4000,
+  cooling: 'Smart forced-air cooling', communication: 'RS485',
 }
 
 const catalogue: CatalogueResponse = {
@@ -65,6 +80,7 @@ const catalogue: CatalogueResponse = {
   },
   bess_solutions: [bessSolution],
   bess_transformers: [bessTransformer],
+  pv_inverters: [pvInverter],
 }
 
 vi.mock('../hooks/useCatalogue', () => ({
@@ -185,6 +201,30 @@ describe('Inspector — expand control for a placed station (ticket 06)', () => 
     expect(screen.getByText(/1,000 kVA @ 40 °C/)).toBeTruthy()
     expect(screen.queryByText(/BESS/i, { selector: '.spec-view *' })).toBeNull()
     expect(screen.queryByRole('button', { name: 'BESS solution specification' })).toBeNull()
+  })
+
+  it('selects a paired PV inverter after the station and bounds its count', () => {
+    withNode({
+      id: 'n1', kind: 'station', x: 0, y: 0,
+      props: { fleet_kind: 'pv', mode: 'catalogue', model: pvTransformer.key },
+    })
+    render(<Inspector />)
+
+    const inverterSelect = screen.getByLabelText('PV inverter')
+    expect(screen.getByRole('option', { name: pvInverter.display_name })).toBeTruthy()
+    fireEvent.change(inverterSelect, { target: { value: pvInverter.key } })
+    expect(useStore.getState().diagram.nodes[0].props).toMatchObject({
+      pv_inverter: pvInverter.key,
+      inverter_count: 10,
+    })
+
+    const count = screen.getByLabelText('Inverters')
+    expect(count.getAttribute('min')).toBe('1')
+    expect(count.getAttribute('max')).toBe('10')
+    fireEvent.change(count, { target: { value: '11' } })
+    expect(useStore.getState().diagram.nodes[0].props.inverter_count).toBe(10)
+    fireEvent.click(screen.getByRole('button', { name: 'PV inverter specification' }))
+    expect(screen.getByText('DC side')).toBeTruthy()
   })
 
   it('hides the expand control for a custom PV station', () => {

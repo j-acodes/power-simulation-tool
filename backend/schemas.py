@@ -180,6 +180,53 @@ class TransformerInfo(BaseModel):
     # transformer is sold with (data/bess_transformers.yaml's paired_solutions).
     # Always empty for a PV transformer, which has no pairing to carry.
     paired_solutions: dict[str, int] = {}
+    paired_inverters: dict[str, "PvInverterPairingInfo"] = {}
+
+
+class PvInverterPairingInfo(BaseModel):
+    maximum_count: int
+    default_count: int
+
+
+class PvInverterInfo(BaseModel):
+    key: str
+    display_name: str
+    brand: str
+    series: str
+    model: str
+    power_kw_at_40c: float
+    power_kw_at_30c: float | None
+    nominal_ac_voltage_kv: float
+    minimum_power_factor: float | None
+    datasheet_url: str | None
+    datasheet_version: str | None
+    datasheet_date: str | None
+    market: str | None
+    preliminary: bool
+    maximum_efficiency_percent: float | None
+    european_efficiency_percent: float | None
+    dc_voltage_max_v: float | None
+    dc_voltage_min_v: float | None
+    dc_voltage_nominal_v: float | None
+    mppt_count: int | None
+    strings_per_mppt: int | None
+    input_current_per_mppt_a: float | None
+    short_circuit_current_per_mppt_a: float | None
+    rated_ac_power_kw: float | None
+    max_ac_apparent_power_kva: float | None
+    max_ac_current_a: float | None
+    thdi_percent: float | None
+    protection: str | None
+    width_mm: float | None
+    height_mm: float | None
+    depth_mm: float | None
+    weight_kg: float | None
+    ip_rating: str | None
+    temp_min_c: float | None
+    temp_max_c: float | None
+    altitude_max_m: float | None
+    cooling: str | None
+    communication: str | None
 
 
 class CableInfo(BaseModel):
@@ -259,6 +306,7 @@ class CatalogueResponse(BaseModel):
     defaults: CatalogueDefaults
     bess_solutions: list[BessSolutionInfo]
     bess_transformers: list[TransformerInfo]
+    pv_inverters: list[PvInverterInfo]
 
 
 # --- Projects / Designs persistence (M4) ---------------------------------

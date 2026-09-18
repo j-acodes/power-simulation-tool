@@ -1,12 +1,13 @@
 import { fmt, ratingAtAmbients } from '../format'
 import { Row, SectionTitle } from './DetailRows'
-import type { BessSolutionInfo, FleetKind, TransformerInfo } from '../types'
+import type { BessSolutionInfo, FleetKind, PvInverterInfo, TransformerInfo } from '../types'
 
 /** The catalogue-backed product SpecView is showing. The transformer-station
  * target is shared by both fleet kinds; callers identify the fleet without
  * pretending a PV product is a BESS product. */
 export type SpecViewTarget =
   | { kind: 'bess_solution'; item: BessSolutionInfo }
+  | { kind: 'pv_inverter'; item: PvInverterInfo }
   | { kind: 'transformer_station'; fleet_kind: FleetKind; item: TransformerInfo }
 
 /** Read-only, full-screen catalogue specification (ticket 04). Renders inside
@@ -22,6 +23,8 @@ export function SpecView({
   target,
   solutions,
   transformers,
+  pvInverters = [],
+  pvTransformers = [],
 }: {
   target: SpecViewTarget
   /** Every BESS solution in the catalogue — used to resolve a station
@@ -31,6 +34,8 @@ export function SpecView({
    * ones a solution is paired with (the reverse direction has no index of
    * its own; it's the same pairing read from the other side). */
   transformers: TransformerInfo[]
+  pvInverters?: PvInverterInfo[]
+  pvTransformers?: TransformerInfo[]
 }) {
   const item = target.item
   const preliminary = item.preliminary
@@ -49,6 +54,8 @@ export function SpecView({
       <div className="spec-view-simulated">
         {target.kind === 'bess_solution' ? (
           <SimulatedBessSolution item={target.item} />
+        ) : target.kind === 'pv_inverter' ? (
+          <SimulatedPvInverter item={target.item} />
         ) : (
           <SimulatedTransformerStation item={target.item} />
         )}
@@ -56,11 +63,19 @@ export function SpecView({
 
       {target.kind === 'bess_solution' ? (
         <BessSolutionSpec item={target.item} />
+      ) : target.kind === 'pv_inverter' ? (
+        <PvInverterSpec item={target.item} />
       ) : (
         <TransformerStationSpec item={target.item} />
       )}
 
-      <PairingsSection target={target} solutions={solutions} transformers={transformers} />
+      <PairingsSection
+        target={target}
+        solutions={solutions}
+        transformers={transformers}
+        pvInverters={pvInverters}
+        pvTransformers={pvTransformers}
+      />
 
       {/* Provenance shows whenever there is any of it. A transcription with a
         * version but no public URL — which is the shipped Sungrow entry — still
@@ -70,6 +85,8 @@ export function SpecView({
         <>
           <SectionTitle>Datasheet</SectionTitle>
           {datasheetVersion && <Row label="Version" value={datasheetVersion} />}
+          {target.kind === 'pv_inverter' && target.item.datasheet_date && <Row label="Date" value={target.item.datasheet_date} />}
+          {target.kind === 'pv_inverter' && target.item.market && <Row label="Market" value={target.item.market} />}
           {datasheetUrl && (
             <p>
               <a href={datasheetUrl} target="_blank" rel="noreferrer">
@@ -80,6 +97,19 @@ export function SpecView({
         </>
       )}
     </div>
+  )
+}
+
+function SimulatedPvInverter({ item }: { item: PvInverterInfo }) {
+  const power = item.power_kw_at_30c == null
+    ? `${fmt(item.power_kw_at_40c)} kW / kVA @ 40 °C`
+    : `${fmt(item.power_kw_at_30c)} kW / kVA @ 30 °C; ${fmt(item.power_kw_at_40c)} kW / kVA @ 40 °C`
+  return (
+    <>
+      <Row label="Power at ambient" value={power} />
+      <Row label="Nominal AC voltage" value={`${fmt(item.nominal_ac_voltage_kv, 2)} kV`} />
+      <Row label="Minimum power factor" value={item.minimum_power_factor == null ? 'Not published' : fmt(item.minimum_power_factor, 2)} />
+    </>
   )
 }
 
@@ -199,6 +229,42 @@ function BessSolutionSpec({ item }: { item: BessSolutionInfo }) {
   )
 }
 
+function PvInverterSpec({ item }: { item: PvInverterInfo }) {
+  const efficiencyRows = [
+    optionalRow('Maximum efficiency', item.maximum_efficiency_percent == null ? null : `${fmt(item.maximum_efficiency_percent, 2)} %`),
+    optionalRow('European efficiency', item.european_efficiency_percent == null ? null : `${fmt(item.european_efficiency_percent, 2)} %`),
+  ].filter(Boolean)
+  const dcRows = [
+    optionalRow('DC voltage range', item.dc_voltage_min_v == null || item.dc_voltage_max_v == null ? null : `${fmt(item.dc_voltage_min_v)} – ${fmt(item.dc_voltage_max_v)} V`),
+    optionalRow('Nominal DC voltage', item.dc_voltage_nominal_v == null ? null : `${fmt(item.dc_voltage_nominal_v)} V`),
+    optionalRow('MPPTs', item.mppt_count == null ? null : String(item.mppt_count)),
+    optionalRow('Strings per MPPT', item.strings_per_mppt == null ? null : String(item.strings_per_mppt)),
+    optionalRow('Input current per MPPT', item.input_current_per_mppt_a == null ? null : `${fmt(item.input_current_per_mppt_a)} A`),
+    optionalRow('Short-circuit current per MPPT', item.short_circuit_current_per_mppt_a == null ? null : `${fmt(item.short_circuit_current_per_mppt_a)} A`),
+  ].filter(Boolean)
+  const acRows = [
+    optionalRow('Rated AC power', item.rated_ac_power_kw == null ? null : `${fmt(item.rated_ac_power_kw)} kW`),
+    optionalRow('Maximum apparent power', item.max_ac_apparent_power_kva == null ? null : `${fmt(item.max_ac_apparent_power_kva)} kVA`),
+    optionalRow('Maximum AC current', item.max_ac_current_a == null ? null : `${fmt(item.max_ac_current_a, 1)} A`),
+    optionalRow('THDi', item.thdi_percent == null ? null : `< ${fmt(item.thdi_percent, 1)} %`),
+  ].filter(Boolean)
+  const protectionRows = [optionalRow('Protection', item.protection)].filter(Boolean)
+  const mechanicalRows = [
+    optionalRow('Dimensions', item.width_mm == null || item.height_mm == null || item.depth_mm == null ? null : `${fmt(item.width_mm)} × ${fmt(item.height_mm)} × ${fmt(item.depth_mm)} mm`),
+    optionalRow('Weight', item.weight_kg == null ? null : `${fmt(item.weight_kg)} kg`),
+    optionalRow('Ingress protection', item.ip_rating),
+    optionalRow('Operating temperature', item.temp_min_c == null || item.temp_max_c == null ? null : `${fmt(item.temp_min_c)} – ${fmt(item.temp_max_c)} °C`),
+    optionalRow('Maximum altitude', item.altitude_max_m == null ? null : `${fmt(item.altitude_max_m)} m`),
+    optionalRow('Cooling', item.cooling),
+    optionalRow('Communication', item.communication),
+  ].filter(Boolean)
+  return <>{specGroup('Efficiency', efficiencyRows)}{specGroup('DC side', dcRows)}{specGroup('AC side', acRows)}{specGroup('Protection', protectionRows)}{specGroup('Mechanical and environmental', mechanicalRows)}</>
+}
+
+function specGroup(title: string, rows: Array<ReturnType<typeof optionalRow>>) {
+  return rows.length === 0 ? null : <><SectionTitle>{title}</SectionTitle>{rows}</>
+}
+
 function TransformerStationSpec({ item }: { item: TransformerInfo }) {
   const transformerRows = [
     optionalRow('Model', item.model),
@@ -295,14 +361,19 @@ function PairingsSection({
   target,
   solutions,
   transformers,
+  pvInverters,
+  pvTransformers,
 }: {
   target: SpecViewTarget
   solutions: BessSolutionInfo[]
   transformers: TransformerInfo[]
+  pvInverters: PvInverterInfo[]
+  pvTransformers: TransformerInfo[]
 }) {
-  const rows =
-    target.kind === 'bess_solution'
-      ? transformers
+  let rows
+  let title
+  if (target.kind === 'bess_solution') {
+    rows = transformers
           .filter((tx) => target.item.key in tx.paired_solutions)
           .map((tx) => (
             <Row
@@ -311,18 +382,34 @@ function PairingsSection({
               value={`${tx.paired_solutions[target.item.key]} container(s)`}
             />
           ))
-      : target.fleet_kind === 'bess'
-        ? Object.entries(target.item.paired_solutions).map(([solutionKey, count]) => {
+    title = 'Sold with these station transformers'
+  } else if (target.kind === 'pv_inverter') {
+    rows = pvTransformers
+      .filter((tx) => target.item.key in (tx.paired_inverters ?? {}))
+      .map((tx) => {
+        const pairing = tx.paired_inverters![target.item.key]
+        return <Row key={tx.key} label={tx.display_name} value={`1–${pairing.maximum_count} inverter(s); default ${pairing.default_count}`} />
+      })
+    title = 'Paired PV Transformer Stations'
+  } else if (target.fleet_kind === 'bess') {
+    rows = Object.entries(target.item.paired_solutions).map(([solutionKey, count]) => {
           const sol = solutions.find((s) => s.key === solutionKey)
           return <Row key={solutionKey} label={sol?.display_name ?? solutionKey} value={`${count} container(s)`} />
         })
-        : []
+    title = 'Sold with these solutions'
+  } else {
+    rows = Object.entries(target.item.paired_inverters ?? {}).map(([inverterKey, pairing]) => {
+      const inverter = pvInverters.find((candidate) => candidate.key === inverterKey)
+      return <Row key={inverterKey} label={inverter?.display_name ?? inverterKey} value={`1–${pairing.maximum_count} inverter(s); default ${pairing.default_count}`} />
+    })
+    title = 'Paired PV inverters'
+  }
 
   if (rows.length === 0) return null
 
   return (
     <>
-      <SectionTitle>{target.kind === 'bess_solution' ? 'Sold with these station transformers' : 'Sold with these solutions'}</SectionTitle>
+      <SectionTitle>{title}</SectionTitle>
       {rows}
     </>
   )

@@ -83,6 +83,24 @@ def test_minimal_drawing_is_valid():
     assert validate_graph(_minimal(), db) == []
 
 
+def test_pv_station_rejects_unknown_unpaired_and_out_of_range_inverters():
+    diagram = _minimal()
+    station = diagram["nodes"][2]["props"]
+    station.update({"model": "SUNGROW_MVS3200", "pv_inverter": "missing", "inverter_count": 10})
+    assert "unknown_pv_inverter" in _codes(validate_graph(diagram, db))
+
+    station.update({"model": "HUAWEI_JUPITER3000", "pv_inverter": "sungrow-sg350hx-20"})
+    assert "unpaired_pv_inverter" in _codes(validate_graph(diagram, db))
+
+    station.update({"model": "SUNGROW_MVS3200", "pv_inverter": "sungrow-sg350hx-20"})
+    station.pop("inverter_count")
+    assert "bad_inverter_count" in _codes(validate_graph(diagram, db))
+    station["inverter_count"] = 0
+    assert "bad_inverter_count" in _codes(validate_graph(diagram, db))
+    station["inverter_count"] = 11
+    assert "bad_inverter_count" in _codes(validate_graph(diagram, db))
+
+
 def test_station_without_fleet_kind_parses_as_pv_and_solves_identically():
     # This is the backward-compatibility guarantee for every design already
     # saved: a station that never heard of fleet_kind must behave exactly as

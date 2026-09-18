@@ -362,3 +362,56 @@ class BessSolution:
         product is recognised and the model number is what distinguishes two
         durations of it."""
         return f"{self.series} — {self.model}"
+
+
+@dataclass(frozen=True)
+class PvInverter:
+    """A curated PV inverter product selected inside a transformer station."""
+
+    name: str
+    brand: str
+    series: str
+    model: str
+    power_kw_at_40c: float
+    power_kw_at_30c: float | None
+    nominal_ac_voltage_kv: float
+    minimum_power_factor: float | None
+    datasheet_url: str | None = None
+    datasheet_version: str | None = None
+    datasheet_date: str | None = None
+    market: str | None = None
+    preliminary: bool = False
+    maximum_efficiency_percent: float | None = None
+    european_efficiency_percent: float | None = None
+    dc_voltage_max_v: float | None = None
+    dc_voltage_min_v: float | None = None
+    dc_voltage_nominal_v: float | None = None
+    mppt_count: int | None = None
+    strings_per_mppt: int | None = None
+    input_current_per_mppt_a: float | None = None
+    short_circuit_current_per_mppt_a: float | None = None
+    rated_ac_power_kw: float | None = None
+    max_ac_apparent_power_kva: float | None = None
+    max_ac_current_a: float | None = None
+    thdi_percent: float | None = None
+    protection: str | None = None
+    width_mm: float | None = None
+    height_mm: float | None = None
+    depth_mm: float | None = None
+    weight_kg: float | None = None
+    ip_rating: str | None = None
+    temp_min_c: float | None = None
+    temp_max_c: float | None = None
+    altitude_max_m: float | None = None
+    cooling: str | None = None
+    communication: str | None = None
+
+    @property
+    def display_name(self) -> str:
+        return f"{self.series} — {self.model}"
+
+
+@dataclass(frozen=True)
+class PvInverterPairing:
+    maximum_count: int
+    default_count: int

@@ -10,7 +10,7 @@ from pathlib import Path
 
 import yaml
 
-from .components import BessSolution, Cable, Transformer
+from .components import BessSolution, Cable, PvInverter, PvInverterPairing, Transformer
 
 # data/ lives next to the powertool/ package, one level up from this file.
 DATA_DIR = Path(__file__).resolve().parent.parent / "data"
@@ -28,8 +28,23 @@ def load_transformers(path: str | Path | None = None) -> dict[str, Transformer]:
     path = Path(path) if path else DATA_DIR / "transformers.yaml"
     raw = yaml.safe_load(path.read_text()) or {}
     return {
-        name: Transformer(name=name, **params)
+        name: Transformer(name=name, **{k: v for k, v in params.items() if k != "paired_inverters"})
         for name, params in (raw.get("transformers") or {}).items()
+    }
+
+
+def load_pv_inverter_pairings(
+    path: str | Path | None = None,
+) -> dict[str, dict[str, PvInverterPairing]]:
+    """Load each PV station's allowed inverter models and count bounds."""
+    path = Path(path) if path else DATA_DIR / "transformers.yaml"
+    raw = yaml.safe_load(path.read_text()) or {}
+    return {
+        station: {
+            inverter: PvInverterPairing(**pairing)
+            for inverter, pairing in (params.get("paired_inverters") or {}).items()
+        }
+        for station, params in (raw.get("transformers") or {}).items()
     }
 
 
@@ -40,6 +55,16 @@ def load_bess_solutions(path: str | Path | None = None) -> dict[str, BessSolutio
     return {
         name: BessSolution(name=name, **params)
         for name, params in (raw.get("bess_solutions") or {}).items()
+    }
+
+
+def load_pv_inverters(path: str | Path | None = None) -> dict[str, PvInverter]:
+    """Load curated PV inverter products from their dedicated catalogue."""
+    path = Path(path) if path else DATA_DIR / "pv_inverters.yaml"
+    raw = yaml.safe_load(path.read_text()) or {}
+    return {
+        name: PvInverter(name=name, **params)
+        for name, params in (raw.get("pv_inverters") or {}).items()
     }
 
 
@@ -79,6 +104,8 @@ class ComponentDatabase:
         bess_solutions: dict[str, BessSolution] | None = None,
         bess_transformers: dict[str, Transformer] | None = None,
         bess_pairings: dict[str, dict[str, int]] | None = None,
+        pv_inverters: dict[str, PvInverter] | None = None,
+        pv_inverter_pairings: dict[str, dict[str, PvInverterPairing]] | None = None,
     ) -> None:
         self.cables = cables or {}
         self.transformers = transformers or {}
@@ -88,6 +115,8 @@ class ComponentDatabase:
         # The solutions each BESS station transformer is sold with (see
         # data/bess_transformers.yaml's ``paired_solutions``).
         self.bess_pairings = bess_pairings or {}
+        self.pv_inverters = pv_inverters or {}
+        self.pv_inverter_pairings = pv_inverter_pairings or {}
 
     @classmethod
     def load(cls, data_dir: str | Path | None = None) -> "ComponentDatabase":
@@ -95,7 +124,8 @@ class ComponentDatabase:
         if data_dir is None:
             bess_transformers, bess_pairings = load_bess_transformers()
             return cls(load_cables(), load_transformers(), load_bess_solutions(),
-                       bess_transformers, bess_pairings)
+                       bess_transformers, bess_pairings, load_pv_inverters(),
+                       load_pv_inverter_pairings())
         data_dir = Path(data_dir)
         bess_transformers, bess_pairings = load_bess_transformers(
             data_dir / "bess_transformers.yaml")
@@ -105,6 +135,8 @@ class ComponentDatabase:
             load_bess_solutions(data_dir / "bess.yaml"),
             bess_transformers,
             bess_pairings,
+            load_pv_inverters(data_dir / "pv_inverters.yaml"),
+            load_pv_inverter_pairings(data_dir / "transformers.yaml"),
         )
 
     def cable(self, name: str) -> Cable:
@@ -130,6 +162,15 @@ class ComponentDatabase:
             raise KeyError(
                 f"BESS solution '{name}' not found in database. "
                 f"Available: {sorted(self.bess_solutions)}"
+            ) from None
+
+    def pv_inverter(self, name: str) -> PvInverter:
+        try:
+            return self.pv_inverters[name]
+        except KeyError:
+            raise KeyError(
+                f"PV inverter '{name}' not found in database. "
+                f"Available: {sorted(self.pv_inverters)}"
             ) from None
 
     def bess_transformer(self, name: str) -> Transformer:

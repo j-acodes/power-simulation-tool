@@ -2,7 +2,7 @@ import { fireEvent, render, screen } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import { describe, expect, it, vi } from 'vitest'
 import { CataloguePage } from './CataloguePage'
-import type { BessSolutionInfo, CableInfo, CatalogueResponse, TransformerInfo } from '../types'
+import type { BessSolutionInfo, CableInfo, CatalogueResponse, PvInverterInfo, TransformerInfo } from '../types'
 
 const bessSolution: BessSolutionInfo = {
   key: 'sungrow-st6900ux-4h', display_name: 'PowerTitan 3.0 — ST6900UX-4H',
@@ -58,6 +58,20 @@ const pvTransformer: TransformerInfo = {
 
 const cable: CableInfo = { name: '3x1x240 Al', cross_section_mm2: 240, rated_current_a: 420 }
 
+const pvInverter: PvInverterInfo = {
+  key: 'sungrow-sg350hx-20', display_name: 'SG350HX — SG350HX-20', brand: 'Sungrow',
+  series: 'SG350HX', model: 'SG350HX-20', power_kw_at_40c: 320, power_kw_at_30c: 352,
+  nominal_ac_voltage_kv: 0.8, minimum_power_factor: 0.8, datasheet_url: 'https://example.invalid/sg350.pdf',
+  datasheet_version: 'Version 12', datasheet_date: '2025-03-12', market: 'Europe', preliminary: false,
+  maximum_efficiency_percent: 99.02, european_efficiency_percent: 98.8, dc_voltage_max_v: 1500,
+  dc_voltage_min_v: 500, dc_voltage_nominal_v: 1160, mppt_count: 12, strings_per_mppt: 2,
+  input_current_per_mppt_a: 40, short_circuit_current_per_mppt_a: 60, rated_ac_power_kw: 320,
+  max_ac_apparent_power_kva: 352, max_ac_current_a: 254.1, thdi_percent: 3,
+  protection: 'Surge protection', width_mm: 1163, height_mm: 1051, depth_mm: 366,
+  weight_kg: 162, ip_rating: 'IP66', temp_min_c: -30, temp_max_c: 60, altitude_max_m: 4000,
+  cooling: 'Smart forced-air cooling', communication: 'RS485',
+}
+
 const catalogue: CatalogueResponse = {
   transformers: [pvTransformer],
   cables: { '20': [cable] },
@@ -67,6 +81,7 @@ const catalogue: CatalogueResponse = {
   },
   bess_solutions: [bessSolution],
   bess_transformers: [bessTransformer],
+  pv_inverters: [pvInverter],
 }
 
 // The hook is mocked through a mutable holder so a test can vary the catalogue
@@ -91,9 +106,18 @@ function renderPage() {
 }
 
 describe('CataloguePage', () => {
-  it('lists all four catalogues', () => {
+  it('lists the PV inverter catalogue without making it a canvas palette item', () => {
     renderPage()
     expect(screen.getByText('PV Transformer Stations')).toBeTruthy()
+    expect(screen.getByText('PV Inverters')).toBeTruthy()
+    fireEvent.click(screen.getByText(pvInverter.display_name).closest('button')!)
+    expect(screen.getByText('352 kW / kVA @ 30 °C; 320 kW / kVA @ 40 °C')).toBeTruthy()
+    expect(screen.getByText('DC side')).toBeTruthy()
+    expect(screen.getByText('Version 12')).toBeTruthy()
+  })
+
+  it('lists the other catalogues', () => {
+    renderPage()
     expect(screen.getByText('Cables')).toBeTruthy()
     expect(screen.getByText('BESS solutions')).toBeTruthy()
     expect(screen.getByText('BESS station transformers')).toBeTruthy()
@@ -101,7 +125,8 @@ describe('CataloguePage', () => {
 
   it('shows a BESS solution\'s brand, series and model via its display name', () => {
     renderPage()
-    expect(screen.getByText(bessSolution.brand)).toBeTruthy()
+    const section = screen.getByText('BESS solutions').closest('section')!
+    expect(section.textContent).toContain(bessSolution.brand)
     expect(screen.getByText(bessSolution.display_name)).toBeTruthy()
   })
 

@@ -328,6 +328,53 @@ export interface TransformerInfo {
   /** BESS solution key -> containers per station: the solutions this station
    *  transformer is sold with. Always empty for a PV transformer. */
   paired_solutions: Record<string, number>
+  paired_inverters?: Record<string, PvInverterPairingInfo>
+}
+
+export interface PvInverterPairingInfo {
+  maximum_count: number
+  default_count: number
+}
+
+export interface PvInverterInfo {
+  key: string
+  display_name: string
+  brand: string
+  series: string
+  model: string
+  power_kw_at_40c: number
+  power_kw_at_30c: number | null
+  nominal_ac_voltage_kv: number
+  minimum_power_factor: number | null
+  datasheet_url: string | null
+  datasheet_version: string | null
+  datasheet_date: string | null
+  market: string | null
+  preliminary: boolean
+  maximum_efficiency_percent: number | null
+  european_efficiency_percent: number | null
+  dc_voltage_max_v: number | null
+  dc_voltage_min_v: number | null
+  dc_voltage_nominal_v: number | null
+  mppt_count: number | null
+  strings_per_mppt: number | null
+  input_current_per_mppt_a: number | null
+  short_circuit_current_per_mppt_a: number | null
+  rated_ac_power_kw: number | null
+  max_ac_apparent_power_kva: number | null
+  max_ac_current_a: number | null
+  thdi_percent: number | null
+  protection: string | null
+  width_mm: number | null
+  height_mm: number | null
+  depth_mm: number | null
+  weight_kg: number | null
+  ip_rating: string | null
+  temp_min_c: number | null
+  temp_max_c: number | null
+  altitude_max_m: number | null
+  cooling: string | null
+  communication: string | null
 }
 
 export interface CableInfo {
@@ -394,6 +441,7 @@ export interface CatalogueResponse {
   defaults: CatalogueDefaults
   bess_solutions: BessSolutionInfo[]
   bess_transformers: TransformerInfo[]
+  pv_inverters?: PvInverterInfo[]
 }
 
 // --- Projects / Designs (M4 persistence) ------------------------------------

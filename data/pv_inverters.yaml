@@ -1,0 +1,38 @@
+pv_inverters:
+  sungrow-sg350hx-20:
+    brand: Sungrow
+    series: SG350HX
+    model: SG350HX-20
+    power_kw_at_40c: 320
+    power_kw_at_30c: 352
+    nominal_ac_voltage_kv: 0.8
+    minimum_power_factor: 0.8
+    datasheet_url: https://info-support.sungrowpower.com/application/pdf/2025/01/10/DS_202401218_SG350HX-20_Datasheet_V7_EN.pdf
+    datasheet_version: Version 7
+    datasheet_date: "2025-01-10"
+    market: Global
+    preliminary: false
+    maximum_efficiency_percent: 99.02
+    european_efficiency_percent: 98.8
+    dc_voltage_max_v: 1500
+    dc_voltage_min_v: 500
+    dc_voltage_nominal_v: 1080
+    mppt_count: 6
+    strings_per_mppt: 5
+    input_current_per_mppt_a: 75
+    short_circuit_current_per_mppt_a: 125
+    rated_ac_power_kw: 320
+    max_ac_apparent_power_kva: 352
+    max_ac_current_a: 254.1
+    thdi_percent: 1
+    protection: DC reverse-polarity, AC short-circuit, leakage-current and surge protection
+    width_mm: 1148
+    height_mm: 779
+    depth_mm: 371
+    weight_kg: 106
+    ip_rating: IP66
+    temp_min_c: -30
+    temp_max_c: 60
+    altitude_max_m: 5000
+    cooling: Smart forced-air cooling
+    communication: RS485 / PLC
