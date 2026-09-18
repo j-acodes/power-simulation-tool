@@ -93,7 +93,7 @@ function renderPage() {
 describe('CataloguePage', () => {
   it('lists all four catalogues', () => {
     renderPage()
-    expect(screen.getByText('PV station transformers')).toBeTruthy()
+    expect(screen.getByText('PV Transformer Stations')).toBeTruthy()
     expect(screen.getByText('Cables')).toBeTruthy()
     expect(screen.getByText('BESS solutions')).toBeTruthy()
     expect(screen.getByText('BESS station transformers')).toBeTruthy()
@@ -105,11 +105,12 @@ describe('CataloguePage', () => {
     expect(screen.getByText(bessSolution.display_name)).toBeTruthy()
   })
 
-  it('shows a PV transformer\'s existing parameters without a click affordance', () => {
+  it('opens a PV Transformer Station through the complete specification view', () => {
     renderPage()
-    expect(screen.getByText(pvTransformer.display_name)).toBeTruthy()
-    expect(screen.getByText(/1,000 kVA @ 40 °C/)).toBeTruthy() // s_rated_kva, formatted
-    expect(screen.queryByRole('button', { name: pvTransformer.display_name })).toBeNull()
+    fireEvent.click(screen.getByText(pvTransformer.display_name).closest('button')!)
+    expect(screen.getByText('What the simulation uses')).toBeTruthy()
+    expect(screen.getByText(/1,000 kVA @ 40 °C/)).toBeTruthy()
+    expect(screen.queryByText(/BESS/i, { selector: '.spec-view *' })).toBeNull()
   })
 
   it('cites the source datasheet on a PV transformer that has one', () => {
@@ -120,12 +121,14 @@ describe('CataloguePage', () => {
       ...catalogue,
       transformers: [{ ...pvTransformer, datasheet_url: 'https://example.invalid/acme.pdf' }],
     })
+    fireEvent.click(screen.getByText(pvTransformer.display_name).closest('button')!)
     const link = screen.getByRole('link', { name: 'View datasheet' })
     expect(link.getAttribute('href')).toBe('https://example.invalid/acme.pdf')
   })
 
   it('shows no source link on a transformer that cites none', () => {
     renderWith(catalogue)
+    fireEvent.click(screen.getByText(pvTransformer.display_name).closest('button')!)
     expect(screen.queryByRole('link', { name: 'View datasheet' })).toBeNull()
   })
 

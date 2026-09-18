@@ -8,36 +8,9 @@ import { ModalShell } from '../components/Modal'
 import { SpecView } from '../components/SpecView'
 import type { SpecViewTarget } from '../components/SpecView'
 import { useCatalogue } from '../hooks/useCatalogue'
-import { fmt, ratingAtAmbients } from '../format'
+import { fmt } from '../format'
 import { LABEL } from '../labels'
-import type { BessSolutionInfo, CableInfo, TransformerInfo } from '../types'
-
-/** A transformer with no transcribed specification behind it (every PV station
- * transformer, today's cables) — shown with what it already carries, and not
- * made to look clickable, because there is no specification a click would open.
- *
- * It can still cite its source. The PV catalogue's parameters were read off
- * published datasheets whose links used to live in a loose text file beside the
- * YAML; they are on the entries now, so the link sits next to the numbers it
- * justifies rather than in a list nobody opens. */
-function StaticTransformerRow({ tx }: { tx: TransformerInfo }) {
-  return (
-    <div className="catalogue-row catalogue-row-static">
-      <div className="catalogue-row-header">{tx.display_name}</div>
-      <Row label={LABEL.sRatedKva} value={ratingAtAmbients(tx)} />
-      <Row label={LABEL.ukPercent} value={fmt(tx.uk_percent, 2)} />
-      <Row label={LABEL.hvKv} value={tx.hv_kv != null ? fmt(tx.hv_kv, 2) : '—'} />
-      <Row label={LABEL.lvKv} value={tx.lv_kv != null ? fmt(tx.lv_kv, 2) : '—'} />
-      {tx.datasheet_url && (
-        <p className="catalogue-row-source">
-          <a href={tx.datasheet_url} target="_blank" rel="noreferrer">
-            View datasheet
-          </a>
-        </p>
-      )}
-    </div>
-  )
-}
+import type { BessSolutionInfo, CableInfo } from '../types'
 
 function CableRow({ cable }: { cable: CableInfo }) {
   return (
@@ -49,9 +22,8 @@ function CableRow({ cable }: { cable: CableInfo }) {
   )
 }
 
-/** A catalogue-backed BESS entry — clicking it opens its full specification
- * (ticket 04's SpecView), exactly as selecting it in the palette or the
- * Inspector does. */
+/** A catalogue-backed product — clicking it opens the same full specification
+ * used by a placed station's Inspector. */
 function ClickableRow({ target, onSelect }: { target: SpecViewTarget; onSelect: (target: SpecViewTarget) => void }) {
   const item = target.item
   return (
@@ -88,12 +60,16 @@ export function CataloguePage() {
       ) : (
         <div className="app-body catalogue-body">
           <section>
-            <h2>PV station transformers</h2>
+            <h2>PV Transformer Stations</h2>
             {pvBrandGroups.map(([brand, transformers]) => (
               <details key={brand} className="palette-group" open>
                 <summary>{brand}</summary>
                 {transformers.map((tx) => (
-                  <StaticTransformerRow key={tx.key} tx={tx} />
+                  <ClickableRow
+                    key={tx.key}
+                    target={{ kind: 'transformer_station', fleet_kind: 'pv', item: tx }}
+                    onSelect={setSpecTarget}
+                  />
                 ))}
               </details>
             ))}
@@ -124,7 +100,11 @@ export function CataloguePage() {
               <details key={brand} className="palette-group" open>
                 <summary>{brand}</summary>
                 {transformers.map((tx) => (
-                  <ClickableRow key={tx.key} target={{ kind: 'bess_transformer', item: tx }} onSelect={setSpecTarget} />
+                  <ClickableRow
+                    key={tx.key}
+                    target={{ kind: 'transformer_station', fleet_kind: 'bess', item: tx }}
+                    onSelect={setSpecTarget}
+                  />
                 ))}
               </details>
             ))}

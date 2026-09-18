@@ -11,12 +11,12 @@ specification interface over parallel PV and BESS renderers.
 
 **Blocked by:** None (can start immediately).
 
-**Status:** ready-for-agent
+**Status:** done
 
-- [ ] The specification view accepts PV Transformer Stations without labeling them as BESS
-- [ ] PV Transformer Stations are clickable from the catalogue and a placed catalogue station
-- [ ] Simulated parameters render before grouped typed parameters and provenance
-- [ ] The existing BESS solution and BESS transformer specification behavior is unchanged
-- [ ] Custom stations expose no supplier specification view
-- [ ] Focused catalogue/specification component tests pass
-- [ ] Frontend typechecking passes
+- [x] The specification view accepts PV Transformer Stations without labeling them as BESS
+- [x] PV Transformer Stations are clickable from the catalogue and a placed catalogue station
+- [x] Simulated parameters render before grouped typed parameters and provenance
+- [x] The existing BESS solution and BESS transformer specification behavior is unchanged
+- [x] Custom stations expose no supplier specification view
+- [x] Focused catalogue/specification component tests pass
+- [x] Frontend typechecking passes

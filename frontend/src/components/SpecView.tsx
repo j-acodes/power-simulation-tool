@@ -1,14 +1,13 @@
 import { fmt, ratingAtAmbients } from '../format'
 import { Row, SectionTitle } from './DetailRows'
-import type { BessSolutionInfo, TransformerInfo } from '../types'
+import type { BessSolutionInfo, FleetKind, TransformerInfo } from '../types'
 
-/** The catalogue-backed thing SpecView is showing. A BESS solution and a BESS
- * station transformer carry different simulated blocks and different typed
- * groupings, so the view branches on this discriminant rather than trying to
- * force one shape over both. */
+/** The catalogue-backed product SpecView is showing. The transformer-station
+ * target is shared by both fleet kinds; callers identify the fleet without
+ * pretending a PV product is a BESS product. */
 export type SpecViewTarget =
   | { kind: 'bess_solution'; item: BessSolutionInfo }
-  | { kind: 'bess_transformer'; item: TransformerInfo }
+  | { kind: 'transformer_station'; fleet_kind: FleetKind; item: TransformerInfo }
 
 /** Read-only, full-screen catalogue specification (ticket 04). Renders inside
  * a `<ModalShell size="full">` — this component owns no overlay of its own.
@@ -33,11 +32,10 @@ export function SpecView({
    * its own; it's the same pairing read from the other side). */
   transformers: TransformerInfo[]
 }) {
-  const isSolution = target.kind === 'bess_solution'
   const item = target.item
-  const preliminary = isSolution && (item as BessSolutionInfo).preliminary
+  const preliminary = item.preliminary
   const datasheetUrl = item.datasheet_url
-  const datasheetVersion = isSolution ? (item as BessSolutionInfo).datasheet_version : null
+  const datasheetVersion = item.datasheet_version
 
   return (
     <div className="spec-view">
@@ -52,14 +50,14 @@ export function SpecView({
         {target.kind === 'bess_solution' ? (
           <SimulatedBessSolution item={target.item} />
         ) : (
-          <SimulatedBessTransformer item={target.item} />
+          <SimulatedTransformerStation item={target.item} />
         )}
       </div>
 
       {target.kind === 'bess_solution' ? (
         <BessSolutionSpec item={target.item} />
       ) : (
-        <BessTransformerSpec item={target.item} />
+        <TransformerStationSpec item={target.item} />
       )}
 
       <PairingsSection target={target} solutions={solutions} transformers={transformers} />
@@ -104,7 +102,7 @@ function SimulatedBessSolution({ item }: { item: BessSolutionInfo }) {
   )
 }
 
-function SimulatedBessTransformer({ item }: { item: TransformerInfo }) {
+function SimulatedTransformerStation({ item }: { item: TransformerInfo }) {
   return (
     <>
       {item.brand && <Row label="Brand" value={item.brand} />}
@@ -201,7 +199,7 @@ function BessSolutionSpec({ item }: { item: BessSolutionInfo }) {
   )
 }
 
-function BessTransformerSpec({ item }: { item: TransformerInfo }) {
+function TransformerStationSpec({ item }: { item: TransformerInfo }) {
   const transformerRows = [
     optionalRow('Model', item.model),
     optionalRow('Vector group', item.vector_group),
@@ -313,10 +311,12 @@ function PairingsSection({
               value={`${tx.paired_solutions[target.item.key]} container(s)`}
             />
           ))
-      : Object.entries(target.item.paired_solutions).map(([solutionKey, count]) => {
+      : target.fleet_kind === 'bess'
+        ? Object.entries(target.item.paired_solutions).map(([solutionKey, count]) => {
           const sol = solutions.find((s) => s.key === solutionKey)
           return <Row key={solutionKey} label={sol?.display_name ?? solutionKey} value={`${count} container(s)`} />
         })
+        : []
 
   if (rows.length === 0) return null
 

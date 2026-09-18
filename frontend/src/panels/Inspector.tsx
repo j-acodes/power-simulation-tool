@@ -195,7 +195,14 @@ function NodeProperties({ node }: { node: DiagramNode }) {
               custom transformer has no catalogue entry and therefore no
               specification to open. */}
           {stationTransformer && (
-            <button type="button" onClick={() => setSpecTarget({ kind: 'bess_transformer', item: stationTransformer })}>
+            <button
+              type="button"
+              onClick={() => setSpecTarget({
+                kind: 'transformer_station',
+                fleet_kind: props.fleet_kind === 'bess' ? 'bess' : 'pv',
+                item: stationTransformer,
+              })}
+            >
               Station transformer specification
             </button>
           )}
@@ -446,10 +453,12 @@ export function Inspector() {
     const bessSolution = catalogue?.bess_solutions.find((s) => s.key === selection.key)
     const previewTx = tx ?? bessTx
     const specTarget = bessTx
-      ? ({ kind: 'bess_transformer', item: bessTx } as const)
+      ? ({ kind: 'transformer_station', fleet_kind: 'bess', item: bessTx } as const)
       : bessSolution
         ? ({ kind: 'bess_solution', item: bessSolution } as const)
-        : null
+        : tx
+          ? ({ kind: 'transformer_station', fleet_kind: 'pv', item: tx } as const)
+          : null
 
     return (
       <CollapsiblePanel title="Inspector" side="right" className="inspector">

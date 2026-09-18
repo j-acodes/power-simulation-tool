@@ -180,7 +180,10 @@ describe('Inspector — expand control for a placed station (ticket 06)', () => 
     })
     render(<Inspector />)
 
-    expect(screen.getByRole('button', { name: 'Station transformer specification' })).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'Station transformer specification' }))
+    expect(screen.getByText('What the simulation uses')).toBeTruthy()
+    expect(screen.getByText(/1,000 kVA @ 40 °C/)).toBeTruthy()
+    expect(screen.queryByText(/BESS/i, { selector: '.spec-view *' })).toBeNull()
     expect(screen.queryByRole('button', { name: 'BESS solution specification' })).toBeNull()
   })
 

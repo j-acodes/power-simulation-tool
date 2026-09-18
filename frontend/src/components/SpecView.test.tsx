@@ -152,17 +152,51 @@ describe('SpecView — BESS solution', () => {
   })
 })
 
-describe('SpecView — BESS station transformer', () => {
+describe('SpecView — BESS transformer station', () => {
   it('shows the pairing from the transformer side, resolved to the solution display name', () => {
     const tx = transformer({ paired_solutions: { [fullSpecSolution.key]: 2 } })
-    render(<SpecView target={{ kind: 'bess_transformer', item: tx }} solutions={[fullSpecSolution]} transformers={[]} />)
+    render(<SpecView target={{ kind: 'transformer_station', fleet_kind: 'bess', item: tx }} solutions={[fullSpecSolution]} transformers={[]} />)
     expect(screen.getByText(fullSpecSolution.display_name)).toBeTruthy()
     expect(screen.getByText('2 container(s)')).toBeTruthy()
   })
 
   it('shows its own simulated electrical parameters', () => {
     const tx = transformer()
-    render(<SpecView target={{ kind: 'bess_transformer', item: tx }} solutions={[]} transformers={[]} />)
+    render(<SpecView target={{ kind: 'transformer_station', fleet_kind: 'bess', item: tx }} solutions={[]} transformers={[]} />)
     expect(screen.getByText(/2,750 kVA @ 40 °C/)).toBeTruthy()
+  })
+})
+
+describe('SpecView — PV transformer station', () => {
+  it('renders the generic product contract without presenting the station as BESS', () => {
+    const tx = transformer({
+      key: 'ACME_PV_TS_3200',
+      display_name: 'Acme PV Transformer Station 3200',
+      brand: 'Acme',
+      model: 'PV-TS-3200',
+      vector_group: 'Dy11',
+      standards: 'IEC 60076',
+      datasheet_version: 'Revision 2',
+      datasheet_url: 'https://example.com/pv-transformer-station.pdf',
+    })
+
+    const { container } = render(
+      <SpecView
+        target={{ kind: 'transformer_station', fleet_kind: 'pv', item: tx }}
+        solutions={[]}
+        transformers={[]}
+      />,
+    )
+
+    const headings = [...container.querySelectorAll('.spec-view h3')].map((heading) => heading.textContent)
+    expect(headings).toEqual([
+      'What the simulation uses',
+      'Transformer',
+      'General data',
+      'Datasheet',
+    ])
+    expect(screen.getByText('PV-TS-3200')).toBeTruthy()
+    expect(screen.getByText('Revision 2')).toBeTruthy()
+    expect(screen.queryByText(/BESS/i)).toBeNull()
   })
 })
