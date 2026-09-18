@@ -66,7 +66,7 @@ export function SpecView({
       ) : target.kind === 'pv_inverter' ? (
         <PvInverterSpec item={target.item} />
       ) : (
-        <TransformerStationSpec item={target.item} />
+        <TransformerStationSpec item={target.item} showMissing={target.fleet_kind === 'pv'} />
       )}
 
       <PairingsSection
@@ -87,6 +87,8 @@ export function SpecView({
           {datasheetVersion && <Row label="Version" value={datasheetVersion} />}
           {target.kind === 'pv_inverter' && target.item.datasheet_date && <Row label="Date" value={target.item.datasheet_date} />}
           {target.kind === 'pv_inverter' && target.item.market && <Row label="Market" value={target.item.market} />}
+          {target.kind === 'transformer_station' && target.item.datasheet_date && <Row label="Date" value={target.item.datasheet_date} />}
+          {target.kind === 'transformer_station' && target.item.market && <Row label="Market" value={target.item.market} />}
           {datasheetUrl && (
             <p>
               <a href={datasheetUrl} target="_blank" rel="noreferrer">
@@ -107,6 +109,7 @@ function SimulatedPvInverter({ item }: { item: PvInverterInfo }) {
   return (
     <>
       <Row label="Power at ambient" value={power} />
+      <Row label="Power provenance" value={item.power_provenance} />
       <Row label="Nominal AC voltage" value={`${fmt(item.nominal_ac_voltage_kv, 2)} kV`} />
       <Row label="Minimum power factor" value={item.minimum_power_factor == null ? 'Not published' : fmt(item.minimum_power_factor, 2)} />
     </>
@@ -151,6 +154,10 @@ function SimulatedTransformerStation({ item }: { item: TransformerInfo }) {
  * is null (a `Row[]` swallowed by `.filter(Boolean)` at the call site). */
 function optionalRow(label: string, value: string | null) {
   return value == null ? null : <Row key={label} label={label} value={value} />
+}
+
+function typedRow(label: string, value: string | null | undefined, showMissing = true) {
+  return optionalRow(label, value ?? (showMissing ? 'Not published' : null))
 }
 
 function BessSolutionSpec({ item }: { item: BessSolutionInfo }) {
@@ -231,107 +238,141 @@ function BessSolutionSpec({ item }: { item: BessSolutionInfo }) {
 
 function PvInverterSpec({ item }: { item: PvInverterInfo }) {
   const efficiencyRows = [
-    optionalRow('Maximum efficiency', item.maximum_efficiency_percent == null ? null : `${fmt(item.maximum_efficiency_percent, 2)} %`),
-    optionalRow('European efficiency', item.european_efficiency_percent == null ? null : `${fmt(item.european_efficiency_percent, 2)} %`),
+    typedRow('Maximum efficiency', item.maximum_efficiency_percent == null ? null : `${fmt(item.maximum_efficiency_percent, 2)} %`),
+    typedRow('European efficiency', item.european_efficiency_percent == null ? null : `${fmt(item.european_efficiency_percent, 2)} %`),
   ].filter(Boolean)
   const dcRows = [
-    optionalRow('DC voltage range', item.dc_voltage_min_v == null || item.dc_voltage_max_v == null ? null : `${fmt(item.dc_voltage_min_v)} – ${fmt(item.dc_voltage_max_v)} V`),
-    optionalRow('Nominal DC voltage', item.dc_voltage_nominal_v == null ? null : `${fmt(item.dc_voltage_nominal_v)} V`),
-    optionalRow('MPPTs', item.mppt_count == null ? null : String(item.mppt_count)),
-    optionalRow('Strings per MPPT', item.strings_per_mppt == null ? null : String(item.strings_per_mppt)),
-    optionalRow('Input current per MPPT', item.input_current_per_mppt_a == null ? null : `${fmt(item.input_current_per_mppt_a)} A`),
-    optionalRow('Short-circuit current per MPPT', item.short_circuit_current_per_mppt_a == null ? null : `${fmt(item.short_circuit_current_per_mppt_a)} A`),
+    typedRow('DC voltage range', item.dc_voltage_min_v == null || item.dc_voltage_max_v == null ? null : `${fmt(item.dc_voltage_min_v)} – ${fmt(item.dc_voltage_max_v)} V`),
+    typedRow('Start voltage', item.start_voltage_v == null ? null : `${fmt(item.start_voltage_v)} V`),
+    typedRow('Nominal DC voltage', item.dc_voltage_nominal_v == null ? null : `${fmt(item.dc_voltage_nominal_v)} V`),
+    typedRow('MPPTs', item.mppt_count == null ? null : String(item.mppt_count)),
+    typedRow('PV inputs per MPPT', item.pv_inputs_per_mppt ?? (item.strings_per_mppt == null ? null : String(item.strings_per_mppt))),
+    typedRow('Input current per MPPT', item.input_current_per_mppt_a == null ? null : `${fmt(item.input_current_per_mppt_a)} A`),
+    typedRow('Short-circuit current per MPPT', item.short_circuit_current_per_mppt_a == null ? null : `${fmt(item.short_circuit_current_per_mppt_a)} A`),
   ].filter(Boolean)
   const acRows = [
-    optionalRow('Rated AC power', item.rated_ac_power_kw == null ? null : `${fmt(item.rated_ac_power_kw)} kW`),
-    optionalRow('Maximum apparent power', item.max_ac_apparent_power_kva == null ? null : `${fmt(item.max_ac_apparent_power_kva)} kVA`),
-    optionalRow('Maximum AC current', item.max_ac_current_a == null ? null : `${fmt(item.max_ac_current_a, 1)} A`),
-    optionalRow('THDi', item.thdi_percent == null ? null : `< ${fmt(item.thdi_percent, 1)} %`),
+    typedRow('Rated AC power', item.rated_ac_power_kw == null ? null : `${fmt(item.rated_ac_power_kw)} kW`),
+    typedRow('Maximum active power', item.max_ac_active_power_kw == null ? null : `${fmt(item.max_ac_active_power_kw)} kW`),
+    typedRow('Maximum apparent power', item.max_ac_apparent_power_kva == null ? null : `${fmt(item.max_ac_apparent_power_kva)} kVA`),
+    typedRow('Nominal AC current', item.nominal_ac_current_a == null ? null : `${fmt(item.nominal_ac_current_a, 1)} A`),
+    typedRow('Maximum AC current', item.max_ac_current_a == null ? null : `${fmt(item.max_ac_current_a, 1)} A`),
+    typedRow('Grid frequency', item.rated_grid_frequency),
+    typedRow('Adjustable power factor', item.adjustable_power_factor),
+    typedRow('THDi', item.thdi_percent == null ? null : `< ${fmt(item.thdi_percent, 1)} %`),
   ].filter(Boolean)
-  const protectionRows = [optionalRow('Protection', item.protection)].filter(Boolean)
+  const protectionRows = [typedRow('Protection', item.protection)].filter(Boolean)
+  const connectionRows = [
+    typedRow('Communication', item.communication),
+    typedRow('DC connector', item.dc_connector),
+    typedRow('AC connector', item.ac_connector),
+  ].filter(Boolean)
   const mechanicalRows = [
-    optionalRow('Dimensions', item.width_mm == null || item.height_mm == null || item.depth_mm == null ? null : `${fmt(item.width_mm)} × ${fmt(item.height_mm)} × ${fmt(item.depth_mm)} mm`),
-    optionalRow('Weight', item.weight_kg == null ? null : `${fmt(item.weight_kg)} kg`),
-    optionalRow('Ingress protection', item.ip_rating),
-    optionalRow('Operating temperature', item.temp_min_c == null || item.temp_max_c == null ? null : `${fmt(item.temp_min_c)} – ${fmt(item.temp_max_c)} °C`),
-    optionalRow('Maximum altitude', item.altitude_max_m == null ? null : `${fmt(item.altitude_max_m)} m`),
-    optionalRow('Cooling', item.cooling),
-    optionalRow('Communication', item.communication),
+    typedRow('Dimensions', item.width_mm == null || item.height_mm == null || item.depth_mm == null ? null : `${fmt(item.width_mm)} × ${fmt(item.height_mm)} × ${fmt(item.depth_mm)} mm`),
+    typedRow('Weight', item.weight_specification ?? (item.weight_kg == null ? null : `${fmt(item.weight_kg)} kg`)),
+    typedRow('Isolation', item.isolation),
+    typedRow('Ingress protection', item.ip_rating),
+    typedRow('Corrosion class', item.corrosion_class),
+    typedRow('Operating temperature', item.temp_min_c == null || item.temp_max_c == null ? null : `${fmt(item.temp_min_c)} – ${fmt(item.temp_max_c)} °C`),
+    typedRow('Relative humidity', item.relative_humidity),
+    typedRow('Maximum altitude', item.altitude_max_m == null ? null : `${fmt(item.altitude_max_m)} m`),
+    typedRow('Cooling', item.cooling),
   ].filter(Boolean)
-  return <>{specGroup('Efficiency', efficiencyRows)}{specGroup('DC side', dcRows)}{specGroup('AC side', acRows)}{specGroup('Protection', protectionRows)}{specGroup('Mechanical and environmental', mechanicalRows)}</>
+  const standardsRows = [typedRow('Standards', item.standards), typedRow('Grid support', item.grid_support)].filter(Boolean)
+  return <>{specGroup('Efficiency', efficiencyRows)}{specGroup('DC input', dcRows)}{specGroup('AC output and grid support', acRows)}{specGroup('Protection', protectionRows)}{specGroup('Communications and connectors', connectionRows)}{specGroup('General and environmental', mechanicalRows)}{specGroup('Standards', standardsRows)}</>
 }
 
 function specGroup(title: string, rows: Array<ReturnType<typeof optionalRow>>) {
   return rows.length === 0 ? null : <><SectionTitle>{title}</SectionTitle>{rows}</>
 }
 
-function TransformerStationSpec({ item }: { item: TransformerInfo }) {
+function TransformerStationSpec({ item, showMissing }: { item: TransformerInfo; showMissing: boolean }) {
+  const inputRows = [
+    typedRow('Maximum input current', item.maximum_input_current, showMissing),
+    typedRow('LV panel segregation', item.lv_panel_segregation, showMissing),
+    typedRow('LV main switches', item.lv_main_switches, showMissing),
+    typedRow('LV inverter switches', item.lv_inverter_switches, showMissing),
+  ].filter(Boolean)
   const transformerRows = [
-    optionalRow('Model', item.model),
-    optionalRow('Vector group', item.vector_group),
+    typedRow('Series', item.series, showMissing),
+    typedRow('Model', item.model, showMissing),
+    typedRow('Transformer type', item.transformer_type, showMissing),
+    typedRow('Vector group', item.vector_group, showMissing),
     item.mv_kv_min != null || item.mv_kv_max != null
-      ? optionalRow('MV voltage range', `${fmt(item.mv_kv_min, 2)} – ${fmt(item.mv_kv_max, 2)} kV`)
-      : null,
-    optionalRow('LV winding count', String(item.lv_winding_count)),
-    optionalRow('Insulation level', item.insulation_level),
-    optionalRow('Nominal frequency', item.f_nominal != null ? `${item.f_nominal} Hz` : null),
-    optionalRow('uk% tolerance', item.uk_tolerance_pct != null ? `±${fmt(item.uk_tolerance_pct, 1)}%` : null),
-    optionalRow('MV winding material', item.winding_material_mv),
-    optionalRow('LV winding material', item.winding_material_lv),
-    optionalRow('IP rating (transformer)', item.ip_rating_transformer),
-    optionalRow('IP rating (enclosure)', item.ip_rating_enclosure),
+      ? typedRow('MV voltage range', `${fmt(item.mv_kv_min, 2)} – ${fmt(item.mv_kv_max, 2)} kV`, showMissing)
+      : typedRow('MV voltage range', null, showMissing),
+    typedRow('LV winding count', String(item.lv_winding_count), showMissing),
+    typedRow('Tappings', item.transformer_tappings, showMissing),
+    typedRow('Oil type', item.transformer_oil_type, showMissing),
+    typedRow('Efficiency', item.transformer_efficiency, showMissing),
+    typedRow('Insulation level', item.insulation_level, showMissing),
+    typedRow('Nominal frequency', item.f_nominal != null ? `${item.f_nominal} Hz` : null, showMissing),
+    typedRow('uk% tolerance', item.uk_tolerance_pct != null ? `±${fmt(item.uk_tolerance_pct, 1)}%` : null, showMissing),
+    typedRow('MV winding material', item.winding_material_mv, showMissing),
+    typedRow('LV winding material', item.winding_material_lv, showMissing),
+    typedRow('IP rating (transformer)', item.ip_rating_transformer, showMissing),
+    typedRow('IP rating (enclosure)', item.ip_rating_enclosure, showMissing),
   ].filter(Boolean)
 
   const hasRmuRange = item.rmu_kv_min != null || item.rmu_kv_max != null
   const rmuRows = [
     hasRmuRange
-      ? optionalRow('RMU voltage range', `${fmt(item.rmu_kv_min, 2)} – ${fmt(item.rmu_kv_max, 2)} kV`)
-      : null,
-    optionalRow('RMU rated current', item.rmu_rated_current_a != null ? `${fmt(item.rmu_rated_current_a, 0)} A` : null),
-    optionalRow('RMU units', item.rmu_units),
-    optionalRow('RMU relay protection', item.rmu_relay_protection),
-    optionalRow('RMU short-time withstand', item.rmu_short_time_withstand),
+      ? typedRow('RMU voltage range', `${fmt(item.rmu_kv_min, 2)} – ${fmt(item.rmu_kv_max, 2)} kV`, showMissing)
+      : typedRow('RMU voltage range', null, showMissing),
+    typedRow('RMU rated current', item.rmu_rated_current_a != null ? `${fmt(item.rmu_rated_current_a, 0)} A` : null, showMissing),
+    typedRow('RMU units', item.rmu_units, showMissing),
+    typedRow('RMU relay protection', item.rmu_relay_protection, showMissing),
+    typedRow('RMU short-time withstand', item.rmu_short_time_withstand, showMissing),
   ].filter(Boolean)
 
   const cabinetRows = [
-    optionalRow('Cabinet protection', item.cabinet_protection),
-    optionalRow('Surge protection', item.surge_protection),
-    optionalRow('AC insulation detection', item.ac_insulation_detection),
-    optionalRow('Cabinet temperature control', item.cabinet_temp_control),
-    optionalRow('UPS', item.ups),
+    typedRow('AC input protection', item.ac_input_protection, showMissing),
+    typedRow('Transformer protection', item.transformer_protection, showMissing),
+    typedRow('Internal arc classification', item.internal_arc_classification, showMissing),
+    typedRow('Surge protection', item.surge_protection, showMissing),
+    typedRow('Optional features', item.optional_features, showMissing),
+  ].filter(Boolean)
+
+  const auxiliaryRows = [
+    typedRow('Auxiliary transformer', item.auxiliary_transformer, showMissing),
+    typedRow('Auxiliary output voltage', item.auxiliary_output_voltage, showMissing),
   ].filter(Boolean)
 
   const hasDimensions = item.width_mm != null || item.height_mm != null || item.depth_mm != null
   const hasTemp = item.temp_min_c != null || item.temp_max_c != null
   const hasHumidity = item.humidity_min_pct != null || item.humidity_max_pct != null
   const generalRows = [
-    optionalRow('Cooling', item.cooling),
+    typedRow('Cooling', item.cooling, showMissing),
     hasDimensions
-      ? optionalRow(
+      ? typedRow(
           'Dimensions (W x H x D)',
           `${fmt(item.width_mm)} x ${fmt(item.height_mm)} x ${fmt(item.depth_mm)} mm`,
+          showMissing,
         )
-      : null,
-    optionalRow('Weight', item.weight_kg != null ? `${fmt(item.weight_kg)} kg` : null),
-    optionalRow('Cable entry', item.cable_entry),
-    optionalRow('Corrosion class', item.corrosion_class),
+      : typedRow('Dimensions (W x H x D)', null, showMissing),
+    typedRow('Weight', item.weight_specification ?? (item.weight_kg != null ? `${fmt(item.weight_kg)} kg` : null), showMissing),
+    typedRow('Cable entry', item.cable_entry, showMissing),
+    typedRow('Corrosion class', item.corrosion_class, showMissing),
     hasTemp
-      ? optionalRow('Operating temperature', `${fmt(item.temp_min_c, 1)} – ${fmt(item.temp_max_c, 1)} °C`)
-      : null,
+      ? typedRow('Operating temperature', `${fmt(item.temp_min_c, 1)} – ${fmt(item.temp_max_c, 1)} °C`, showMissing)
+      : typedRow('Operating temperature', null, showMissing),
     hasHumidity
-      ? optionalRow('Operating humidity', `${fmt(item.humidity_min_pct, 0)} – ${fmt(item.humidity_max_pct, 0)}%`)
-      : null,
-    optionalRow('Maximum altitude', item.altitude_max_m != null ? `${fmt(item.altitude_max_m)} m` : null),
-    optionalRow('Communication', item.communication),
-    optionalRow('Standards', item.standards),
+      ? typedRow('Operating humidity', `${fmt(item.humidity_min_pct, 0)} – ${fmt(item.humidity_max_pct, 0)}%`, showMissing)
+      : typedRow('Operating humidity', null, showMissing),
+    typedRow('Maximum altitude', item.altitude_max_m != null ? `${fmt(item.altitude_max_m)} m` : null, showMissing),
     item.preliminary ? optionalRow('Preliminary', 'Yes') : null,
+  ].filter(Boolean)
+
+  const communicationsRows = [
+    typedRow('Communication', item.communication, showMissing),
+    typedRow('Standards', item.standards, showMissing),
   ].filter(Boolean)
 
   return (
     <>
+      {inputRows.length > 0 && <>{<SectionTitle>Input and LV panel</SectionTitle>}{inputRows}</>}
       {transformerRows.length > 0 && (
         <>
-          <SectionTitle>Transformer</SectionTitle>
+          <SectionTitle>Output transformer</SectionTitle>
           {transformerRows}
         </>
       )}
@@ -341,18 +382,20 @@ function TransformerStationSpec({ item }: { item: TransformerInfo }) {
           {rmuRows}
         </>
       )}
+      {auxiliaryRows.length > 0 && <>{<SectionTitle>Auxiliary transformer</SectionTitle>}{auxiliaryRows}</>}
       {cabinetRows.length > 0 && (
         <>
-          <SectionTitle>Control cabinet</SectionTitle>
+          <SectionTitle>Protection and options</SectionTitle>
           {cabinetRows}
         </>
       )}
       {generalRows.length > 0 && (
         <>
-          <SectionTitle>General data</SectionTitle>
+          <SectionTitle>General and environmental</SectionTitle>
           {generalRows}
         </>
       )}
+      {communicationsRows.length > 0 && <>{<SectionTitle>Communications and standards</SectionTitle>}{communicationsRows}</>}
     </>
   )
 }

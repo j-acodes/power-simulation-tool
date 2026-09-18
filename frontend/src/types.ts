@@ -290,6 +290,7 @@ export interface TransformerInfo {
   hv_kv: number | null
   lv_kv: number | null
   brand: string | null
+  series?: string | null
   uk_percent: number
   pk_kw: number
   p0_kw: number
@@ -337,7 +338,24 @@ export interface TransformerInfo {
   communication: string | null
   standards: string | null
   datasheet_version: string | null
+  datasheet_date?: string | null
+  market?: string | null
   preliminary: boolean
+  transformer_type?: string | null
+  transformer_tappings?: string | null
+  transformer_oil_type?: string | null
+  transformer_efficiency?: string | null
+  maximum_input_current?: string | null
+  lv_panel_segregation?: string | null
+  lv_main_switches?: string | null
+  lv_inverter_switches?: string | null
+  auxiliary_transformer?: string | null
+  auxiliary_output_voltage?: string | null
+  transformer_protection?: string | null
+  internal_arc_classification?: string | null
+  ac_input_protection?: string | null
+  optional_features?: string | null
+  weight_specification?: string | null
   /** BESS solution key -> containers per station: the solutions this station
    *  transformer is sold with. Always empty for a PV transformer. */
   paired_solutions: Record<string, number>
@@ -359,6 +377,7 @@ export interface PvInverterInfo {
   power_kw_at_30c: number | null
   nominal_ac_voltage_kv: number
   minimum_power_factor: number | null
+  power_provenance: string
   datasheet_url: string | null
   datasheet_version: string | null
   datasheet_date: string | null
@@ -388,6 +407,20 @@ export interface PvInverterInfo {
   altitude_max_m: number | null
   cooling: string | null
   communication: string | null
+  max_ac_active_power_kw?: number | null
+  nominal_ac_current_a?: number | null
+  rated_grid_frequency?: string | null
+  adjustable_power_factor?: string | null
+  pv_inputs_per_mppt?: string | null
+  start_voltage_v?: number | null
+  relative_humidity?: string | null
+  corrosion_class?: string | null
+  isolation?: string | null
+  dc_connector?: string | null
+  ac_connector?: string | null
+  standards?: string | null
+  grid_support?: string | null
+  weight_specification?: string | null
 }
 
 export interface CableInfo {

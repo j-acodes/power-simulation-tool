@@ -131,6 +131,7 @@ class TransformerInfo(BaseModel):
     hv_kv: float | None
     lv_kv: float | None
     brand: str | None
+    series: str | None = None
     uk_percent: float
     pk_kw: float
     p0_kw: float
@@ -177,7 +178,24 @@ class TransformerInfo(BaseModel):
     communication: str | None = None
     standards: str | None = None
     datasheet_version: str | None = None
+    datasheet_date: str | None = None
+    market: str | None = None
     preliminary: bool = False
+    transformer_type: str | None = None
+    transformer_tappings: str | None = None
+    transformer_oil_type: str | None = None
+    transformer_efficiency: str | None = None
+    maximum_input_current: str | None = None
+    lv_panel_segregation: str | None = None
+    lv_main_switches: str | None = None
+    lv_inverter_switches: str | None = None
+    auxiliary_transformer: str | None = None
+    auxiliary_output_voltage: str | None = None
+    transformer_protection: str | None = None
+    internal_arc_classification: str | None = None
+    ac_input_protection: str | None = None
+    optional_features: str | None = None
+    weight_specification: str | None = None
     # BESS solution key -> containers per station: the solutions this station
     # transformer is sold with (data/bess_transformers.yaml's paired_solutions).
     # Always empty for a PV transformer, which has no pairing to carry.
@@ -200,6 +218,7 @@ class PvInverterInfo(BaseModel):
     power_kw_at_30c: float | None
     nominal_ac_voltage_kv: float
     minimum_power_factor: float | None
+    power_provenance: str
     datasheet_url: str | None
     datasheet_version: str | None
     datasheet_date: str | None
@@ -229,6 +248,20 @@ class PvInverterInfo(BaseModel):
     altitude_max_m: float | None
     cooling: str | None
     communication: str | None
+    max_ac_active_power_kw: float | None
+    nominal_ac_current_a: float | None
+    rated_grid_frequency: str | None
+    adjustable_power_factor: str | None
+    pv_inputs_per_mppt: str | None
+    start_voltage_v: float | None
+    relative_humidity: str | None
+    corrosion_class: str | None
+    isolation: str | None
+    dc_connector: str | None
+    ac_connector: str | None
+    standards: str | None
+    grid_support: str | None
+    weight_specification: str | None
 
 
 class CableInfo(BaseModel):

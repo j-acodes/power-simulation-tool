@@ -7,6 +7,7 @@ pv_inverters:
     power_kw_at_30c: 352
     nominal_ac_voltage_kv: 0.8
     minimum_power_factor: 0.8
+    power_provenance: Supplier datasheet
     datasheet_url: https://info-support.sungrowpower.com/application/pdf/2025/01/10/DS_202401218_SG350HX-20_Datasheet_V7_EN.pdf
     datasheet_version: Version 7
     datasheet_date: "2025-01-10"
@@ -30,9 +31,73 @@ pv_inverters:
     height_mm: 779
     depth_mm: 371
     weight_kg: 106
+    weight_specification: ≤ 106 kg
     ip_rating: IP66
     temp_min_c: -30
     temp_max_c: 60
     altitude_max_m: 5000
     cooling: Smart forced-air cooling
     communication: RS485 / PLC
+    nominal_ac_current_a: 231
+    rated_grid_frequency: 50 Hz / 45–55 Hz; 60 Hz / 55–65 Hz
+    adjustable_power_factor: 0.8 leading – 0.8 lagging
+    start_voltage_v: 550
+    relative_humidity: 0–100%
+    corrosion_class: C5
+    isolation: Transformerless
+    dc_connector: Evo2
+    ac_connector: Support OT/DT terminal (maximum 400 mm²)
+    standards: IEC 62109, IEC 61727, IEC 62116, IEC 60068, IEC 61683, VDE-AR-N 4110, VDE-AR-N 4120, EN 50549-2, UNE 217002, NTS, UTE C15-712-1
+    grid_support: LVRT, HVRT, active and reactive power control, ramp-rate control, Q-U and P-f control
+
+  huawei-sun2000-330ktl-h1:
+    brand: Huawei
+    series: SUN2000
+    model: SUN2000-330KTL-H1
+    power_kw_at_40c: 300
+    power_kw_at_30c: 330
+    nominal_ac_voltage_kv: 0.8
+    minimum_power_factor: 0.8
+    power_provenance: Owner-declared engineering basis
+    datasheet_url: https://solar.huawei.com/download?p=/-/media/SolarV4/solar-version2/common/professionals/all-products/utility-smart-pv/smart-pv-controller/SUN2000-330KTL-H1/sun2000-330ktl-h1-datasheet-20230515.pdf
+    datasheet_version: "2023-05-15"
+    datasheet_date: "2023-05-15"
+    market: APAC, LATAM & Europe
+    preliminary: false
+    maximum_efficiency_percent: 99.03
+    european_efficiency_percent: 98.8
+    dc_voltage_max_v: 1500
+    dc_voltage_min_v: 500
+    dc_voltage_nominal_v: 1080
+    start_voltage_v: 550
+    mppt_count: 6
+    strings_per_mppt: null
+    pv_inputs_per_mppt: 4 / 5 / 5 / 4 / 5 / 5
+    input_current_per_mppt_a: 65
+    short_circuit_current_per_mppt_a: 115
+    rated_ac_power_kw: 300
+    max_ac_active_power_kw: 330
+    max_ac_apparent_power_kva: 330
+    nominal_ac_current_a: 216.6
+    max_ac_current_a: 238.2
+    rated_grid_frequency: 50 / 60 Hz
+    adjustable_power_factor: 0.8 leading – 0.8 lagging
+    thdi_percent: 1
+    protection: Smart string- and connector-level disconnection; AC overcurrent; DC reverse-polarity; string-fault; DC/AC surge Type II; insulation and residual-current detection
+    width_mm: 1048
+    height_mm: 732
+    depth_mm: 395
+    weight_kg: 112
+    weight_specification: ≤ 112 kg
+    ip_rating: IP66
+    temp_min_c: -25
+    temp_max_c: 60
+    altitude_max_m: 4000
+    cooling: Smart air cooling
+    communication: LED, WLAN + app, USB, MBUS, RS485
+    relative_humidity: 0–100% non-condensing
+    corrosion_class: C5-Medium
+    isolation: Transformerless
+    dc_connector: HH4SMM4TMSPA / HH4SFM4TMSPA
+    ac_connector: Support OT / DT terminal (maximum 400 mm²)
+    standards: IEC 62109-1/-2, IEC 62920, IEC 60947-2, EN 50549-2, IEC 61683

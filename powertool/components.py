@@ -100,6 +100,7 @@ class Transformer:
     hv_kv: float | None = None
     lv_kv: float | None = None
     brand: str | None = None  # manufacturer, for catalogue display
+    series: str | None = None  # supplier product family
     model: str | None = None  # typed parameter — never computed with
     vector_group: str | None = None  # typed parameter — never computed with
     cooling: str | None = None  # typed parameter — never computed with
@@ -145,7 +146,40 @@ class Transformer:
     communication: str | None = None
     standards: str | None = None
     datasheet_version: str | None = None
+    datasheet_date: str | None = None
+    market: str | None = None
     preliminary: bool = False
+    # Typed datasheet fields used by complete transformer-station views. They
+    # stay strings where suppliers publish compound values or qualifiers.
+    transformer_type: str | None = None
+    transformer_tappings: str | None = None
+    transformer_oil_type: str | None = None
+    transformer_efficiency: str | None = None
+    maximum_input_current: str | None = None
+    lv_panel_segregation: str | None = None
+    lv_main_switches: str | None = None
+    lv_inverter_switches: str | None = None
+    auxiliary_transformer: str | None = None
+    auxiliary_output_voltage: str | None = None
+    transformer_protection: str | None = None
+    internal_arc_classification: str | None = None
+    ac_input_protection: str | None = None
+    optional_features: str | None = None
+    weight_specification: str | None = None
+
+    def __post_init__(self) -> None:
+        required_positive = {
+            "s_rated_kva_at_40c": self.s_rated_kva_at_40c,
+            "uk_percent": self.uk_percent,
+        }
+        for field, value in required_positive.items():
+            if not isinstance(value, (int, float)) or isinstance(value, bool) or value <= 0:
+                raise ValueError(f"{field} must be a positive number")
+        for field, value in {"pk_kw": self.pk_kw, "p0_kw": self.p0_kw, "i0_percent": self.i0_percent}.items():
+            if not isinstance(value, (int, float)) or isinstance(value, bool) or value < 0:
+                raise ValueError(f"{field} must be a non-negative number")
+        if self.s_rated_kva_at_30c is not None and self.s_rated_kva_at_30c <= 0:
+            raise ValueError("s_rated_kva_at_30c must be positive when published")
 
     def rating_at(self, ambient_c: float) -> float:
         """The published rating [kVA] at ``ambient_c`` — lookup only, never
@@ -403,6 +437,10 @@ class PvInverter:
     power_kw_at_30c: float | None
     nominal_ac_voltage_kv: float
     minimum_power_factor: float | None
+    # Provenance for the ambient power used by the engine. This is separate
+    # from the datasheet citation because owner-declared engineering values
+    # must never masquerade as supplier temperature claims (ADR-0005).
+    power_provenance: str
     datasheet_url: str | None = None
     datasheet_version: str | None = None
     datasheet_date: str | None = None
@@ -432,6 +470,40 @@ class PvInverter:
     altitude_max_m: float | None = None
     cooling: str | None = None
     communication: str | None = None
+    max_ac_active_power_kw: float | None = None
+    nominal_ac_current_a: float | None = None
+    rated_grid_frequency: str | None = None
+    adjustable_power_factor: str | None = None
+    pv_inputs_per_mppt: str | None = None
+    start_voltage_v: float | None = None
+    relative_humidity: str | None = None
+    corrosion_class: str | None = None
+    isolation: str | None = None
+    dc_connector: str | None = None
+    ac_connector: str | None = None
+    standards: str | None = None
+    grid_support: str | None = None
+    weight_specification: str | None = None
+
+    def __post_init__(self) -> None:
+        required_text = {
+            "brand": self.brand,
+            "series": self.series,
+            "model": self.model,
+            "power_provenance": self.power_provenance,
+        }
+        for field, value in required_text.items():
+            if not isinstance(value, str) or not value.strip():
+                raise ValueError(f"{field} must be a non-empty string")
+        required_positive = {
+            "power_kw_at_40c": self.power_kw_at_40c,
+            "nominal_ac_voltage_kv": self.nominal_ac_voltage_kv,
+        }
+        for field, value in required_positive.items():
+            if not isinstance(value, (int, float)) or isinstance(value, bool) or value <= 0:
+                raise ValueError(f"{field} must be a positive number")
+        if self.power_kw_at_30c is not None and self.power_kw_at_30c <= 0:
+            raise ValueError("power_kw_at_30c must be positive when published")
 
     @property
     def display_name(self) -> str:
@@ -458,3 +530,9 @@ class PvInverter:
 class PvInverterPairing:
     maximum_count: int
     default_count: int
+
+    def __post_init__(self) -> None:
+        if isinstance(self.maximum_count, bool) or not isinstance(self.maximum_count, int) or self.maximum_count < 1:
+            raise ValueError("maximum_count must be a positive integer")
+        if isinstance(self.default_count, bool) or not isinstance(self.default_count, int) or not 1 <= self.default_count <= self.maximum_count:
+            raise ValueError("default_count must be between 1 and maximum_count")

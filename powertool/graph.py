@@ -237,6 +237,7 @@ def _custom_pv_inverter(props: dict) -> PvInverter | None:
         power_kw_at_30c=power_30,
         nominal_ac_voltage_kv=voltage,
         minimum_power_factor=minimum_pf,
+        power_provenance="User-entered custom equipment",
     )
 
 

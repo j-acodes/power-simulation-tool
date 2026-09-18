@@ -62,10 +62,13 @@ def load_pv_inverters(path: str | Path | None = None) -> dict[str, PvInverter]:
     """Load curated PV inverter products from their dedicated catalogue."""
     path = Path(path) if path else DATA_DIR / "pv_inverters.yaml"
     raw = yaml.safe_load(path.read_text()) or {}
-    return {
-        name: PvInverter(name=name, **params)
-        for name, params in (raw.get("pv_inverters") or {}).items()
-    }
+    inverters: dict[str, PvInverter] = {}
+    for name, params in (raw.get("pv_inverters") or {}).items():
+        try:
+            inverters[name] = PvInverter(name=name, **params)
+        except (TypeError, ValueError) as exc:
+            raise ValueError(f"PV inverter {name!r} has invalid simulated data: {exc}") from exc
+    return inverters
 
 
 def load_bess_transformers(

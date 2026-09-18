@@ -9,6 +9,7 @@ from dataclasses import replace
 import pytest
 
 from powertool import ComponentDatabase
+from powertool.database import load_pv_inverters
 
 # Expected PV transformer stations: key -> (rated kVA, brand, dropdown label).
 PV_STATIONS = {
@@ -20,9 +21,6 @@ PV_STATIONS = {
     "HUAWEI_JUPITER3000": (3300, "Huawei", "3300 kVA - Huawei"),
     "HUAWEI_JUPITER6000": (6600, "Huawei", "6600 kVA - Huawei"),
     "HUAWEI_JUPITER9000": (9000, "Huawei", "9000 kVA - Huawei"),
-    "TBEA_TS3000": (3300, "TBEA", "3300 kVA - TBEA"),
-    "TBEA_TS6000": (6600, "TBEA", "6600 kVA - TBEA"),
-    "TBEA_TS9000": (9240, "TBEA", "9240 kVA - TBEA"),
 }
 
 
@@ -171,6 +169,92 @@ def test_sungrow_pv_inverter_and_station_pairings_load(db):
         pairing = db.pv_inverter_pairings[station]["sungrow-sg350hx-20"]
         assert pairing.maximum_count == count
         assert pairing.default_count == count
+
+
+def test_supported_pv_catalogue_is_complete_and_excludes_rejected_products(db):
+    assert set(db.transformers) == set(PV_STATIONS)
+    assert set(db.pv_inverters) == {
+        "sungrow-sg350hx-20",
+        "huawei-sun2000-330ktl-h1",
+    }
+    rejected = " ".join([*db.transformers, *db.pv_inverters]).lower()
+    assert "tbea" not in rejected
+    assert "sg350hx" not in rejected.replace("sg350hx-20", "")
+    assert "330ktl-h2" not in rejected
+    assert "luna" not in rejected
+
+
+def test_sungrow_station_datasheets_include_published_30c_ratings_and_typed_facts(db):
+    expected_30c = {
+        "SUNGROW_MVS3200": 3520,
+        "SUNGROW_MVS4480": 4928,
+        "SUNGROW_MVS6400": 7040,
+        "SUNGROW_MVS7040": 7744,
+        "SUNGROW_MVS8960": 9856,
+    }
+    for key, rating in expected_30c.items():
+        station = db.transformers[key]
+        assert station.s_rated_kva_at_30c == rating
+        assert station.model
+        assert station.vector_group
+        assert station.transformer_type
+        assert station.lv_main_switches
+        assert station.lv_inverter_switches
+        assert station.auxiliary_transformer
+        assert station.datasheet_version
+        assert station.series == "MVS-LV"
+        assert station.datasheet_date
+        expected_market = "South Africa" if key == "SUNGROW_MVS7040" else "Europe"
+        assert station.market == expected_market
+
+
+def test_huawei_h1_inverter_and_station_pairings_load_with_distinct_provenance(db):
+    inverter = db.pv_inverters["huawei-sun2000-330ktl-h1"]
+    assert inverter.display_name == "SUN2000 — SUN2000-330KTL-H1"
+    assert inverter.power_kw_at_30c == 330
+    assert inverter.power_kw_at_40c == 300
+    assert inverter.power_provenance == "Owner-declared engineering basis"
+    assert inverter.rated_ac_power_kw == 300
+    assert inverter.max_ac_active_power_kw == 330
+    assert inverter.max_ac_apparent_power_kva == 330
+    assert inverter.minimum_power_factor == 0.8
+
+    expected_counts = {
+        "HUAWEI_JUPITER3000": 11,
+        "HUAWEI_JUPITER6000": 22,
+        "HUAWEI_JUPITER9000": 30,
+    }
+    for station_key, count in expected_counts.items():
+        station = db.transformers[station_key]
+        assert station.model.endswith("-H1")
+        assert station.series == "JUPITER-H1"
+        assert station.datasheet_date == "2023-05-15"
+        assert station.market == "Global"
+        assert station.s_rated_kva_at_30c is None
+        assert station.lv_panel_segregation == "Form 2b"
+        assert station.auxiliary_transformer
+        assert station.weight_specification.startswith("<")
+        pairing = db.pv_inverter_pairings[station_key][inverter.name]
+        assert pairing.maximum_count == pairing.default_count == count
+
+
+def test_missing_inverter_simulation_data_fails_catalogue_load_clearly(tmp_path):
+    path = tmp_path / "pv_inverters.yaml"
+    path.write_text(
+        """pv_inverters:
+  broken:
+    brand: Example
+    series: Broken
+    model: Missing-Power
+    power_kw_at_40c: null
+    power_kw_at_30c: null
+    nominal_ac_voltage_kv: 0.8
+    minimum_power_factor: null
+    power_provenance: Supplier datasheet
+"""
+    )
+    with pytest.raises(ValueError, match="broken.*power_kw_at_40c"):
+        load_pv_inverters(path)
 
 
 def test_pv_inverter_power_resolves_explicit_ambients_without_interpolation(db):

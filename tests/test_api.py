@@ -39,7 +39,7 @@ def test_catalogue_returns_transformers_cables_and_defaults():
     assert resp.status_code == 200
     data = resp.json()
 
-    assert len(data["transformers"]) >= 10
+    assert len(data["transformers"]) == 8
     for tx in data["transformers"]:
         assert tx["key"]
         assert tx["display_name"]
@@ -138,13 +138,12 @@ def test_catalogue_serves_bess_transformer_typed_fields():
     assert tx["cooling"] is None
     assert tx["datasheet_url"] is None
 
-    # A PV transformer carries the same fields — the type is shared. Its
-    # model, vector group and cooling are still unset, but every PV entry now
-    # cites the datasheet its parameters were read off.
+    # A PV transformer carries the same fields — the type is shared — and the
+    # supported catalogue now provides the complete supplier specification.
     pv = data["transformers"][0]
-    assert pv["model"] is None
-    assert pv["vector_group"] is None
-    assert pv["cooling"] is None
+    assert pv["model"] == "MVS3200-LV"
+    assert pv["vector_group"] == "Dy11"
+    assert pv["cooling"] == "ONAN (Oil Natural Air Natural)"
     assert pv["datasheet_url"]
     assert all(t["datasheet_url"] for t in data["transformers"])
 
@@ -196,6 +195,51 @@ def test_catalogue_serves_sungrow_pv_inverter_and_station_pairings():
             "maximum_count": count,
             "default_count": count,
         }
+
+
+def test_catalogue_serves_only_supported_pv_products_with_complete_huawei_provenance():
+    data = client.get("/api/catalogue").json()
+    assert {item["key"] for item in data["transformers"]} == {
+        "SUNGROW_MVS3200", "SUNGROW_MVS4480", "SUNGROW_MVS6400",
+        "SUNGROW_MVS7040", "SUNGROW_MVS8960", "HUAWEI_JUPITER3000",
+        "HUAWEI_JUPITER6000", "HUAWEI_JUPITER9000",
+    }
+    assert {item["key"] for item in data["pv_inverters"]} == {
+        "sungrow-sg350hx-20", "huawei-sun2000-330ktl-h1",
+    }
+
+    inverter = next(
+        item for item in data["pv_inverters"]
+        if item["key"] == "huawei-sun2000-330ktl-h1"
+    )
+    assert inverter["power_kw_at_30c"] == 330
+    assert inverter["power_kw_at_40c"] == 300
+    assert inverter["power_provenance"] == "Owner-declared engineering basis"
+    assert inverter["rated_ac_power_kw"] == 300
+    assert inverter["max_ac_active_power_kw"] == 330
+    assert inverter["max_ac_apparent_power_kva"] == 330
+    assert inverter["weight_specification"] == "≤ 112 kg"
+
+    stations = {item["key"]: item for item in data["transformers"]}
+    for key, count in {
+        "HUAWEI_JUPITER3000": 11,
+        "HUAWEI_JUPITER6000": 22,
+        "HUAWEI_JUPITER9000": 30,
+    }.items():
+        assert stations[key]["paired_inverters"][inverter["key"]] == {
+            "maximum_count": count,
+            "default_count": count,
+        }
+        assert stations[key]["s_rated_kva_at_30c"] is None
+        assert stations[key]["lv_panel_segregation"] == "Form 2b"
+        assert stations[key]["series"] == "JUPITER-H1"
+        assert stations[key]["datasheet_date"] == "2023-05-15"
+        assert stations[key]["market"] == "Global"
+
+    assert stations["SUNGROW_MVS3200"]["market"] == "Europe"
+    assert stations["SUNGROW_MVS3200"]["datasheet_date"] == "2025-04-18"
+    assert stations["SUNGROW_MVS7040"]["market"] == "South Africa"
+    assert stations["SUNGROW_MVS7040"]["datasheet_date"] == "2024-04-19"
 
 
 def test_stage1_example_plant_matches_direct_engine_computation():

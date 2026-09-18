@@ -62,6 +62,7 @@ const pvInverter: PvInverterInfo = {
   key: 'sungrow-sg350hx-20', display_name: 'SG350HX — SG350HX-20', brand: 'Sungrow',
   series: 'SG350HX', model: 'SG350HX-20', power_kw_at_40c: 320, power_kw_at_30c: 352,
   nominal_ac_voltage_kv: 0.8, minimum_power_factor: 0.8, datasheet_url: 'https://example.invalid/sg350.pdf',
+  power_provenance: 'Supplier datasheet',
   datasheet_version: 'Version 12', datasheet_date: '2025-03-12', market: 'Europe', preliminary: false,
   maximum_efficiency_percent: 99.02, european_efficiency_percent: 98.8, dc_voltage_max_v: 1500,
   dc_voltage_min_v: 500, dc_voltage_nominal_v: 1160, mppt_count: 12, strings_per_mppt: 2,
@@ -112,7 +113,7 @@ describe('CataloguePage', () => {
     expect(screen.getByText('PV Inverters')).toBeTruthy()
     fireEvent.click(screen.getByText(pvInverter.display_name).closest('button')!)
     expect(screen.getByText('352 kW / kVA @ 30 °C; 320 kW / kVA @ 40 °C')).toBeTruthy()
-    expect(screen.getByText('DC side')).toBeTruthy()
+    expect(screen.getByText('DC input')).toBeTruthy()
     expect(screen.getByText('Version 12')).toBeTruthy()
   })
 

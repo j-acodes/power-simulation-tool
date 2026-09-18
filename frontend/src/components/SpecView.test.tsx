@@ -1,7 +1,33 @@
 import { render, screen } from '@testing-library/react'
 import { describe, expect, it } from 'vitest'
 import { SpecView } from './SpecView'
-import type { BessSolutionInfo, TransformerInfo } from '../types'
+import type { BessSolutionInfo, PvInverterInfo, TransformerInfo } from '../types'
+
+function inverter(overrides: Partial<PvInverterInfo> = {}): PvInverterInfo {
+  return {
+    key: 'huawei-sun2000-330ktl-h1', display_name: 'SUN2000 — SUN2000-330KTL-H1',
+    brand: 'Huawei', series: 'SUN2000', model: 'SUN2000-330KTL-H1',
+    power_kw_at_40c: 300, power_kw_at_30c: 330, nominal_ac_voltage_kv: 0.8,
+    minimum_power_factor: 0.8, power_provenance: 'Owner-declared engineering basis',
+    datasheet_url: 'https://example.com/huawei.pdf', datasheet_version: '2023-05-15',
+    datasheet_date: '2023-05-15', market: 'APAC, LATAM & Europe', preliminary: false,
+    maximum_efficiency_percent: 99.03, european_efficiency_percent: null,
+    dc_voltage_max_v: 1500, dc_voltage_min_v: 500, dc_voltage_nominal_v: 1080,
+    mppt_count: 6, strings_per_mppt: null, input_current_per_mppt_a: 65,
+    short_circuit_current_per_mppt_a: 115, rated_ac_power_kw: 300,
+    max_ac_apparent_power_kva: 330, max_ac_current_a: 238.2, thdi_percent: 1,
+    protection: 'Supplier protection set', width_mm: 1048, height_mm: 732, depth_mm: 395,
+    weight_kg: 112, ip_rating: 'IP66', temp_min_c: -25, temp_max_c: 60,
+    altitude_max_m: 4000, cooling: 'Smart air cooling', communication: 'MBUS, RS485',
+    max_ac_active_power_kw: 330, nominal_ac_current_a: 216.6,
+    rated_grid_frequency: '50 / 60 Hz', adjustable_power_factor: '0.8 leading – 0.8 lagging',
+    pv_inputs_per_mppt: '4 / 5 / 5 / 4 / 5 / 5', start_voltage_v: 550,
+    relative_humidity: '0–100% non-condensing', corrosion_class: 'C5-Medium',
+    isolation: 'Transformerless', dc_connector: null, ac_connector: null,
+    standards: 'IEC 62109-1/-2', grid_support: null,
+    ...overrides,
+  }
+}
 
 function solution(overrides: Partial<BessSolutionInfo> = {}): BessSolutionInfo {
   return {
@@ -173,10 +199,13 @@ describe('SpecView — PV transformer station', () => {
       key: 'ACME_PV_TS_3200',
       display_name: 'Acme PV Transformer Station 3200',
       brand: 'Acme',
+      series: 'PV Turnkey',
       model: 'PV-TS-3200',
       vector_group: 'Dy11',
       standards: 'IEC 60076',
       datasheet_version: 'Revision 2',
+      datasheet_date: '2026-04-18',
+      market: 'Europe',
       datasheet_url: 'https://example.com/pv-transformer-station.pdf',
     })
 
@@ -191,12 +220,37 @@ describe('SpecView — PV transformer station', () => {
     const headings = [...container.querySelectorAll('.spec-view h3')].map((heading) => heading.textContent)
     expect(headings).toEqual([
       'What the simulation uses',
-      'Transformer',
-      'General data',
+      'Input and LV panel',
+      'Output transformer',
+      'RMU',
+      'Auxiliary transformer',
+      'Protection and options',
+      'General and environmental',
+      'Communications and standards',
       'Datasheet',
     ])
     expect(screen.getByText('PV-TS-3200')).toBeTruthy()
+    expect(screen.getByText('PV Turnkey')).toBeTruthy()
     expect(screen.getByText('Revision 2')).toBeTruthy()
+    expect(screen.getByText('2026-04-18')).toBeTruthy()
+    expect(screen.getByText('Europe')).toBeTruthy()
     expect(screen.queryByText(/BESS/i)).toBeNull()
+  })
+})
+
+describe('SpecView — PV inverter provenance and missing supplier facts', () => {
+  it('keeps Huawei simulation power visibly owner-declared beside supplier facts', () => {
+    render(<SpecView target={{ kind: 'pv_inverter', item: inverter() }} solutions={[]} transformers={[]} />)
+    expect(screen.getByText('330 kW / kVA @ 30 °C; 300 kW / kVA @ 40 °C')).toBeTruthy()
+    expect(screen.getByText('Owner-declared engineering basis')).toBeTruthy()
+    expect(screen.getByText('300 kW')).toBeTruthy()
+    expect(screen.getAllByText('330 kW').length).toBeGreaterThan(0)
+    expect(screen.getByText('330 kVA')).toBeTruthy()
+  })
+
+  it('renders a missing typed field as Not published', () => {
+    render(<SpecView target={{ kind: 'pv_inverter', item: inverter() }} solutions={[]} transformers={[]} />)
+    const row = screen.getByText('European efficiency').closest('.kv-row')
+    expect(row?.textContent).toContain('Not published')
   })
 })
