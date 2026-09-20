@@ -243,7 +243,6 @@ describe('SpecView — PV transformer station', () => {
       paired_inverters: {
         [pairedInverter.key]: {
           maximum_count: 11,
-          default_count: 11,
           count_provenance: 'Supplier-published maximum LV AC inputs',
         },
       },
@@ -282,7 +281,6 @@ describe('SpecView — PV inverter provenance and missing supplier facts', () =>
       paired_inverters: {
         [item.key]: {
           maximum_count: 10,
-          default_count: 10,
           count_provenance: 'Engineering interpretation of published LV disconnector quantities',
         },
       },

@@ -55,7 +55,7 @@ const pvTransformer: TransformerInfo = {
   datasheet_version: null, preliminary: false,
   paired_solutions: {},
   paired_inverters: { 'sungrow-sg350hx-20': {
-    maximum_count: 10, default_count: 10,
+    maximum_count: 10,
     count_provenance: 'Engineering interpretation of published LV disconnector quantities',
   } },
 }

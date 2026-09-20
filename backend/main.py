@@ -163,7 +163,6 @@ def _transformer_info(
         paired_inverters={
             name: {
                 "maximum_count": pairing.maximum_count,
-                "default_count": pairing.default_count,
                 "count_provenance": pairing.count_provenance,
             }
             for name, pairing in (paired_inverters or {}).items()

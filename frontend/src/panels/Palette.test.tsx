@@ -54,10 +54,8 @@ const pvTransformer: TransformerInfo = {
   humidity_max_pct: null, altitude_max_m: null, communication: null, standards: null,
   datasheet_version: null, preliminary: false,
   paired_solutions: {},
-  // default_count deliberately differs from maximum_count here: a station is
-  // deployed full, so a test that used the default would read 3, not 10.
   paired_inverters: {
-    'sungrow-sg350hx-20': { maximum_count: 10, default_count: 3, count_provenance: 'test' },
+    'sungrow-sg350hx-20': { maximum_count: 10, count_provenance: 'test' },
   },
 }
 

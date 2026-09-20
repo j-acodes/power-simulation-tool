@@ -205,7 +205,6 @@ class TransformerInfo(BaseModel):
 
 class PvInverterPairingInfo(BaseModel):
     maximum_count: int
-    default_count: int
     count_provenance: str
 
 

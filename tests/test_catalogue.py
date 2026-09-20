@@ -168,7 +168,6 @@ def test_sungrow_pv_inverter_and_station_pairings_load(db):
     for station, count in expected_counts.items():
         pairing = db.pv_inverter_pairings[station]["sungrow-sg350hx-20"]
         assert pairing.maximum_count == count
-        assert pairing.default_count == count
         assert pairing.count_provenance == (
             "Engineering interpretation of published LV disconnector quantities"
         )
@@ -238,7 +237,7 @@ def test_huawei_h1_inverter_and_station_pairings_load_with_distinct_provenance(d
         assert station.auxiliary_transformer
         assert station.weight_specification.startswith("<")
         pairing = db.pv_inverter_pairings[station_key][inverter.name]
-        assert pairing.maximum_count == pairing.default_count == count
+        assert pairing.maximum_count == count
         assert pairing.count_provenance == "Supplier-published maximum LV AC inputs"
 
 

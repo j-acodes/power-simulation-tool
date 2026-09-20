@@ -365,7 +365,6 @@ export interface TransformerInfo {
 
 export interface PvInverterPairingInfo {
   maximum_count: number
-  default_count: number
   count_provenance: string
 }
 

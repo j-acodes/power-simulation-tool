@@ -398,8 +398,8 @@ interface TargetPresentation {
   market?: string | null
 }
 
-function pairingValue(maximumCount: number, defaultCount: number, provenance: string) {
-  return `1–${maximumCount} inverter(s); default ${defaultCount}. ${provenance}`
+function pairingValue(maximumCount: number, provenance: string) {
+  return `1–${maximumCount} inverter(s); stations deploy full. ${provenance}`
 }
 
 /** Keep the product-kind switch in one place so the shared page structure
@@ -437,7 +437,7 @@ function targetPresentation(
         .map((tx) => {
           const pairing = tx.paired_inverters[target.item.key]
           return <Row key={tx.key} label={tx.display_name} value={pairingValue(
-            pairing.maximum_count, pairing.default_count, pairing.count_provenance,
+            pairing.maximum_count, pairing.count_provenance,
           )} />
         }),
       datasheetDate: target.item.datasheet_date,
@@ -464,7 +464,7 @@ function targetPresentation(
     pairingRows: Object.entries(target.item.paired_inverters).map(([inverterKey, pairing]) => {
       const inverter = pvInverters.find((candidate) => candidate.key === inverterKey)
       return <Row key={inverterKey} label={inverter?.display_name ?? inverterKey} value={pairingValue(
-        pairing.maximum_count, pairing.default_count, pairing.count_provenance,
+        pairing.maximum_count, pairing.count_provenance,
       )} />
     }),
     datasheetDate: target.item.datasheet_date,

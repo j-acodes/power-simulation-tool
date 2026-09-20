@@ -10,7 +10,7 @@ const catalogue = {
   transformers: [{
     key: 'SUNGROW_MVS3200', display_name: 'MVS3200-LV',
     paired_inverters: { 'sungrow-sg350hx-20': {
-      maximum_count: 10, default_count: 10,
+      maximum_count: 10,
       count_provenance: 'Engineering interpretation of published LV disconnector quantities',
     } },
   }],
