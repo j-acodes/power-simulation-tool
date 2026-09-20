@@ -6,6 +6,7 @@ import { Editor } from '../canvas/Editor'
 import { SeedWizard } from '../components/SeedWizard'
 import { EXAMPLE_DIAGRAM } from '../example'
 import { useAutoSolve } from '../hooks/useAutoSolve'
+import { useFillInverters } from '../hooks/useFillInverters'
 import { IssuesBanner } from '../panels/IssuesBanner'
 import { Inspector } from '../panels/Inspector'
 import { Palette } from '../panels/Palette'
@@ -28,6 +29,7 @@ interface EditorViewProps {
  * them, so those are the only customization points. */
 export function EditorView({ title, headerLeft, headerRight }: EditorViewProps) {
   useAutoSolve()
+  useFillInverters()
   const [showSettings, setShowSettings] = useState(false)
   const [showSeedWizard, setShowSeedWizard] = useState(false)
   const loadDiagram = useStore((s) => s.loadDiagram)
