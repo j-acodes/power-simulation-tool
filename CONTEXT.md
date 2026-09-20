@@ -137,10 +137,12 @@ _Avoid_: battery unit, pack
 **Pairing**:
 The product-composition record carried by a transformer station. For BESS it names the solutions
 the station is sold with and how many containers it serves. For PV it names the allowed inverter
-products plus each pairing's maximum and default inverter count. Pairing is authoritative: the
+products plus each pairing's maximum inverter count. Pairing is authoritative: the
 tool does not infer compatibility by comparing nominal voltages, and products not named by the
-station cannot be combined. The PV default is the maximum physical-input interpretation recorded
-in the catalogue; an engineer may reduce the count within the declared range.
+station cannot be combined. A station is deployed full — with its paired inverter at the maximum
+physical-input interpretation recorded in the catalogue — and an engineer may reduce the count
+within the declared range. Because the pairing decides the inverter, changing a plant's inverter
+means changing its stations' models, not choosing an inverter independently.
 _Avoid_: compatibility, match, association
 
 **PCS**:

@@ -21,8 +21,12 @@ not a second source of requirements.
   and [ADR-0002](adr/0002-technology-declared-not-derived.md).
 - YAML catalogues include PV and BESS transformer stations, cables, datasheet-backed BESS
   solutions, and Sungrow/Huawei PV inverters. Supported PV transformer stations declare their
-  inverter pairings and count bounds; every PV station must select one paired inverter and a
-  whole-number count. TBEA stations are no longer selectable.
+  inverter pairings and a maximum count; every PV station must carry one paired inverter and a
+  whole-number count. A station is deployed with its paired inverter at that maximum, on the
+  palette, in the seed wizard and on a model change, and the inverter is presented as a choice
+  only where a station declares more than one pairing. One click applies a model to every
+  catalogue PV station, refilling each one's inverter and count. TBEA stations are no longer
+  selectable.
 - PV conversion duty is allocated by installed inverter power at the selected ambient and is
   checked independently for active power, apparent power, and published minimum power factor.
   Transformer-station loading remains a separate check. Ambient lookup and provenance follow
