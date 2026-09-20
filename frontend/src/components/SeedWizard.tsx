@@ -6,6 +6,7 @@ import { LABEL } from '../labels'
 import { useStore } from '../store'
 import type { Diagram, SeedParams } from '../types'
 import { ModalShell, useConfirmDialog } from './Modal'
+import { defaultInverterSelection } from '../inverterDefaults'
 
 // 45 MW / 0.95 pf HV reference plant (same numbers as example.ts) — sensible
 // starting point for fields the catalogue doesn't have an opinion on.
@@ -172,10 +173,10 @@ export function SeedWizard({ onClose }: SeedWizardProps) {
                 onChange={(e) => {
                   const key = e.target.value
                   const station = eligibleStations.find((candidate) => candidate.key === key)
-                  const nextInverter = Object.keys(station?.paired_inverters ?? {})[0] ?? ''
+                  const deployed = defaultInverterSelection(station)
                   setStationModel(key)
-                  setPvInverter(nextInverter)
-                  setInverterCount(station?.paired_inverters?.[nextInverter]?.maximum_count ?? null)
+                  setPvInverter(deployed.pv_inverter)
+                  setInverterCount(deployed.inverter_count ?? null)
                 }}
                 required
               >

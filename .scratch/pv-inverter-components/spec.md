@@ -28,8 +28,9 @@ does not expose enough provenance for that assumption to be defended in a design
 Introduce the **inverter** as a first-class PV catalogue product contained by a **station**. It
 is selected and counted inside the station, like containers behind a BESS station, but it is
 never an independently drawable node. A PV transformer station declares which inverter products
-it is paired with, the maximum physical count for each pairing and the default count. The
-engineer may reduce or restore the count within that physical range.
+it is paired with and the maximum physical count for each pairing. A station is deployed with
+its paired inverter at that maximum; the engineer may reduce or restore the count within that
+physical range.
 
 The requested POC active power and power factor remain the operating requirement. The sizing
 engine works backward through losses as it does today, but distributes the resulting PV
@@ -201,16 +202,16 @@ in code comments.
 ### Model pairings on PV transformer stations
 
 A PV transformer station carries a pairing for each allowed inverter. A pairing provides the
-maximum integer count, the default integer count and the provenance of those counts. The default
-equals the maximum physical input count. A catalogue station with an unknown inverter, a count
+maximum integer count and the provenance of that count. A station is always deployed at that
+maximum, so no separate default is recorded. A catalogue station with an unknown inverter, a count
 below one or a count above the pairing maximum is invalid and does not solve.
 
-Sungrow station pairings use SG350HX-20. Maximum/default counts are 10, 14, 20, 22 and 28 for
+Sungrow station pairings use SG350HX-20. Maximum counts are 10, 14, 20, 22 and 28 for
 MVS3200-LV, MVS4480-LV, MVS6400-LV, MVS7040-LV and MVS8960-LV respectively. These counts come
 from the published LV disconnector quantities and are explicitly an engineering interpretation
 of physical inputs, not a supplier field named “maximum inverter count.”
 
-Huawei station pairings use SUN2000-330KTL-H1. Maximum/default counts are 11, 22 and 30 for
+Huawei station pairings use SUN2000-330KTL-H1. Maximum counts are 11, 22 and 30 for
 JUPITER-3000K-H1, JUPITER-6000K-H1 and JUPITER-9000K-H1 respectively, from the published maximum
 LV AC input counts.
 

@@ -7,7 +7,7 @@ BESS or accepted topology. Review findings are fixed before the branch is handed
 
 **Blocked by:** 04: Generate and customize inverter-based PV stations; 05: Complete the Sungrow and Huawei PV catalogue.
 
-**Status:** claimed
+**Status:** resolved
 
 - [x] No production fallback synthesizes an inverter for a station that lacks one
 - [x] The glossary and project status describe inverter composition, pairing, ambient power, loading and provenance
@@ -20,7 +20,7 @@ BESS or accepted topology. Review findings are fixed before the branch is handed
 - [x] Frontend production build passes
 - [x] Frontend lint passes with no new warnings
 - [x] Documentation link and whitespace checks pass
-- [ ] Two-axis standards/spec code review is run against the branch base and all accepted findings are fixed
+- [x] Two-axis standards/spec code review is run against the branch base and all accepted findings are fixed
 - [x] The specification and all ticket statuses record implementation evidence
 
 ## Implementation evidence
@@ -47,3 +47,10 @@ arriving unconfigured; `default_count` is deleted from the catalogue, engine, AP
 spec view, leaving `maximum_count` alone; the inverter select renders only where a station
 declares more than one pairing; and the inspector can apply one catalogue model to every other
 catalogue PV station, refilling each one's inverter and count behind a confirmation.
+
+**Second review pass, covering `f9a28bf..HEAD`.** Standards found one duplication worth fixing:
+the seed wizard re-implemented the "first pairing, filled to maximum" rule inline while
+`inverterDefaults.ts` claimed to be the shared home of it, so a future change to the rule would
+have had to land in two places. The wizard now calls `defaultInverterSelection`. Spec found no
+code defect, but caught this specification itself still describing a pairing's `default_count`
+after the field was deleted; the Solution and Implementation Decisions sections are corrected.
