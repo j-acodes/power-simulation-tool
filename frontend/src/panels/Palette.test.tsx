@@ -53,7 +53,12 @@ const pvTransformer: TransformerInfo = {
   corrosion_class: null, temp_min_c: null, temp_max_c: null, humidity_min_pct: null,
   humidity_max_pct: null, altitude_max_m: null, communication: null, standards: null,
   datasheet_version: null, preliminary: false,
-  paired_solutions: {}, paired_inverters: {},
+  paired_solutions: {},
+  // default_count deliberately differs from maximum_count here: a station is
+  // deployed full, so a test that used the default would read 3, not 10.
+  paired_inverters: {
+    'sungrow-sg350hx-20': { maximum_count: 10, default_count: 3, count_provenance: 'test' },
+  },
 }
 
 const catalogue: CatalogueResponse = {
@@ -100,5 +105,19 @@ describe('Palette (ticket 06)', () => {
 
     expect(screen.getByText(pvTransformer.display_name)).toBeTruthy()
     expect(screen.queryByText(pvTransformer.key)).toBeNull()
+  })
+
+  it('deploys a catalogue PV station with the maximum number of its paired inverters', () => {
+    render(<Palette />)
+
+    const item = screen.getByText(pvTransformer.display_name).closest('.palette-item')!
+    const setData = vi.fn()
+    fireEvent.dragStart(item, { dataTransfer: { setData, effectAllowed: 'none' } })
+
+    expect(JSON.parse(setData.mock.calls[0][1] as string).props).toMatchObject({
+      model: pvTransformer.key,
+      pv_inverter: 'sungrow-sg350hx-20',
+      inverter_count: 10,
+    })
   })
 })

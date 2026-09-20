@@ -7,6 +7,7 @@ import { takenBusbarSlots } from '../canvas/connect'
 import type { PaletteDropPayload } from '../canvas/Editor'
 import { permitsFleetKind } from '../technology'
 import { groupByBrand } from '../catalogueGrouping'
+import { defaultInverterSelection } from '../inverterDefaults'
 
 const BESS_CUSTOM_PROPS = {
   mode: 'custom',
@@ -99,7 +100,7 @@ export function Palette() {
                     key={tx.key}
                     label={tx.display_name}
                     kind="station"
-                    props={{ mode: 'catalogue', model: tx.key }}
+                    props={{ mode: 'catalogue', model: tx.key, ...defaultInverterSelection(tx) }}
                     selected={selection?.type === 'palette' && selection.key === tx.key}
                     onClick={() => setSelection({ type: 'palette', key: tx.key })}
                   />

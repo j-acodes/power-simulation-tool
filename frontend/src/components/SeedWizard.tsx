@@ -68,7 +68,7 @@ export function SeedWizard({ onClose }: SeedWizardProps) {
     (inverter) => inverter.key in pairings,
   )
   const selectedPairing = pairings[effectivePvInverter]
-  const effectiveInverterCount = inverterCount ?? selectedPairing?.default_count ?? 0
+  const effectiveInverterCount = inverterCount ?? selectedPairing?.maximum_count ?? 0
 
   // Fill catalogue-derived defaults once they arrive, without clobbering
   // anything the user has already changed.
@@ -175,7 +175,7 @@ export function SeedWizard({ onClose }: SeedWizardProps) {
                   const nextInverter = Object.keys(station?.paired_inverters ?? {})[0] ?? ''
                   setStationModel(key)
                   setPvInverter(nextInverter)
-                  setInverterCount(station?.paired_inverters?.[nextInverter]?.default_count ?? null)
+                  setInverterCount(station?.paired_inverters?.[nextInverter]?.maximum_count ?? null)
                 }}
                 required
               >
@@ -195,7 +195,7 @@ export function SeedWizard({ onClose }: SeedWizardProps) {
                 onChange={(e) => {
                   const key = e.target.value
                   setPvInverter(key)
-                  setInverterCount(pairings[key]?.default_count ?? null)
+                  setInverterCount(pairings[key]?.maximum_count ?? null)
                 }}
                 required
               >
@@ -218,7 +218,7 @@ export function SeedWizard({ onClose }: SeedWizardProps) {
                   const value = e.target.valueAsNumber
                   setInverterCount(selectedPairing && Number.isFinite(value)
                     ? Math.min(selectedPairing.maximum_count, Math.max(1, Math.round(value)))
-                    : selectedPairing?.default_count ?? null)
+                    : selectedPairing?.maximum_count ?? null)
                 }}
                 required
               />

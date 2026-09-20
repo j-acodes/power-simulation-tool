@@ -6,6 +6,7 @@ import { useCatalogue } from '../hooks/useCatalogue'
 import { useStore } from '../store'
 import { takenBusbarSlots } from '../canvas/connect'
 import { permitsFleetKind } from '../technology'
+import { defaultInverterSelection } from '../inverterDefaults'
 import { Row, SectionTitle } from '../components/DetailRows'
 import { ModalShell } from '../components/Modal'
 import { SpecView } from '../components/SpecView'
@@ -281,7 +282,10 @@ function NodeProperties({ node }: { node: DiagramNode }) {
               <span>Model</span>
               <select value={String(props.model ?? '')} onChange={(e) => patch({
                 model: e.target.value,
-                ...(props.fleet_kind !== 'bess' ? { pv_inverter: '', inverter_count: undefined } : {}),
+                ...(props.fleet_kind !== 'bess'
+                  ? defaultInverterSelection(
+                      catalogue?.transformers.find((tx) => tx.key === e.target.value))
+                  : {}),
               })}>
                 <option value="">— select —</option>
                 {(props.fleet_kind === 'bess' ? catalogue?.bess_transformers : catalogue?.transformers)?.map((tx) => (
@@ -353,7 +357,7 @@ function NodeProperties({ node }: { node: DiagramNode }) {
                   value={String(props.pv_inverter ?? '')}
                   onChange={(e) => {
                     const pairing = pvPairings[e.target.value]
-                    patch({ pv_inverter: e.target.value, inverter_count: pairing?.default_count })
+                    patch({ pv_inverter: e.target.value, inverter_count: pairing?.maximum_count })
                   }}
                 >
                   <option value="">— select —</option>
@@ -365,13 +369,13 @@ function NodeProperties({ node }: { node: DiagramNode }) {
               {selectedPvPairing && (
                 <NumberField
                   label="Inverters"
-                  value={Number(props.inverter_count ?? selectedPvPairing.default_count)}
+                  value={Number(props.inverter_count ?? selectedPvPairing.maximum_count)}
                   min={1}
                   max={selectedPvPairing.maximum_count}
                   onChange={(value) => patch({
                     inverter_count: Number.isFinite(value)
                       ? Math.min(selectedPvPairing.maximum_count, Math.max(1, Math.round(value)))
-                      : selectedPvPairing.default_count,
+                      : selectedPvPairing.maximum_count,
                   })}
                 />
               )}
