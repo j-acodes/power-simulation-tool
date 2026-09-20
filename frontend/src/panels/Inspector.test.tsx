@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { Inspector } from './Inspector'
 import { EMPTY_DIAGRAM, useStore } from '../store'
@@ -75,8 +75,35 @@ const pvInverter: PvInverterInfo = {
   cooling: 'Smart forced-air cooling', communication: 'RS485',
 }
 
+/** A second PV model, paired with the same inverter but accepting a different
+ * number of them — so a bulk re-model has to move the count too, not just the
+ * model key. */
+const otherPvTransformer: TransformerInfo = {
+  ...pvTransformer,
+  key: 'ACME_2000', display_name: 'ACME 2000', s_rated_kva_at_40c: 2000,
+  paired_inverters: { 'sungrow-sg350hx-20': {
+    maximum_count: 4, count_provenance: 'Engineering interpretation',
+  } },
+}
+
+const secondInverter: PvInverterInfo = {
+  ...pvInverter, key: 'acme-inv-2', display_name: 'ACME INV — 2', model: 'INV-2',
+}
+
+/** No shipped station pairs with two inverters, but the inspector still has to
+ * offer the choice when one does — that is the only case the select exists
+ * for. */
+const twoPairingTransformer: TransformerInfo = {
+  ...pvTransformer,
+  key: 'ACME_3000', display_name: 'ACME 3000',
+  paired_inverters: {
+    'sungrow-sg350hx-20': { maximum_count: 10, count_provenance: 'test' },
+    'acme-inv-2': { maximum_count: 6, count_provenance: 'test' },
+  },
+}
+
 const catalogue: CatalogueResponse = {
-  transformers: [pvTransformer],
+  transformers: [pvTransformer, otherPvTransformer, twoPairingTransformer],
   cables: {},
   defaults: {
     tiers: { lv_kv: 0.8, mv_kv: 20, hv_kv: 132 },
@@ -84,7 +111,7 @@ const catalogue: CatalogueResponse = {
   },
   bess_solutions: [bessSolution],
   bess_transformers: [bessTransformer],
-  pv_inverters: [pvInverter],
+  pv_inverters: [pvInverter, secondInverter],
 }
 
 vi.mock('../hooks/useCatalogue', () => ({
@@ -207,20 +234,19 @@ describe('Inspector — expand control for a placed station (ticket 06)', () => 
     expect(screen.queryByRole('button', { name: 'BESS solution specification' })).toBeNull()
   })
 
-  it('selects a paired PV inverter after the station and bounds its count', () => {
+  it('states the inverter as a fact for a station with only one pairing, and bounds its count', () => {
     withNode({
       id: 'n1', kind: 'station', x: 0, y: 0,
-      props: { fleet_kind: 'pv', mode: 'catalogue', model: pvTransformer.key },
+      props: {
+        fleet_kind: 'pv', mode: 'catalogue', model: pvTransformer.key,
+        pv_inverter: pvInverter.key, inverter_count: 10,
+      },
     })
     render(<Inspector />)
 
-    const inverterSelect = screen.getByLabelText('PV inverter')
-    expect(screen.getByRole('option', { name: pvInverter.display_name })).toBeTruthy()
-    fireEvent.change(inverterSelect, { target: { value: pvInverter.key } })
-    expect(useStore.getState().diagram.nodes[0].props).toMatchObject({
-      pv_inverter: pvInverter.key,
-      inverter_count: 10,
-    })
+    // One pairing is not a choice: the name shows, the select does not.
+    expect(screen.queryByLabelText('PV inverter')).toBeNull()
+    expect(screen.getByText(pvInverter.display_name)).toBeTruthy()
 
     const count = screen.getByLabelText('Inverters')
     expect(count.getAttribute('min')).toBe('1')
@@ -291,6 +317,59 @@ describe('Inspector — expand control for a placed station (ticket 06)', () => 
     expect(screen.getByLabelText('Inverter power at 30 °C (kW/kVA, optional)')).toBeTruthy()
     expect(screen.getByLabelText('Minimum power factor (optional)')).toBeTruthy()
     expect(screen.queryByRole('button', { name: 'PV inverter specification' })).toBeNull()
+  })
+
+  it('offers the inverter as a choice only where the station has two pairings', () => {
+    withNode({
+      id: 'n1', kind: 'station', x: 0, y: 0,
+      props: {
+        fleet_kind: 'pv', mode: 'catalogue', model: twoPairingTransformer.key,
+        pv_inverter: pvInverter.key, inverter_count: 10,
+      },
+    })
+    render(<Inspector />)
+
+    fireEvent.change(screen.getByLabelText('PV inverter'), { target: { value: secondInverter.key } })
+    expect(useStore.getState().diagram.nodes[0].props).toMatchObject({
+      pv_inverter: secondInverter.key,
+      inverter_count: 6,
+    })
+  })
+
+  it('applies one PV model to every other catalogue PV station, inverter and count included', async () => {
+    useStore.setState({
+      diagram: {
+        ...EMPTY_DIAGRAM,
+        nodes: [
+          { id: 'n1', kind: 'station', x: 0, y: 0,
+            props: { mode: 'catalogue', model: otherPvTransformer.key, pv_inverter: pvInverter.key, inverter_count: 4 } },
+          { id: 'n2', kind: 'station', x: 0, y: 0,
+            props: { mode: 'catalogue', model: pvTransformer.key, pv_inverter: pvInverter.key, inverter_count: 10 } },
+          // Neither a custom PV station nor a BESS station is re-modelled.
+          { id: 'n3', kind: 'station', x: 0, y: 0, props: { mode: 'custom', name: 'Custom station' } },
+          { id: 'n4', kind: 'station', x: 0, y: 0,
+            props: { fleet_kind: 'bess', mode: 'catalogue', model: bessTransformer.key } },
+        ],
+      },
+      selection: { type: 'node', id: 'n1' },
+    })
+    render(<Inspector />)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Apply this model to all PV stations (1)' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Apply to all' }))
+
+    // The confirmation resolves a promise, so the re-model lands a microtask
+    // after the click, not synchronously with it.
+    await waitFor(() => expect(
+      useStore.getState().diagram.nodes[1].props.model,
+    ).toBe(otherPvTransformer.key))
+
+    const nodes = useStore.getState().diagram.nodes
+    expect(nodes[1].props).toMatchObject({
+      model: otherPvTransformer.key, pv_inverter: pvInverter.key, inverter_count: 4,
+    })
+    expect(nodes[2].props.model).toBeUndefined()
+    expect(nodes[3].props.model).toBe(bessTransformer.key)
   })
 
   it('hides the BESS solution control for a catalogue-backed BESS station that names no solution yet', () => {

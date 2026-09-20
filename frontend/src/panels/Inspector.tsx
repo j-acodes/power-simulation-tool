@@ -8,7 +8,7 @@ import { takenBusbarSlots } from '../canvas/connect'
 import { permitsFleetKind } from '../technology'
 import { defaultInverterSelection } from '../inverterDefaults'
 import { Row, SectionTitle } from '../components/DetailRows'
-import { ModalShell } from '../components/Modal'
+import { ModalShell, useConfirmDialog } from '../components/Modal'
 import { SpecView } from '../components/SpecView'
 import type { SpecViewTarget } from '../components/SpecView'
 import type { DiagramEdge, DiagramNode, EdgeResult, NodeResult, TransformerInfo } from '../types'
@@ -188,6 +188,7 @@ function NodeProperties({ node }: { node: DiagramNode }) {
   // full-screen. Local to this component so closing it (Escape) never
   // touches selection/diagram state — the canvas underneath is untouched.
   const [specTarget, setSpecTarget] = useState<SpecViewTarget | null>(null)
+  const { confirm, dialog: confirmDialog } = useConfirmDialog()
 
   // Station transformer -> duration -> solution, each narrowing the next
   // (ticket 02): a custom transformer corresponds to no catalogue entry, so
@@ -216,6 +217,32 @@ function NodeProperties({ node }: { node: DiagramNode }) {
   const pvInverterOptions = (catalogue?.pv_inverters ?? []).filter((inverter) => inverter.key in pvPairings)
   const selectedPvInverter = (catalogue?.pv_inverters ?? []).find((inverter) => inverter.key === props.pv_inverter)
   const selectedPvPairing = pvPairings[String(props.pv_inverter)]
+
+  // One catalogue model, applied to every catalogue PV station on the canvas.
+  // A station's inverter follows from its model, so this is also how a plant
+  // changes inverter: re-model the stations and let the pairing decide.
+  // Custom stations are left alone — they are custom on purpose.
+  const otherPvStations = diagram.nodes.filter(
+    (n) => n.kind === 'station' && n.props.fleet_kind !== 'bess'
+      && n.props.mode !== 'custom' && n.id !== node.id,
+  )
+  const applyModelToAllPvStations = async () => {
+    if (!pvTransformer) return
+    const ok = await confirm({
+      title: 'Apply to every PV station?',
+      message: `Set ${otherPvStations.length} other PV station(s) to `
+        + `${pvTransformer.display_name}, each filled with its paired inverter. `
+        + `This replaces the model they have now and cannot be undone.`,
+      confirmLabel: 'Apply to all',
+    })
+    if (!ok) return
+    for (const target of otherPvStations) {
+      updateNodeProps(target.id, {
+        model: pvTransformer.key,
+        ...defaultInverterSelection(pvTransformer),
+      })
+    }
+  }
 
   return (
     <div>
@@ -351,21 +378,34 @@ function NodeProperties({ node }: { node: DiagramNode }) {
           )}
           {props.fleet_kind !== 'bess' && props.mode !== 'custom' && pvTransformer && (
             <>
-              <label className="field">
-                <span>PV inverter</span>
-                <select
-                  value={String(props.pv_inverter ?? '')}
-                  onChange={(e) => {
-                    const pairing = pvPairings[e.target.value]
-                    patch({ pv_inverter: e.target.value, inverter_count: pairing?.maximum_count })
-                  }}
-                >
-                  <option value="">— select —</option>
-                  {pvInverterOptions.map((inverter) => (
-                    <option key={inverter.key} value={inverter.key}>{inverter.display_name}</option>
-                  ))}
-                </select>
-              </label>
+              {otherPvStations.length > 0 && (
+                <button type="button" onClick={applyModelToAllPvStations}>
+                  Apply this model to all PV stations ({otherPvStations.length})
+                </button>
+              )}
+              {/* A station's inverter is a fact about the station until the
+                  catalogue gives it a second pairing to choose between: every
+                  station ships with exactly one today, and a select with one
+                  option is a decision nobody gets to make. */}
+              {pvInverterOptions.length > 1 ? (
+                <label className="field">
+                  <span>PV inverter</span>
+                  <select
+                    value={String(props.pv_inverter ?? '')}
+                    onChange={(e) => {
+                      const pairing = pvPairings[e.target.value]
+                      patch({ pv_inverter: e.target.value, inverter_count: pairing?.maximum_count })
+                    }}
+                  >
+                    <option value="">— select —</option>
+                    {pvInverterOptions.map((inverter) => (
+                      <option key={inverter.key} value={inverter.key}>{inverter.display_name}</option>
+                    ))}
+                  </select>
+                </label>
+              ) : (
+                <Row label="PV inverter" value={selectedPvInverter?.display_name ?? '—'} />
+              )}
               {selectedPvPairing && (
                 <NumberField
                   label="Inverters"
@@ -425,6 +465,7 @@ function NodeProperties({ node }: { node: DiagramNode }) {
           />
         </ModalShell>
       )}
+      {confirmDialog}
     </div>
   )
 }
