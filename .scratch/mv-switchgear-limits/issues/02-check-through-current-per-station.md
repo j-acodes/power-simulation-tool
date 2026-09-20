@@ -16,7 +16,7 @@ check beside it without changing any existing number.
 
 **Blocked by:** 01.
 
-**Status:** ready-for-agent
+**Status:** resolved
 
 - [ ] Every station carries a through current in the results, alongside the switchgear rated
       current it was checked against.
