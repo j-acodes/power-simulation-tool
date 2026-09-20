@@ -27,7 +27,8 @@ _Avoid_: bus, collector bus
 **Circuit**:
 One radial daisy chain of stations run off a busbar by a single MV cable: the busbar feeds
 the first station, that station feeds the next, and so on to the end of the chain. A fleet's
-stations are grouped into as many circuits as the cable current limit demands.
+stations are grouped into as many circuits as the switchgear rated current of the stations in
+them allows.
 _Avoid_: feeder, string (string is reserved for PV DC strings, a concept this tool does not model)
 
 **Station**:
@@ -44,9 +45,10 @@ node)
 **Transformer station**:
 A real MV/LV product a supplier sells, identified the way a quote identifies it, and the unit
 a station catalogue entry describes. It is the whole enclosure — the transformer, its MV
-switchgear, its control cabinet and its UPS — but only the transformer's own figures are read
-by the sizing engine; the rest is recorded and shown. One catalogue entry per model number,
-so two ratings of the same physical enclosure are two entries, not one entry with variants.
+switchgear, its control cabinet and its UPS. The sizing engine reads the transformer's own
+figures and the switchgear rated current; everything else is recorded and shown. One
+catalogue entry per model number, so two ratings of the same physical enclosure are two
+entries, not one entry with variants.
 _Avoid_: MVS, medium-voltage substation (the supplier's word for it, and it collides with
 substation), station transformer, MV/LV transformer, station (that is the node on the
 diagram)
@@ -69,6 +71,25 @@ used only when its non-supplier provenance remains visible. Installed station ca
 power times inverter count and governs PV duty allocation and inverter compliance; it does not
 replace the transformer station's separate loading check.
 _Avoid_: inverter rating (drops the ambient), transformer capacity (names the wrong equipment)
+
+**Switchgear rated current**:
+The continuous current the MV switchgear inside a transformer station can carry, and the figure
+that bounds how many stations one circuit may hold. It is a hard limit: unlike a cable's
+ampacity it carries no installation-condition margin, so no utilization factor is applied to it.
+A supplier who does not publish it has not declared the absence of a limit — the design falls
+back to the standard ring-main-unit size and says so, the same way an unpublished ambient or an
+unpublished auxiliary consumption is handled.
+_Avoid_: RMU rated current (RMU is supplier shorthand of the same kind as MVS), switchgear
+rating (drops the quantity being rated), busbar rating (names a different piece of equipment)
+
+**Through current**:
+The current a station passes along its circuit toward the busbar: its own current plus that of
+every station downstream of it in the chain. It is the quantity a station's switchgear rated
+current limits, so it is a property of a station at a position in a circuit, not of the circuit
+as a whole — the station nearest the busbar carries the most. A circuit is compliant when every
+station in it is within its own switchgear rated current.
+_Avoid_: circuit current (belongs to no particular station, and the limit does), cumulative
+current, transit current
 
 **Technology**:
 The set of fleet kinds a design is permitted to contain — `pv`, `bess` or `hybrid` — declared
