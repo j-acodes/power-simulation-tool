@@ -102,6 +102,8 @@ def _transformer_info(
         pk_kw=tx.pk_kw,
         p0_kw=tx.p0_kw,
         i0_percent=tx.i0_percent,
+        switchgear_rated_current_a=tx.switchgear_rated_current_a,
+        switchgear_rating_published=tx.switchgear_rating_published,
         model=tx.model,
         vector_group=tx.vector_group,
         cooling=tx.cooling,

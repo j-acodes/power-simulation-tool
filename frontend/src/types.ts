@@ -295,6 +295,12 @@ export interface TransformerInfo {
   pk_kw: number
   p0_kw: number
   i0_percent: number
+  /** Simulated: the resolved switchgear rated current the engine checks a
+   *  station's through current against, and whether the supplier published it
+   *  or it came from the standard-ring-main-unit fallback (ADR-0006). The raw
+   *  `rmu_rated_current_a` below stays null when nothing was published. */
+  switchgear_rated_current_a: number
+  switchgear_rating_published: boolean
   /** Typed parameters (never computed with) — see CONTEXT.md's "Simulated
    *  parameter / typed parameter" entry. `null` means the datasheet is
    *  silent on that field, not that the value is zero. Unset for every PV

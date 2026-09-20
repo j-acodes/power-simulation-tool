@@ -1148,7 +1148,10 @@ def test_golden_45mw_example_drawn_equals_the_auto_path():
     assert summary["total_transformer_loss_kw"] == arch.total_transformer_loss_kw
     assert summary["worst_trunk_current_a"] == max(
         c.i_trunk_a for c in arch.branches[0].circuits)
-    assert summary["power_balance_ok"] and results["warnings"] == []
+    # The fixture draws Huawei stations, which publish no switchgear rated
+    # current, so the ADR-0006 fallback notice is expected here. Nothing else is.
+    assert summary["power_balance_ok"]
+    assert [w["code"] for w in results["warnings"]] == ["switchgear_rating_not_published"]
     assert summary["p_poc_refined_delivered_kw"] >= P_POC_KW
 
     # Every cable run: same section, same losses, keyed to the drawn edge.
@@ -1275,3 +1278,32 @@ def test_aux_load_on_a_second_busbar_validates():
         _edge("e_aux2", "bus2", "aux2"),
     ]
     assert validate_graph(diagram, db) == []
+
+
+def test_unpublished_switchgear_rating_falls_back_with_notice():
+    # Huawei publishes no switchgear rated current, so every design drawing a
+    # JUPITER station exercises the fallback. Silence must never mean "no
+    # limit" — see ADR-0006.
+    result = solve_diagram(_minimal(), db)
+
+    assert result["issues"] == []
+    notices = [w for w in result["results"]["warnings"]
+               if w["code"] == "switchgear_rating_not_published"]
+    assert len(notices) == 1
+    assert "630 A" in notices[0]["message"]
+    assert "Huawei" in notices[0]["message"]
+
+
+def test_published_switchgear_rating_raises_no_notice():
+    diagram = _minimal()
+    diagram["nodes"][2]["props"].update({
+        "model": "SUNGROW_MVS3200",
+        "pv_inverter": "sungrow-sg350hx-20",
+        "inverter_count": 10,
+    })
+
+    result = solve_diagram(diagram, db)
+
+    assert result["issues"] == []
+    assert not any(w["code"] == "switchgear_rating_not_published"
+                   for w in result["results"]["warnings"])

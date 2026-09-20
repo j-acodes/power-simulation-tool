@@ -124,6 +124,14 @@ function SimulatedBessSolution({ item }: { item: BessSolutionInfo }) {
   )
 }
 
+/** The switchgear rated current, marked when it came from the ADR-0006
+ *  fallback rather than a datasheet — a defaulted figure must never read as a
+ *  supplier claim. */
+function switchgearRatedCurrent(item: TransformerInfo) {
+  const value = `${fmt(item.switchgear_rated_current_a, 0)} A`
+  return item.switchgear_rating_published ? value : `${value} (not published — standard rating assumed)`
+}
+
 function SimulatedTransformerStation({ item }: { item: TransformerInfo }) {
   return (
     <>
@@ -135,6 +143,7 @@ function SimulatedTransformerStation({ item }: { item: TransformerInfo }) {
       <Row label="i0%" value={fmt(item.i0_percent, 2)} />
       <Row label="HV voltage" value={item.hv_kv != null ? `${fmt(item.hv_kv, 2)} kV` : '—'} />
       <Row label="LV voltage" value={item.lv_kv != null ? `${fmt(item.lv_kv, 2)} kV` : '—'} />
+      <Row label="Switchgear rated current" value={switchgearRatedCurrent(item)} />
     </>
   )
 }
@@ -307,7 +316,6 @@ function TransformerStationSpec({ item, showMissing }: { item: TransformerInfo; 
     hasRmuRange
       ? typedRow('RMU voltage range', `${fmt(item.rmu_kv_min, 2)} – ${fmt(item.rmu_kv_max, 2)} kV`, showMissing)
       : typedRow('RMU voltage range', null, showMissing),
-    typedRow('RMU rated current', item.rmu_rated_current_a != null ? `${fmt(item.rmu_rated_current_a, 0)} A` : null, showMissing),
     typedRow('RMU units', item.rmu_units, showMissing),
     typedRow('RMU relay protection', item.rmu_relay_protection, showMissing),
     typedRow('RMU short-time withstand', item.rmu_short_time_withstand, showMissing),

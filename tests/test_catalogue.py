@@ -292,3 +292,51 @@ def test_the_0_5c_sungrow_station_carries_its_confirmed_container_count(db):
     # datasheet, which states no count at all — same standing as the
     # SUNGROW_MVS7400_LS pairing above.
     assert db.bess_pairings["SUNGROW_MVS7080_LS"] == {"sungrow-st6680ux-2h": 2}
+
+
+# --- Switchgear rated current (ADR-0006) ---------------------------------
+
+
+def test_sungrow_stations_publish_their_switchgear_rated_current(db):
+    # Both the PV MVS stations and the two real BESS stations publish 630 A.
+    for key in ("SUNGROW_MVS3200", "SUNGROW_MVS4480", "SUNGROW_MVS6400",
+                "SUNGROW_MVS7040", "SUNGROW_MVS8960"):
+        station = db.transformers[key]
+        assert station.switchgear_rating_published is True, key
+        assert station.switchgear_rated_current_a == 630.0, key
+    for key in ("SUNGROW_MVS7400_LS", "SUNGROW_MVS7080_LS"):
+        station = db.bess_transformers[key]
+        assert station.switchgear_rating_published is True, key
+        assert station.switchgear_rated_current_a == 630.0, key
+
+
+def test_huawei_stations_fall_back_and_say_the_figure_was_defaulted(db):
+    # Huawei publishes switchgear units, relay protection and short-time
+    # withstand for the JUPITER stations, but no rated current. This is the
+    # primary fallback case, not an edge case.
+    for key in ("HUAWEI_JUPITER3000", "HUAWEI_JUPITER6000", "HUAWEI_JUPITER9000"):
+        station = db.transformers[key]
+        assert station.rmu_rated_current_a is None, key
+        assert station.switchgear_rating_published is False, key
+        assert station.switchgear_rated_current_a == 630.0, key
+        # The other typed RMU facts Huawei DOES publish are untouched.
+        assert station.rmu_units
+        assert station.rmu_relay_protection
+
+
+def test_no_station_in_the_catalogue_resolves_to_an_unlimited_switchgear(db):
+    for source in (db.transformers, db.bess_transformers):
+        for key, station in source.items():
+            assert station.switchgear_rated_current_a > 0, key
+
+
+def test_the_switchgear_fallback_is_not_written_into_the_yaml():
+    # The fallback lives in the engine on purpose: a figure in a station's
+    # datasheet block must always mean a supplier published it (ADR-0006).
+    from pathlib import Path
+    for name in ("transformers.yaml", "bess_transformers.yaml"):
+        text = Path("data", name).read_text()
+        # huawei_common must not acquire a rated current.
+        huawei = text.split("huawei_common:")[-1].split("\nPV_TRANSFORMERS")[0] \
+            if "huawei_common:" in text else ""
+        assert "rmu_rated_current_a" not in huawei

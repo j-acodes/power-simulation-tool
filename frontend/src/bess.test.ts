@@ -29,6 +29,7 @@ function transformer(overrides: Partial<TransformerInfo>): TransformerInfo {
   return {
     key: 'TX', display_name: 'TX', s_rated_kva_at_40c: 2750, hv_kv: null, lv_kv: 0.69,
     brand: 'Generic', uk_percent: 8, pk_kw: 27.5, p0_kw: 2.75, i0_percent: 0,
+    switchgear_rated_current_a: 630, switchgear_rating_published: true,
     model: null, vector_group: null, cooling: null, datasheet_url: null,
     s_rated_kva_at_30c: null,
     mv_kv_min: null, mv_kv_max: null, lv_winding_count: 1, insulation_level: null,

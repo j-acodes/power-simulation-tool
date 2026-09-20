@@ -143,6 +143,12 @@
           "edge_id": null,
           "message": "No auxiliary consumption figure is published for PowerTitan 3.0 \u2014 ST6900UX-4H \u2014 the busbar auxiliary load is understated by that station's draw.",
           "node_id": "bus"
+        },
+        {
+          "code": "switchgear_rating_not_published",
+          "edge_id": null,
+          "message": "No switchgear rated current is published for 4000 kVA - Generic \u2014 using the standard 630 A ring main unit rating for those stations. Obtain the supplier's figure before a design review.",
+          "node_id": null
         }
       ]
     }
@@ -285,6 +291,12 @@
           "edge_id": null,
           "message": "No auxiliary consumption figure is published for PowerTitan 3.0 \u2014 ST6900UX-4H \u2014 the busbar auxiliary load is understated by that station's draw.",
           "node_id": "bus"
+        },
+        {
+          "code": "switchgear_rating_not_published",
+          "edge_id": null,
+          "message": "No switchgear rated current is published for 4000 kVA - Generic \u2014 using the standard 630 A ring main unit rating for those stations. Obtain the supplier's figure before a design review.",
+          "node_id": null
         }
       ]
     }
@@ -433,6 +445,12 @@
           "edge_id": null,
           "message": "No auxiliary consumption figure is published for PowerTitan 3.0 \u2014 ST6900UX-4H \u2014 the busbar auxiliary load is understated by that station's draw.",
           "node_id": "bus"
+        },
+        {
+          "code": "switchgear_rating_not_published",
+          "edge_id": null,
+          "message": "No switchgear rated current is published for 2750 kVA - Generic \u2014 using the standard 630 A ring main unit rating for those stations. Obtain the supplier's figure before a design review.",
+          "node_id": null
         }
       ]
     }
@@ -575,6 +593,12 @@
           "edge_id": null,
           "message": "No auxiliary consumption figure is published for PowerTitan 3.0 \u2014 ST6900UX-4H \u2014 the busbar auxiliary load is understated by that station's draw.",
           "node_id": "bus"
+        },
+        {
+          "code": "switchgear_rating_not_published",
+          "edge_id": null,
+          "message": "No switchgear rated current is published for 4000 kVA - Generic \u2014 using the standard 630 A ring main unit rating for those stations. Obtain the supplier's figure before a design review.",
+          "node_id": null
         }
       ]
     }
@@ -722,6 +746,12 @@
           "edge_id": null,
           "message": "No auxiliary consumption figure is published for PowerTitan 3.0 \u2014 ST6900UX-4H \u2014 the busbar auxiliary load is understated by that station's draw.",
           "node_id": "bus"
+        },
+        {
+          "code": "switchgear_rating_not_published",
+          "edge_id": null,
+          "message": "No switchgear rated current is published for 2750 kVA - Generic \u2014 using the standard 630 A ring main unit rating for those stations. Obtain the supplier's figure before a design review.",
+          "node_id": null
         }
       ]
     }
@@ -967,6 +997,12 @@
           "edge_id": null,
           "message": "No auxiliary consumption figure is published for PowerTitan 3.0 \u2014 ST6900UX-4H \u2014 the busbar auxiliary load is understated by that station's draw.",
           "node_id": "bus_b"
+        },
+        {
+          "code": "switchgear_rating_not_published",
+          "edge_id": null,
+          "message": "No switchgear rated current is published for 3300 kVA - Huawei, 2750 kVA - Generic \u2014 using the standard 630 A ring main unit rating for those stations. Obtain the supplier's figure before a design review.",
+          "node_id": null
         }
       ]
     }
@@ -1137,6 +1173,12 @@
           "edge_id": null,
           "message": "One or more drawn transformer stations exceed the fleet's 100 % transformer loading limit (aggregate loading is 1242 %). Add stations or pick bigger units.",
           "node_id": "bus"
+        },
+        {
+          "code": "switchgear_rating_not_published",
+          "edge_id": null,
+          "message": "No switchgear rated current is published for 3300 kVA - Huawei \u2014 using the standard 630 A ring main unit rating for those stations. Obtain the supplier's figure before a design review.",
+          "node_id": null
         }
       ]
     }
@@ -1295,6 +1337,12 @@
           "edge_id": null,
           "message": "One or more drawn transformer stations exceed the fleet's 100 % transformer loading limit (aggregate loading is 101 %). Add stations or pick bigger units.",
           "node_id": "bus"
+        },
+        {
+          "code": "switchgear_rating_not_published",
+          "edge_id": null,
+          "message": "No switchgear rated current is published for 3300 kVA - Huawei \u2014 using the standard 630 A ring main unit rating for those stations. Obtain the supplier's figure before a design review.",
+          "node_id": null
         }
       ]
     }
@@ -1441,7 +1489,14 @@
         "v_mv_kv": 20.0,
         "worst_trunk_current_a": 88.26772804621902
       },
-      "warnings": []
+      "warnings": [
+        {
+          "code": "switchgear_rating_not_published",
+          "edge_id": null,
+          "message": "No switchgear rated current is published for 3300 kVA - Huawei \u2014 using the standard 630 A ring main unit rating for those stations. Obtain the supplier's figure before a design review.",
+          "node_id": null
+        }
+      ]
     }
   },
   "min_no_aux": {
@@ -1581,7 +1636,14 @@
         "v_mv_kv": 20.0,
         "worst_trunk_current_a": 91.40805630680313
       },
-      "warnings": []
+      "warnings": [
+        {
+          "code": "switchgear_rating_not_published",
+          "edge_id": null,
+          "message": "No switchgear rated current is published for 3300 kVA - Huawei \u2014 using the standard 630 A ring main unit rating for those stations. Obtain the supplier's figure before a design review.",
+          "node_id": null
+        }
+      ]
     }
   },
   "seed_10mw_hv": {

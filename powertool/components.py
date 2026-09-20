@@ -77,6 +77,13 @@ class Cable:
 # and the "AC power at ambient" entry in CONTEXT.md. Not user-configurable yet.
 DEFAULT_AMBIENT_C = 40.0
 
+# The switchgear rated current a transformer station falls back to when its
+# supplier publishes none — the standard IEC ring-main-unit size. Silence is
+# not the absence of a limit (ADR-0006). It lives here and deliberately NOT in
+# the YAML, so that a figure in a station's datasheet block always means a
+# supplier published it.
+DEFAULT_SWITCHGEAR_RATED_CURRENT_A = 630.0
+
 
 @dataclass
 class Transformer:
@@ -123,6 +130,11 @@ class Transformer:
     ip_rating_enclosure: str | None = None
     rmu_kv_min: float | None = None
     rmu_kv_max: float | None = None
+    # SIMULATED, despite sitting among its typed RMU siblings: the sizing
+    # engine reads this one. The domain calls it the switchgear rated current
+    # and it bounds a station's through current (ADR-0006). ``None`` means the
+    # supplier publishes no figure — resolve it through
+    # ``switchgear_rated_current_a``, never read it raw.
     rmu_rated_current_a: float | None = None
     rmu_units: str | None = None
     rmu_relay_protection: str | None = None
@@ -180,6 +192,32 @@ class Transformer:
                 raise ValueError(f"{field} must be a non-negative number")
         if self.s_rated_kva_at_30c is not None and self.s_rated_kva_at_30c <= 0:
             raise ValueError("s_rated_kva_at_30c must be positive when published")
+        if self.rmu_rated_current_a is not None and self.rmu_rated_current_a <= 0:
+            raise ValueError("rmu_rated_current_a must be positive when published")
+
+    @property
+    def switchgear_rated_current_a(self) -> float:
+        """The continuous current this station's MV switchgear can carry [A].
+
+        A hard limit on the station's through current, with no utilization
+        factor: unlike a cable's ampacity it carries no installation-condition
+        margin (ADR-0006). An unpublished figure resolves to
+        ``DEFAULT_SWITCHGEAR_RATED_CURRENT_A`` rather than to no limit;
+        ``switchgear_rating_published`` says which happened.
+        """
+        if self.rmu_rated_current_a is None:
+            return DEFAULT_SWITCHGEAR_RATED_CURRENT_A
+        return float(self.rmu_rated_current_a)
+
+    @property
+    def switchgear_rating_published(self) -> bool:
+        """Whether the figure came from the supplier or from the fallback.
+
+        Kept visible so callers can report a defaulted rating instead of
+        presenting it as published data — the same reason
+        ``PvInverterCapability`` keeps its source ambient.
+        """
+        return self.rmu_rated_current_a is not None
 
     def rating_at(self, ambient_c: float) -> float:
         """The published rating [kVA] at ``ambient_c`` — lookup only, never

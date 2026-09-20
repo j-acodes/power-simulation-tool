@@ -8,7 +8,12 @@ import math
 
 import pytest
 
-from powertool.components import Cable, Transformer, current_a
+from powertool.components import (
+    DEFAULT_SWITCHGEAR_RATED_CURRENT_A,
+    Cable,
+    Transformer,
+    current_a,
+)
 
 
 def test_current_three_phase():
@@ -112,3 +117,37 @@ def _solution(**overrides):
 def test_display_name_leads_with_series_and_qualifies_with_model():
     sol = _solution(series="PowerTitan 3.0", model="ST6900UX-4H")
     assert sol.display_name == "PowerTitan 3.0 — ST6900UX-4H"
+
+
+# --- Switchgear rated current (ADR-0006) ---------------------------------
+
+
+def test_switchgear_rated_current_uses_the_published_figure():
+    t = Transformer("t", s_rated_kva_at_40c=3200, uk_percent=8.0, pk_kw=32.0,
+                    p0_kw=3.2, i0_percent=0.0, rmu_rated_current_a=630)
+    assert t.switchgear_rated_current_a == 630
+    assert t.switchgear_rating_published is True
+
+
+def test_switchgear_rated_current_falls_back_when_unpublished():
+    # Silence is not the absence of a limit: it resolves to the standard
+    # ring-main-unit size, and says it was defaulted. See ADR-0006.
+    t = Transformer("t", s_rated_kva_at_40c=3300, uk_percent=8.0, pk_kw=33.0,
+                    p0_kw=3.3, i0_percent=0.0, rmu_rated_current_a=None)
+    assert t.switchgear_rated_current_a == DEFAULT_SWITCHGEAR_RATED_CURRENT_A
+    assert t.switchgear_rated_current_a == 630.0
+    assert t.switchgear_rating_published is False
+
+
+def test_switchgear_rated_current_never_resolves_to_no_limit():
+    for published in (None, 630, 1250):
+        t = Transformer("t", s_rated_kva_at_40c=3200, uk_percent=8.0, pk_kw=32.0,
+                        p0_kw=3.2, i0_percent=0.0, rmu_rated_current_a=published)
+        assert t.switchgear_rated_current_a > 0
+        assert math.isfinite(t.switchgear_rated_current_a)
+
+
+def test_switchgear_rated_current_rejects_a_nonpositive_published_figure():
+    with pytest.raises(ValueError):
+        Transformer("t", s_rated_kva_at_40c=3200, uk_percent=8.0, pk_kw=32.0,
+                    p0_kw=3.2, i0_percent=0.0, rmu_rated_current_a=0)

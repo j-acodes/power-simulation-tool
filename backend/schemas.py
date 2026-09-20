@@ -136,6 +136,12 @@ class TransformerInfo(BaseModel):
     pk_kw: float
     p0_kw: float
     i0_percent: float
+    # Simulated: the switchgear rated current the engine checks a station's
+    # through current against, already resolved. ``switchgear_rating_published``
+    # says whether it came from the supplier or the ADR-0006 fallback; the raw
+    # ``rmu_rated_current_a`` below stays null when nothing was published.
+    switchgear_rated_current_a: float
+    switchgear_rating_published: bool
     # Typed parameters (never computed with) — see CONTEXT.md's "Simulated
     # parameter / typed parameter" entry. Unset for every PV transformer and
     # for the placeholder BESS station transformers.
