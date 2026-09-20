@@ -225,6 +225,61 @@ def test_pv_inverter_capacity_and_power_factor_violations_warn_but_return_result
     assert "inverter_power_factor_below_minimum" in codes
 
 
+def test_circuit_over_switchgear_through_current_still_solves_flagged_at_offending_station():
+    # A two-station daisy chain (ADR-0006): s1 sits nearest the busbar and
+    # carries its own current plus s2's, downstream of it in the chain. Each
+    # station's OWN current stays under its 630 A switchgear rating, but s1's
+    # THROUGH current (both stations) does not — the circuit is collectively
+    # too heavy, not self-contradictory, so it must still solve in full.
+    diagram = _minimal()
+    diagram["nodes"][0]["props"].update({"p_target_mw": 21.0, "pf": 0.95})
+    diagram["nodes"][2]["props"].update({
+        "model": "SUNGROW_MVS3200",
+        "pv_inverter": "sungrow-sg350hx-20",
+        "inverter_count": 10,
+    })
+    diagram["nodes"].append(_node(
+        "s2", "station", mode="catalogue", model="SUNGROW_MVS3200",
+        pv_inverter="sungrow-sg350hx-20", inverter_count=10,
+    ))
+    diagram["edges"].append(_edge("e_t2", "s1", "s2", length_m=400.0))
+
+    result = solve_diagram(diagram, db)
+
+    assert result["issues"] == []
+    assert result["results"] is not None
+    nodes = result["results"]["nodes"]
+    assert nodes["s1"]["i_a"] < 630.0  # each station's OWN current is fine on its own
+    assert nodes["s2"]["i_a"] < 630.0
+    warnings = result["results"]["warnings"]
+    matches = [w for w in warnings if w["code"] == "switchgear_through_current_exceeded"]
+    assert len(matches) == 1
+    assert matches[0]["node_id"] == "s1"  # nearest the busbar, carries the most
+    assert "642" in matches[0]["message"] or "630" in matches[0]["message"]
+
+
+def test_station_over_own_switchgear_rating_on_its_own_current_is_an_engine_error():
+    # A single station whose OWN current alone (no downstream) already exceeds
+    # its OWN switchgear rated current is a hard error: the catalogue is
+    # self-contradictory and nothing downstream of it is trustworthy, in the
+    # same style as the existing "No cable can carry" error.
+    diagram = _minimal()
+    diagram["nodes"][0]["props"].update({"p_target_mw": 25.0, "pf": 0.95})
+    diagram["nodes"][2]["props"].update({
+        "model": "SUNGROW_MVS3200",
+        "pv_inverter": "sungrow-sg350hx-20",
+        "inverter_count": 10,
+    })
+
+    result = solve_diagram(diagram, db)
+
+    assert result["results"] is None
+    assert result["issues"][0]["code"] == "engine_error"
+    message = result["issues"][0]["message"]
+    assert "738" in message and "630" in message
+    assert "switchgear rated current" in message
+
+
 def test_inverter_apparent_limit_is_independent_of_active_and_transformer_limits():
     diagram = _minimal()
     diagram["settings"]["rules"]["max_loading_pv"] = 1.10

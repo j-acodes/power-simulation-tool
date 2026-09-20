@@ -1678,6 +1678,24 @@ def map_results(inputs: GraphInputs, stage1s: list[SizingResult],
                             node_id=node_id,
                         ))
                 nodes[node_id] = station_payload
+                # A circuit that is collectively too heavy for a station's
+                # switchgear still solves and reports every current — the
+                # engineer needs those numbers to see where to split it
+                # (ADR-0006). This reads the through current the segment walk
+                # already accumulated (station.through_current_a), never
+                # recomputes it. A station's OWN current alone exceeding its
+                # OWN rating is instead a hard error raised in
+                # architecture.size_circuits, so it never reaches this point.
+                switchgear_rated_a = plan.transformer.switchgear_rated_current_a
+                if station.through_current_a > switchgear_rated_a + 1e-9:
+                    warnings.append(GraphIssue(
+                        "switchgear_through_current_exceeded",
+                        f"Station '{node_id}' carries {station.through_current_a:,.0f} A "
+                        f"through its switchgear, above its {switchgear_rated_a:,.0f} A "
+                        f"switchgear rated current — move a station to another circuit "
+                        f"or use a higher-rated one.",
+                        node_id=node_id,
+                    ))
             if not circuit.current_ok:
                 warnings.append(GraphIssue(
                     "circuit_over_current",

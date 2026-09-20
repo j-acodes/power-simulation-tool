@@ -478,6 +478,36 @@ def test_trunk_current_cap_violation_flagged():
     assert not circuit.current_ok
 
 
+def test_through_current_reads_the_accumulated_segment_walk_not_a_second_computation():
+    layout = _layout_one_circuit(n_stations=3)
+    (circuit,) = size_circuits(layout, _catalogue())
+    # Position 1 is nearest the substation: its through current is its own
+    # plus every station downstream of it, i.e. exactly the trunk current.
+    assert circuit.stations[0].through_current_a == pytest.approx(circuit.i_trunk_a)
+    # The far station's through current is just its own.
+    assert circuit.stations[-1].through_current_a == pytest.approx(
+        layout.circuit_plans[0][-1].i_a)
+    # Every station's through current is current_a() of the SAME s_kva already
+    # stored on its own segment — proof this reads the walk, not a second one.
+    for station, segment in zip(circuit.stations, circuit.segments):
+        assert station.through_current_a == pytest.approx(
+            current_a(segment.s_kva, layout.v_mv_kv))
+
+
+def test_station_over_own_switchgear_rating_raises_before_any_cable_is_sized():
+    # A station whose OWN current alone exceeds its OWN switchgear rated
+    # current is a hard error — the catalogue entry is self-contradictory
+    # (ADR-0006) — raised before through current or cable sizing.
+    tx = replace(_tx_2500(), rmu_rated_current_a=50.0)  # far below its own MV current
+    stage1 = _stage1(p_inv_kw=2_400.0, q_inv_kvar=500.0)
+    layout = arrange_plant(
+        stage1, [(tx, 1)], max_circuit_current_a=10_000.0,
+        trunk_length_km=0.8, spacing_km=0.35, v_mv_kv=20.0,
+    )
+    with pytest.raises(ValueError, match="switchgear rated current"):
+        size_circuits(layout, _catalogue())
+
+
 def test_charging_recorded_but_never_netted():
     layout = _layout_one_circuit(n_stations=3)
     (with_b,) = size_circuits(layout, _catalogue(b_us=120.0))

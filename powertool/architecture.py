@@ -418,6 +418,10 @@ class StationResult:
     model: str  # display label, e.g. "3300 kVA - Huawei"
     v_lv_kv: float  # the station's own transformer LV rating
     kind: str = "pv"  # fleet kind ("pv" or "bess"); see powertool.graph
+    # This station's own current plus every station downstream of it in the
+    # chain (ADR-0006's "through current"). Filled in once the segment walk
+    # below has accumulated it — 0.0 here is never the reported value.
+    through_current_a: float = 0.0
 
 
 @dataclass
@@ -516,6 +520,22 @@ def size_circuits(
     circuits: list[CircuitResult] = []
     for c_idx, plans in enumerate(layout.circuit_plans, start=1):
         n_stations = len(plans)
+        # A station whose OWN current alone exceeds its OWN switchgear rated
+        # current is a hard error: no number downstream of it is trustworthy,
+        # because the catalogue is contradicting itself (a station cannot draw
+        # more than its enclosure can carry before any circuit position is
+        # even considered). This is checked before through current, cable
+        # sizing, or anything else in this circuit (ADR-0006).
+        for plan in plans:
+            rated = plan.transformer.switchgear_rated_current_a
+            if plan.i_a > rated + 1e-9:
+                raise ValueError(
+                    f"Station transformer {plan.transformer.display_name} draws "
+                    f"{plan.i_a:,.0f} A on its own MV current in circuit {c_idx}, "
+                    f"above its own {rated:,.0f} A switchgear rated current. The "
+                    f"catalogue entry is self-contradictory — fix the datasheet or "
+                    f"choose a different station."
+                )
         stations = [
             StationResult(
                 index=k,
@@ -545,6 +565,11 @@ def size_circuits(
             p += plans[k - 1].p_mv_kw
             q += plans[k - 1].q_mv_kvar
             s = math.hypot(p, q)
+            # This IS the through current the switchgear check reads: the
+            # cumulative flow at station k's position, before this segment's
+            # own losses are consumed — the same ``s`` the segment below is
+            # sized against, just converted to amps. Not a second walk.
+            stations[k - 1].through_current_a = current_a(s, layout.v_mv_kv)
             cos_phi = p / s if s > 0 else 1.0
             sin_phi = q / s if s > 0 else 0.0
             length_km = layout.trunk_length_km if k == 1 else layout.spacing_km
