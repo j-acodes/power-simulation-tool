@@ -165,7 +165,11 @@ button:disabled {
   margin-bottom: 0.75rem;
 }
 
-.modal input[type='text'] {
+/* The prompt and technology dialogs put their controls straight in the form,
+   with no .field wrapper to dress them. A .field select inside a modal (the
+   seed wizard) still wins — that rule comes later. */
+.modal input[type='text'],
+.modal select {
   width: 100%;
   font: inherit;
   padding: 0.45rem 0.6rem;
