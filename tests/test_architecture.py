@@ -41,20 +41,30 @@ def _tx_2500(rmu_rated_current_a: float | None = None) -> Transformer:
     # Representative 2500 kVA 20/0.8 kV station transformer. An explicit
     # switchgear rating lets a test reproduce a specific circuit split
     # (ADR-0006); omitted, it falls back to DEFAULT_SWITCHGEAR_RATED_CURRENT_A.
+    # A published 2 x 400 mm^2 cable entry keeps this fixture's existing
+    # cable-selection tests exercising cross-sections above the engine's
+    # 2 x 300 mm^2 fallback (ADR-0007) — the cable-entry FALLBACK itself has
+    # its own dedicated tests using a station that publishes none.
     return Transformer("TX_2500", s_rated_kva_at_40c=2500, uk_percent=6.0, pk_kw=24.0,
                        p0_kw=2.5, i0_percent=0.8, hv_kv=20, lv_kv=0.8,
-                       rmu_rated_current_a=rmu_rated_current_a)
+                       rmu_rated_current_a=rmu_rated_current_a,
+                       cable_entry_cables_per_phase=2,
+                       cable_entry_max_cross_section_mm2=400)
 
 
 def _tx_9000() -> Transformer:
     # A big PV station, parameters per the project's design assumptions.
     return Transformer("TX_9000", s_rated_kva_at_40c=9000, uk_percent=8.0, pk_kw=90.0,
-                       p0_kw=9.0, i0_percent=0.0, lv_kv=0.8, brand="BrandA")
+                       p0_kw=9.0, i0_percent=0.0, lv_kv=0.8, brand="BrandA",
+                       cable_entry_cables_per_phase=2,
+                       cable_entry_max_cross_section_mm2=400)
 
 
 def _tx_3300() -> Transformer:
     return Transformer("TX_3300", s_rated_kva_at_40c=3300, uk_percent=8.0, pk_kw=33.0,
-                       p0_kw=3.3, i0_percent=0.0, lv_kv=0.8, brand="BrandB")
+                       p0_kw=3.3, i0_percent=0.0, lv_kv=0.8, brand="BrandB",
+                       cable_entry_cables_per_phase=2,
+                       cable_entry_max_cross_section_mm2=400)
 
 
 def _stage1(p_inv_kw: float, q_inv_kvar: float) -> SizingResult:
@@ -528,6 +538,52 @@ def test_through_current_reads_the_accumulated_segment_walk_not_a_second_computa
             current_a(segment.s_kva, layout.v_mv_kv))
 
 
+# --- Cable entry bounds circuit cables (ADR-0007) ---------------------------
+
+
+def test_segment_bound_is_the_stricter_of_its_two_ends():
+    # Station 1 (near the busbar) publishes a generous cable entry; station 2
+    # (far) publishes a tight one. The far segment (station 2 to station 1)
+    # must respect station 2's tighter bound even though station 1's is wide.
+    near = Transformer("NEAR", s_rated_kva_at_40c=9000, uk_percent=8.0, pk_kw=90.0,
+                       p0_kw=9.0, i0_percent=0.0, lv_kv=0.8, rmu_rated_current_a=2000.0,
+                       cable_entry_cables_per_phase=3, cable_entry_max_cross_section_mm2=500.0)
+    far_tx = Transformer("FAR", s_rated_kva_at_40c=3300, uk_percent=8.0, pk_kw=33.0,
+                         p0_kw=3.3, i0_percent=0.0, lv_kv=0.8, rmu_rated_current_a=2000.0,
+                         cable_entry_cables_per_phase=1, cable_entry_max_cross_section_mm2=150.0)
+    stage1 = _stage1(p_inv_kw=8_000.0, q_inv_kvar=1_500.0)
+    layout = arrange_plant_manual(stage1, [[near, far_tx]], v_mv_kv=20.0)
+    (circuit,) = size_circuits(
+        layout, _catalogue(), segment_lengths={(1, 1): 0.8, (1, 2): 0.35})
+
+    far_segment = circuit.segments[-1]  # station 2 (FAR) to station 1 (NEAR)
+    assert far_segment.selection is not None
+    assert far_segment.selection.n_parallel <= 1  # FAR's own limit, not NEAR's 3
+    assert far_segment.selection.cable.cross_section_mm2 <= 150  # FAR's own cap
+
+
+def test_segment_with_no_admissible_cable_is_flagged_not_raised():
+    # Two stations whose own current is comfortably within their own cable
+    # entry, but whose SUM (the trunk's cumulative current) is not — the
+    # trunk is recorded unsized and the circuit still solves (ADR-0007);
+    # this is deliberately NOT the own-current hard error below.
+    tx = Transformer("MID", s_rated_kva_at_40c=9000, uk_percent=8.0, pk_kw=90.0,
+                     p0_kw=9.0, i0_percent=0.0, lv_kv=0.8, rmu_rated_current_a=2000.0)
+    stage1 = _stage1(p_inv_kw=16_000.0, q_inv_kvar=0.0)
+    layout = arrange_plant_manual(stage1, [[tx, tx]], v_mv_kv=20.0)
+    for plan in layout.circuit_plans[0]:
+        assert plan.i_a < 300.0  # comfortably under the fallback's ~376 A ceiling
+
+    (circuit,) = size_circuits(layout, _catalogue())
+
+    trunk = circuit.segments[0]
+    assert trunk.selection is None
+    assert "cable entry" in trunk.cable_label
+    assert trunk.dp_kw == 0.0
+    far_segment = circuit.segments[-1]
+    assert far_segment.selection is not None  # only the trunk is flagged
+
+
 def test_station_over_own_switchgear_rating_raises_at_auto_arrangement():
     # assign_circuits screens this before any circuit is even formed
     # (ADR-0006): a station whose OWN current alone exceeds its OWN
@@ -549,6 +605,65 @@ def test_station_over_own_switchgear_rating_raises_before_any_cable_is_sized():
     layout = arrange_plant_manual(stage1, [[tx]], v_mv_kv=20.0)
     with pytest.raises(ValueError, match="switchgear rated current"):
         size_circuits(layout, _catalogue())
+
+
+def test_station_over_own_cable_entry_raises_at_auto_arrangement():
+    # Same standing as the switchgear hard error above, for cable entry
+    # (ADR-0007): arrange_plant's cable_candidates path screens a station
+    # whose own current alone no cable within its own cable entry can carry,
+    # before any circuit is even formed.
+    tx = replace(_tx_2500(), cable_entry_cables_per_phase=1,
+                 cable_entry_max_cross_section_mm2=50.0)  # no catalogue cable fits
+    stage1 = _stage1(p_inv_kw=2_400.0, q_inv_kvar=500.0)
+    with pytest.raises(ValueError, match="cable entry"):
+        arrange_plant(stage1, [(tx, 1)],
+                      trunk_length_km=0.8, spacing_km=0.35, v_mv_kv=20.0,
+                      cable_candidates=_catalogue())
+
+
+def test_arrange_plant_without_cable_candidates_skips_the_cable_entry_check():
+    # cable_candidates is opt-in: omitted (the default), grouping considers
+    # switchgear only, unaffected by a station's cable entry — existing
+    # callers with no cable catalogue in scope keep today's behaviour.
+    tx = replace(_tx_2500(), cable_entry_cables_per_phase=1,
+                 cable_entry_max_cross_section_mm2=50.0)
+    stage1 = _stage1(p_inv_kw=2_400.0, q_inv_kvar=500.0)
+    layout = arrange_plant(stage1, [(tx, 1)],
+                           trunk_length_km=0.8, spacing_km=0.35, v_mv_kv=20.0)
+    assert layout.circuit_sizes == [1]
+
+
+def test_station_over_own_cable_entry_raises_before_any_cable_is_sized():
+    # A DRAWN plant skips assign_circuits entirely, so size_circuits is the
+    # last line of defense for the same hard error (ADR-0007).
+    tx = replace(_tx_2500(), cable_entry_cables_per_phase=1,
+                 cable_entry_max_cross_section_mm2=50.0)
+    stage1 = _stage1(p_inv_kw=2_400.0, q_inv_kvar=500.0)
+    layout = arrange_plant_manual(stage1, [[tx]], v_mv_kv=20.0)
+    with pytest.raises(ValueError, match="cable entry"):
+        size_circuits(layout, _catalogue())
+
+
+def test_cable_candidates_narrows_stage1_grouping_to_admissible_circuits():
+    # Two identical stations whose own current comfortably fits their own
+    # switchgear (2000 A, generous) but whose SUM exceeds what the fallback
+    # cable entry (2 x 300 mm^2, ~376 A here with only AL_95 <= 300 mm^2 in
+    # this catalogue) can carry: switchgear-only grouping packs them into one
+    # circuit; cable-entry-aware grouping must split them (ADR-0007's
+    # "Stage-1 grouping only forms circuits in which every segment has an
+    # admissible cable").
+    tx = Transformer("BIG", s_rated_kva_at_40c=9000, uk_percent=8.0, pk_kw=90.0,
+                     p0_kw=9.0, i0_percent=0.0, lv_kv=0.8, rmu_rated_current_a=2000.0)
+    stage1 = _stage1(p_inv_kw=16_000.0, q_inv_kvar=0.0)
+
+    switchgear_only = arrange_plant(stage1, [(tx, 2)],
+                                    trunk_length_km=0.5, spacing_km=0.2, v_mv_kv=20.0)
+    assert switchgear_only.circuit_sizes == [2]
+
+    cable_aware = arrange_plant(stage1, [(tx, 2)],
+                                trunk_length_km=0.5, spacing_km=0.2, v_mv_kv=20.0,
+                                cable_candidates=_catalogue())
+    assert cable_aware.circuit_sizes == [1, 1]
 
 
 def test_charging_recorded_but_never_netted():
@@ -919,7 +1034,17 @@ def test_recompute_operating_point_preserves_complete_branch_details():
 def test_recompute_operating_point_updates_uniform_loading_and_current():
     stage1, layout = _full_plant_inputs()
     layout = replace(layout, max_loading=0.90)
-    branch = size_branch(layout, _catalogue())
+    # The x1.10 correction below pushes the trunk current just past what
+    # AL_95 (the only _catalogue() cable within the fixed 300 mm^2 busbar-end
+    # cable entry, ADR-0007) can carry at 2 parallel runs; AL_300 keeps this
+    # scenario sized so the assertions below still exercise the recomputed
+    # cable-current arithmetic rather than a flagged-unsized segment.
+    catalogue = _catalogue() + [
+        Cable("AL_300", r_ohm_per_km=0.10, x_ohm_per_km=0.115, b_us_per_km=45.0,
+              cross_section_mm2=300, material="aluminium", rated_current_a=300,
+              rated_voltage_kv=20),
+    ]
+    branch = size_branch(layout, catalogue)
     recomputed = architecture.recompute_branch(branch, stage1, 1.10)
     fleet_loading = stage1.s_inv_kva * 1.10 / layout.s_fleet_kva
     station = recomputed.circuits[0].stations[0]
@@ -941,7 +1066,16 @@ def test_refinement_reselects_auto_cable_from_original_catalogue():
         stage1, [(_tx_2500(), 1)],
         trunk_length_km=10.0, spacing_km=0.35, v_mv_kv=20.0,
     )
-    catalogue = _catalogue()
+    # AL_400 (400 mm^2) is now excluded from the trunk regardless of the
+    # station's own published cable entry: the busbar end of a circuit's
+    # first cable always counts as the engine's 2 x 300 mm^2 cable-entry
+    # fallback (ADR-0007), since no busbar switchgear is sized/published yet.
+    # AL_300 stands in as the escalation target that still fits.
+    catalogue = _catalogue() + [
+        Cable("AL_300", r_ohm_per_km=0.10, x_ohm_per_km=0.115, b_us_per_km=45.0,
+              cross_section_mm2=300, material="aluminium", rated_current_a=470,
+              rated_voltage_kv=20),
+    ]
     initial = size_branch(layout, catalogue, max_parallel=1)
     assert initial.circuits[0].segments[0].cable_label == "Al_3x1x95_20kV"
 
@@ -953,7 +1087,7 @@ def test_refinement_reselects_auto_cable_from_original_catalogue():
         initial.p_busbar_kw
     )
     assert refined.branch_refinements[0].p_poc_refined_delivered_kw >= 2_200.0 - 1e-5
-    assert refined.branches[0].circuits[0].segments[0].cable_label == "Al_3x1x400_20kV"
+    assert refined.branches[0].circuits[0].segments[0].cable_label == "Al_3x1x300_20kV"
 
 
 def test_forced_cable_crossing_after_refinement_is_not_swallowed():

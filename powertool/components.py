@@ -84,6 +84,16 @@ DEFAULT_AMBIENT_C = 40.0
 # supplier published it.
 DEFAULT_SWITCHGEAR_RATED_CURRENT_A = 630.0
 
+# The cable entry a transformer station falls back to when its supplier
+# publishes no figure, and the fixed figure assumed at the busbar end of a
+# circuit's first cable — no station sits there to publish one (ADR-0007).
+# Reused by both, so one number ever means "2 x 300 mm^2" in this engine. It
+# lives here and deliberately NOT in the YAML, mirroring
+# DEFAULT_SWITCHGEAR_RATED_CURRENT_A. Lowered from 2 x 630 mm^2 at
+# implementation — see ADR-0007's amendment.
+DEFAULT_CABLE_ENTRY_CABLES_PER_PHASE = 2
+DEFAULT_CABLE_ENTRY_MAX_CROSS_SECTION_MM2 = 300.0
+
 
 @dataclass
 class Transformer:
@@ -149,6 +159,15 @@ class Transformer:
     depth_mm: float | None = None
     weight_kg: float | None = None
     cable_entry: str | None = None
+    # SIMULATED, despite sitting beside its typed ``cable_entry`` string
+    # sibling above: the sizing engine reads this pair to bound a circuit
+    # cable (ADR-0007, CONTEXT.md's "Cable entry"). Resolve through
+    # ``cable_entry_parallel_limit`` / ``cable_entry_cross_section_limit_mm2``,
+    # never read raw. A datasheet publishing only one of the pair is treated
+    # as unpublished (``cable_entry_published``) — one cable entry per
+    # station model, never a mixed published/defaulted pair.
+    cable_entry_cables_per_phase: int | None = None
+    cable_entry_max_cross_section_mm2: float | None = None
     corrosion_class: str | None = None
     temp_min_c: float | None = None
     temp_max_c: float | None = None
@@ -194,6 +213,19 @@ class Transformer:
             raise ValueError("s_rated_kva_at_30c must be positive when published")
         if self.rmu_rated_current_a is not None and self.rmu_rated_current_a <= 0:
             raise ValueError("rmu_rated_current_a must be positive when published")
+        if self.cable_entry_cables_per_phase is not None:
+            invalid = (isinstance(self.cable_entry_cables_per_phase, bool)
+                       or not isinstance(self.cable_entry_cables_per_phase, int)
+                       or self.cable_entry_cables_per_phase <= 0)
+            if invalid:
+                raise ValueError(
+                    "cable_entry_cables_per_phase must be a positive integer when published"
+                )
+        if (self.cable_entry_max_cross_section_mm2 is not None
+                and self.cable_entry_max_cross_section_mm2 <= 0):
+            raise ValueError(
+                "cable_entry_max_cross_section_mm2 must be positive when published"
+            )
 
     @property
     def switchgear_rated_current_a(self) -> float:
@@ -218,6 +250,41 @@ class Transformer:
         ``PvInverterCapability`` keeps its source ambient.
         """
         return self.rmu_rated_current_a is not None
+
+    @property
+    def cable_entry_published(self) -> bool:
+        """Whether BOTH cable-entry figures came from the supplier.
+
+        One cable entry per station model (CONTEXT.md's "Cable entry"): a
+        datasheet publishing only cables-per-phase or only the cross-section
+        is treated as unpublished, never a mixed published/defaulted pair.
+        """
+        return (self.cable_entry_cables_per_phase is not None
+                and self.cable_entry_max_cross_section_mm2 is not None)
+
+    @property
+    def cable_entry_parallel_limit(self) -> int:
+        """Cables accepted per phase [count] at this station's terminals.
+
+        Falls back to ``DEFAULT_CABLE_ENTRY_CABLES_PER_PHASE`` when
+        unpublished, never to no limit (ADR-0007). Bounds the parallel-run
+        count a circuit cable at this station may use — the stricter of the
+        two ends of a segment wins; see ``powertool.cable_sizing``.
+        """
+        if not self.cable_entry_published:
+            return DEFAULT_CABLE_ENTRY_CABLES_PER_PHASE
+        return int(self.cable_entry_cables_per_phase)
+
+    @property
+    def cable_entry_cross_section_limit_mm2(self) -> float:
+        """Maximum cable cross-section [mm^2] this station's terminals accept.
+
+        Falls back to ``DEFAULT_CABLE_ENTRY_MAX_CROSS_SECTION_MM2`` when
+        unpublished, never to no limit (ADR-0007).
+        """
+        if not self.cable_entry_published:
+            return DEFAULT_CABLE_ENTRY_MAX_CROSS_SECTION_MM2
+        return float(self.cable_entry_max_cross_section_mm2)
 
     def rating_at(self, ambient_c: float) -> float:
         """The published rating [kVA] at ``ambient_c`` — lookup only, never

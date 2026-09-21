@@ -55,20 +55,33 @@ def test_hand_computed_anchor_before_regenerating_the_baseline():
     550.350264 A — inside the published 630 A rating. The retired 400 A cap
     allows at most 5 stations (5 * 68.793783 = 343.968913 A; 6 would be 412.76 A),
     so 3 circuits cannot hold 16 and it needed [4, 4, 4, 4]: this anchor is
-    chosen so the two rules disagree.
+    chosen so the two rules disagree. SUNGROW_MVS3200 publishes no cable
+    entry either, so its own cable-entry ceiling is the engine's 2 x 300 mm^2
+    fallback (ADR-0007): the best <= 300 mm^2 catalogue cable, AL_300_20kV
+    (415 A), gives 2 * 0.80 * 415 = 664 A — above the 630 A switchgear
+    ceiling, so switchgear still binds first here exactly as before and the
+    grouping is unaffected by ADR-0007's amendment.
 
     Trunk through current (position 1, nearest the substation): the REAL
     segment-walk figure, the eight station outputs less the series losses of
     the 7 spans downstream of the trunk (spans 2-8, cables as the selector
-    chose them at 0.5 km trunk / 0.2 km spacing):
-      sum dP = 14.544646 + 7.883582 + 7.047718 + 7.250591 + 6.728368
-               + 4.650095 + 1.163080 = 49.268080 kW
-      sum dQ = 7.483667 + 9.574376 + 6.863742 + 4.667568 + 2.857707
-               + 1.396391 + 0.349265 = 33.192716 kvar
-      P = 8 * 2378.8 - 49.268080 = 18981.131920 kW
-      Q = 8 * -142.870572 - 33.192716 = -1176.157292 kvar
-      I_trunk = hypot(P, Q) / (sqrt(3) * 20) = 19017.537036 / 34.641016
-              = 548.989006 A  (below the 550.350264 A nominal packing bound)
+    chose them at 0.5 km trunk / 0.2 km spacing, each now additionally bound
+    to at most 2 parallel runs of <= 300 mm^2 — both ends of every span here
+    fall back to 2 x 300 mm^2, ADR-0007):
+      sum dP = 14.521340 + 13.415323 + 14.491693 + 7.250591 + 6.728368
+               + 4.650095 + 1.163080 = 62.220491 kW
+      sum dQ = 7.471676 + 5.697824 + 4.351754 + 4.667568 + 2.857707
+               + 1.396391 + 0.349265 = 26.792184 kvar
+      P = 8 * 2378.8 - 62.220491 = 18968.179509 kW
+      Q = 8 * -142.870572 - 26.792184 = -1169.756760 kvar
+      I_trunk = hypot(P, Q) / (sqrt(3) * 20) = 19004.214394 / 34.641016
+              = 548.604415 A  (below the 550.350264 A nominal packing bound)
+
+    The trunk segment itself (index 1) is bound the same way — both ends fall
+    back to 2 x 300 mm^2 too, since the busbar end always does (no busbar
+    switchgear is sized/published yet) — and select_cable picks the fewest
+    parallel runs, smallest cross-section that clears ampacity and the 1.30%
+    loss budget within that bound: 2 x AL_240_20kV (240 mm^2).
     """
     tx = ComponentDatabase.load().transformer("SUNGROW_MVS3200")
     assert tx.s_rated_kva_at_40c == 3200
@@ -98,11 +111,15 @@ def test_hand_computed_anchor_before_regenerating_the_baseline():
     assert abs(nominal_bound - 550.350264) < 1e-5
     assert nominal_bound > 400.0  # would not fit under the retired cap
     spans = circuits[0].segments[1:]
-    assert abs(sum(sg.dp_kw for sg in spans) - 49.268080) < 1e-5
-    assert abs(sum(sg.dq_series_kvar for sg in spans) - 33.192716) < 1e-5
+    assert abs(sum(sg.dp_kw for sg in spans) - 62.220491) < 1e-5
+    assert abs(sum(sg.dq_series_kvar for sg in spans) - 26.792184) < 1e-5
     for circuit in circuits:
-        assert abs(circuit.i_trunk_a - 548.989006) < 1e-5
+        assert abs(circuit.i_trunk_a - 548.604415) < 1e-5
     assert circuits[0].i_trunk_a == circuits[1].i_trunk_a  # identical circuits
+    trunk_selection = circuits[0].segments[0].selection
+    assert trunk_selection is not None
+    assert trunk_selection.n_parallel == 2
+    assert trunk_selection.cable.cross_section_mm2 == 240
 
 
 def _differences(expected, actual, path="") -> list[str]:

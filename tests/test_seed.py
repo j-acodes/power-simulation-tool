@@ -158,7 +158,10 @@ def test_seeding_is_deterministic_and_every_station_respects_its_switchgear_rati
     assert result["issues"] == []
     summary = result["results"]["summary"]
     assert summary["all_current_ok"]
-    assert result["results"]["warnings"] == []
+    # The reference station publishes a switchgear rated current but no cable
+    # entry yet (no on-file datasheet does) — the ADR-0007 fallback notice is
+    # expected here; nothing else is.
+    assert [w["code"] for w in result["results"]["warnings"]] == ["cable_entry_not_published"]
 
 
 def test_seed_mv_interconnection_variant_validates_and_solves():

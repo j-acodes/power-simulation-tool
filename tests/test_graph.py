@@ -1063,9 +1063,12 @@ def test_solve_returns_issues_with_http_200():
 
 def test_solve_turns_engine_errors_into_issues_not_500s():
     # A forced 95 mm² trunk cannot carry a 20 MW plant: select_cable raises, and
-    # the API must answer with an issue, never a server error.
+    # the API must answer with an issue, never a server error. No station in
+    # this diagram publishes a cable entry, so the trunk is capped at 2
+    # parallel runs (ADR-0007) — forcing a single small cable type there fails
+    # on ampacity at the catalogue's normal utilization, no extreme setting
+    # needed any more.
     diagram = _hv_diagram()
-    diagram["settings"]["rules"]["max_utilization"] = 0.10
     diagram["edges"][3]["sizing"] = {"mode": "forced", "cable": "AL_95_20kV"}
     resp = client.post("/api/solve", json=diagram)
     assert resp.status_code == 200
@@ -1210,9 +1213,11 @@ def test_golden_45mw_example_drawn_equals_the_auto_path():
     assert summary["worst_trunk_current_a"] == max(
         c.i_trunk_a for c in arch.branches[0].circuits)
     # The fixture draws Huawei stations, which publish no switchgear rated
-    # current, so the ADR-0006 fallback notice is expected here. Nothing else is.
+    # current and no cable entry, so both ADR-0006/ADR-0007 fallback notices
+    # are expected here. Nothing else is.
     assert summary["power_balance_ok"]
-    assert [w["code"] for w in results["warnings"]] == ["switchgear_rating_not_published"]
+    assert sorted(w["code"] for w in results["warnings"]) == sorted(
+        ["switchgear_rating_not_published", "cable_entry_not_published"])
     assert summary["p_poc_refined_delivered_kw"] >= P_POC_KW
 
     # Every cable run: same section, same losses, keyed to the drawn edge.
@@ -1247,7 +1252,7 @@ def test_golden_45mw_example_drawn_equals_the_auto_path():
 
 def test_golden_rearranging_the_drawing_changes_the_numbers():
     # Sanity on the golden test: it compares real numbers, not a tautology —
-    # moving one station to another circuit must move the losses.
+    # moving one station to another circuit must move the numbers.
     _stage1, layout, arch = _auto_reference()
     diagram, _ids, _edges = _drawn_example(layout)
 
@@ -1262,12 +1267,21 @@ def test_golden_rearranging_the_drawing_changes_the_numbers():
     results = body["results"]
     assert body["issues"] == []
     assert results["summary"]["circuit_sizes"] == [5, 2, 1]
-    assert results["summary"]["total_cable_loss_kw"] > arch.total_cable_loss_kw
+    # The grown trunk's ~735 A now exceeds what 2 x 300 mm^2 (no station here
+    # publishes a cable entry) can carry, so it is flagged and recorded
+    # unsized (zero loss) rather than costed — total loss can move either way
+    # once a segment drops out like this, so the number merely has to differ,
+    # not increase (ADR-0007).
+    assert results["summary"]["total_cable_loss_kw"] != arch.total_cable_loss_kw
     # ... and circuit 1's near station now carries more than its own 630 A
     # switchgear rated current in through current — flagged, never refused.
     through_current_warnings = [
         w for w in results["warnings"] if w["code"] == "switchgear_through_current_exceeded"]
     assert [w["node_id"] for w in through_current_warnings] == ["s1_1"]
+    # The grown trunk itself is flagged too: no cable fits its cable entry.
+    cable_entry_warnings = [
+        w for w in results["warnings"] if w["code"] == "circuit_cable_entry_exceeded"]
+    assert [w["edge_id"] for w in cable_entry_warnings] == [_edges[(1, 1)]]
 
 
 def test_unrecognised_fleet_kind_is_rejected_not_coerced():
@@ -1354,6 +1368,20 @@ def test_unpublished_switchgear_rating_falls_back_with_notice():
                if w["code"] == "switchgear_rating_not_published"]
     assert len(notices) == 1
     assert "630 A" in notices[0]["message"]
+    assert "Huawei" in notices[0]["message"]
+
+
+def test_unpublished_cable_entry_falls_back_with_notice():
+    # No station in today's catalogue publishes a cable entry (ADR-0007), so
+    # every design exercises this fallback too. Silence must never mean "no
+    # limit", the same stance as the switchgear notice above.
+    result = solve_diagram(_minimal(), db)
+
+    assert result["issues"] == []
+    notices = [w for w in result["results"]["warnings"]
+               if w["code"] == "cable_entry_not_published"]
+    assert len(notices) == 1
+    assert "2 x 300 mm" in notices[0]["message"]
     assert "Huawei" in notices[0]["message"]
 
 

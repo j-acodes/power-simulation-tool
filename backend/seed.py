@@ -148,6 +148,10 @@ def seed_diagram(params: dict, db: ComponentDatabase) -> dict:
         # arrange_plant's own default, since the produced diagram's default
         # ambient is this same constant.
         ambient_c=DEFAULT_AMBIENT_C,
+        # Stage-1 grouping only proposes circuits every segment can actually
+        # be cabled for (ADR-0007) — the wizard has the MV cable catalogue in
+        # scope, so it opts into the cable-entry-aware ceiling.
+        cable_candidates=db.cables_for_voltage(v_mv_kv),
     )
 
     return _layout_to_diagram(layout, params, v_export_kv)

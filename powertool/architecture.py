@@ -26,7 +26,14 @@ import math
 from dataclasses import dataclass, replace
 
 from .cable_sizing import CableSelection, select_cable
-from .components import DEFAULT_AMBIENT_C, Cable, Transformer, current_a
+from .components import (
+    DEFAULT_AMBIENT_C,
+    DEFAULT_CABLE_ENTRY_CABLES_PER_PHASE,
+    DEFAULT_CABLE_ENTRY_MAX_CROSS_SECTION_MM2,
+    Cable,
+    Transformer,
+    current_a,
+)
 from .sizing import SizingResult, format_cable_label
 
 
@@ -109,6 +116,33 @@ class PlantLayout:
     def circuit_sizes_label(self) -> str:
         """e.g. ``"4 (5+5+4+4)"`` for quick display."""
         return f"{self.n_circuits} ({'+'.join(str(s) for s in self.circuit_sizes)})"
+
+
+def _cable_entry_ceiling_a(
+    candidates: list[Cable],
+    max_parallel: int,
+    max_cross_section_mm2: float,
+    max_utilization: float,
+) -> float:
+    """The highest current an admissible cable can carry within a cable entry
+    (ADR-0007): the best-ampacity candidate at or under the cross-section cap,
+    run at up to ``max_parallel`` circuits, each held to ``max_utilization``.
+
+    A pure ampacity ceiling — it ignores the loss budget, the same standing
+    as ``Transformer.switchgear_rated_current_a``. Cables still carry their
+    own utilization cap (ADR-0006's "no utilization factor" reasoning is
+    about switchgear, not cables). Returns 0.0 when nothing in the catalogue
+    fits the cross-section cap, so a caller comparing a station's own current
+    against this ceiling raises rather than silently passing.
+    """
+    usable = [
+        c for c in candidates
+        if c.rated_current_a is not None and c.cross_section_mm2 is not None
+        and c.cross_section_mm2 <= max_cross_section_mm2 + 1e-9
+    ]
+    if not usable:
+        return 0.0
+    return max(c.rated_current_a for c in usable) * max_utilization * max_parallel
 
 
 def assign_circuits(i_stations: list[float], i_ratings: list[float]) -> list[list[int]]:
@@ -208,6 +242,8 @@ def arrange_plant(
     max_loading: float = 1.0,
     kind: str = "pv",
     ambient_c: float = DEFAULT_AMBIENT_C,
+    cable_candidates: list[Cable] | None = None,
+    max_utilization: float = 0.80,
 ) -> PlantLayout:
     """Arrange the Stage-1 station fleet into MV circuits.
 
@@ -223,6 +259,14 @@ def arrange_plant(
     ``loading_ok = False`` so the caller can warn. ``kind`` (fleet kind, "pv"
     or "bess") is stamped on every station plan built here — see
     ``StationPlan.kind``.
+
+    ``cable_candidates``, when given, also bounds circuit grouping by each
+    station's own cable entry (ADR-0007): a station whose own current alone
+    cannot be carried within its own cable entry raises, and every circuit's
+    ceiling additionally respects the tighter of switchgear rating and cable
+    entry so Stage-1 planning never groups a circuit no cable could serve.
+    Omitted (the default), grouping considers switchgear only — the caller
+    has no cable catalogue in scope yet.
     """
     if trunk_length_km < 0 or spacing_km < 0:
         raise ValueError("Lengths must be non-negative")
@@ -255,10 +299,30 @@ def arrange_plant(
         )
         plans.extend([plan] * count)  # identical figures for every unit of a model
 
-    bins = assign_circuits(
-        [p.i_a for p in plans],
-        [p.transformer.switchgear_rated_current_a for p in plans],
-    )
+    switchgear_ratings = [p.transformer.switchgear_rated_current_a for p in plans]
+    if cable_candidates is not None:
+        cable_ceilings = [
+            _cable_entry_ceiling_a(
+                cable_candidates, p.transformer.cable_entry_parallel_limit,
+                p.transformer.cable_entry_cross_section_limit_mm2, max_utilization,
+            )
+            for p in plans
+        ]
+        for plan, ceiling in zip(plans, cable_ceilings):
+            if plan.i_a > ceiling + 1e-9:
+                tx = plan.transformer
+                raise ValueError(
+                    f"Station transformer {tx.display_name} draws {plan.i_a:,.0f} A "
+                    f"on its own MV current, above the {ceiling:,.0f} A its own "
+                    f"{tx.cable_entry_parallel_limit} x "
+                    f"{tx.cable_entry_cross_section_limit_mm2:g} mm^2 cable entry "
+                    f"can carry. Pick a station with a larger cable entry."
+                )
+        circuit_ratings = [min(sw, c) for sw, c in zip(switchgear_ratings, cable_ceilings)]
+    else:
+        circuit_ratings = switchgear_ratings
+
+    bins = assign_circuits([p.i_a for p in plans], circuit_ratings)
     circuit_plans = [
         sorted((plans[i] for i in b), key=lambda p: -p.transformer.rating_at(ambient_c))
         for b in bins
@@ -535,6 +599,15 @@ def size_circuits(
     so the MV-side PF is worse than at the inverter terminals). Worst-case
     reactive convention preserved: cable charging is recorded per segment but
     never netted against the series reactive.
+
+    Every segment is additionally bound by the cable entry (ADR-0007) of its
+    two ends — the lesser cables-per-phase and the lesser maximum
+    cross-section win; the busbar end of the trunk segment counts as the
+    engine's cable-entry fallback. A non-forced segment that no admissible
+    cable fits within that bound is recorded with ``selection=None`` and a
+    descriptive ``cable_label``, zero losses, and the circuit still solves —
+    the caller flags it at that segment's edge. A forced segment keeps
+    raising, as before.
     """
     if segment_lengths:
         for key, value in segment_lengths.items():
@@ -560,6 +633,25 @@ def size_circuits(
                     f"above its own {rated:,.0f} A switchgear rated current. The "
                     f"catalogue entry is self-contradictory — fix the datasheet or "
                     f"choose a different station."
+                )
+        # Same standing, for cable entry (ADR-0007): a station whose own
+        # current alone cannot be carried within its own cable entry is a
+        # hard error too, checked against the full catalogue (not yet bound
+        # by a neighbour — that per-segment narrowing happens below).
+        for plan in plans:
+            tx = plan.transformer
+            ceiling = _cable_entry_ceiling_a(
+                cable_candidates, tx.cable_entry_parallel_limit,
+                tx.cable_entry_cross_section_limit_mm2, max_utilization,
+            )
+            if plan.i_a > ceiling + 1e-9:
+                raise ValueError(
+                    f"Station transformer {tx.display_name} draws {plan.i_a:,.0f} A "
+                    f"on its own MV current in circuit {c_idx}, above the "
+                    f"{ceiling:,.0f} A its own {tx.cable_entry_parallel_limit} x "
+                    f"{tx.cable_entry_cross_section_limit_mm2:g} mm^2 cable entry "
+                    f"can carry. The catalogue entry is self-contradictory — fix "
+                    f"the datasheet or choose a different station."
                 )
         stations = [
             StationResult(
@@ -602,25 +694,67 @@ def size_circuits(
                 length_km = segment_lengths.get((c_idx, k), length_km)
 
             candidates = cable_candidates
-            if segment_candidates:
-                candidates = segment_candidates.get((c_idx, k), cable_candidates)
+            is_forced = False
+            if segment_candidates and (c_idx, k) in segment_candidates:
+                candidates = segment_candidates[(c_idx, k)]
+                is_forced = True
 
-            sel = select_cable(
-                candidates, s, layout.v_mv_kv, length_km, cos_phi, sin_phi,
-                max_utilization=max_utilization,
-                max_loss_percent=(max_loss_percent_base
-                                  + max_loss_percent_per_km * length_km),
-                max_vdrop_percent=max_vdrop_percent,
-                max_parallel=max_parallel,
+            # A circuit cable must fit the stricter cable entry of its two
+            # ends (ADR-0007): the parallel-run limit is the lesser
+            # cables-per-phase and the cross-section cap is the lesser
+            # maximum of the two. The far end is the NEXT station toward the
+            # substation (k - 2, 0-based) or, for the trunk (k == 1), the
+            # busbar — which has no station to publish a figure, so it counts
+            # as the same engine fallback (see components.py).
+            other_tx = plans[k - 2].transformer if k > 1 else None
+            seg_max_parallel = min(
+                max_parallel,
+                plans[k - 1].transformer.cable_entry_parallel_limit,
+                other_tx.cable_entry_parallel_limit if other_tx is not None
+                else DEFAULT_CABLE_ENTRY_CABLES_PER_PHASE,
+            )
+            seg_max_cross_section = min(
+                plans[k - 1].transformer.cable_entry_cross_section_limit_mm2,
+                other_tx.cable_entry_cross_section_limit_mm2 if other_tx is not None
+                else DEFAULT_CABLE_ENTRY_MAX_CROSS_SECTION_MM2,
             )
 
-            # Same 1/n arithmetic as the Stage-1 solver (sizing._cable_contribution):
-            # n parallel circuits share the current, so series losses scale as 1/n
-            # while charging scales as n.
-            dp, dq_series = sel.cable.series_losses(s, layout.v_mv_kv, length_km)
-            dp /= sel.n_parallel
-            dq_series /= sel.n_parallel
-            q_charging = sel.cable.charging_kvar(layout.v_mv_kv, length_km) * sel.n_parallel
+            try:
+                sel = select_cable(
+                    candidates, s, layout.v_mv_kv, length_km, cos_phi, sin_phi,
+                    max_utilization=max_utilization,
+                    max_loss_percent=(max_loss_percent_base
+                                      + max_loss_percent_per_km * length_km),
+                    max_vdrop_percent=max_vdrop_percent,
+                    max_parallel=seg_max_parallel,
+                    max_cross_section_mm2=seg_max_cross_section,
+                )
+            except ValueError:
+                # A forced section (the engineer picked the cable) is NEVER
+                # silently replaced — the existing contract. An auto-selected
+                # segment that no admissible cable fits still solves: it is
+                # recorded unsized and flagged at its edge, not a hard error
+                # (ADR-0007) — the engineer needs to see where to split it.
+                if is_forced:
+                    raise
+                sel = None
+
+            if sel is not None:
+                # Same 1/n arithmetic as the Stage-1 solver
+                # (sizing._cable_contribution): n parallel circuits share the
+                # current, so series losses scale as 1/n while charging scales
+                # as n.
+                dp, dq_series = sel.cable.series_losses(s, layout.v_mv_kv, length_km)
+                dp /= sel.n_parallel
+                dq_series /= sel.n_parallel
+                q_charging = sel.cable.charging_kvar(layout.v_mv_kv, length_km) * sel.n_parallel
+                cable_label = format_cable_label(sel.cable, sel.n_parallel)
+            else:
+                dp = dq_series = q_charging = 0.0
+                cable_label = (
+                    f"No cable fits the {seg_max_parallel} x "
+                    f"{seg_max_cross_section:g} mm^2 cable entry for {s:,.0f} kVA"
+                )
 
             segments.append(
                 SegmentResult(
@@ -630,7 +764,7 @@ def size_circuits(
                     q_kvar=q,
                     s_kva=s,
                     selection=sel,
-                    cable_label=format_cable_label(sel.cable, sel.n_parallel),
+                    cable_label=cable_label,
                     dp_kw=dp,
                     dq_series_kvar=dq_series,
                     q_charging_kvar=q_charging,
@@ -957,9 +1091,14 @@ def _delivered_with_frozen_cables(
                 q += q_mv
                 s = math.hypot(p, q)
                 sel = seg.selection
-                dp, dq = sel.cable.series_losses(s, branch.layout.v_mv_kv, seg.length_km)
-                p -= dp / sel.n_parallel
-                q -= dq / sel.n_parallel
+                if sel is not None:
+                    # A segment with no admissible cable (ADR-0007) is
+                    # recorded unsized with zero losses — same convention as
+                    # mv_export/hv below — so the refinement pass still runs
+                    # rather than crashing on a flagged-but-solved design.
+                    dp, dq = sel.cable.series_losses(s, branch.layout.v_mv_kv, seg.length_km)
+                    p -= dp / sel.n_parallel
+                    q -= dq / sel.n_parallel
             p_branch += p
             q_branch += q
         p_branch -= branch.aux_p_kw

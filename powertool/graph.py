@@ -58,6 +58,8 @@ from dataclasses import dataclass, field
 from .architecture import PlantArchitecture
 from .components import (
     DEFAULT_AMBIENT_C,
+    DEFAULT_CABLE_ENTRY_CABLES_PER_PHASE,
+    DEFAULT_CABLE_ENTRY_MAX_CROSS_SECTION_MM2,
     DEFAULT_SWITCHGEAR_RATED_CURRENT_A,
     Cable,
     PvInverter,
@@ -1576,6 +1578,20 @@ def map_results(inputs: GraphInputs, stage1s: list[SizingResult],
                 edge_id = branch_inputs.segment_edge_ids[key]
                 edges[edge_id] = _segment_payload(
                     segment, forced=key in branch_inputs.segment_candidates)
+                if segment.selection is None:
+                    # A circuit segment always gets real candidates (unlike an
+                    # export span, whose ``selection`` is None only when the
+                    # catalogue is pending) — so None here means no admissible
+                    # cable fit the stricter cable entry of its two ends
+                    # (ADR-0007). The circuit still solves; this points the
+                    # editor at the segment to split or re-equip.
+                    warnings.append(GraphIssue(
+                        "circuit_cable_entry_exceeded",
+                        f"Circuit {circuit.index} segment {segment.index}: "
+                        f"{segment.cable_label} — no cable in the catalogue fits "
+                        f"both ends' cable entry. Split the circuit or use a "
+                        f"station with a larger cable entry there.",
+                        edge_id=edge_id))
             for station, plan, node_id in zip(circuit.stations, plans, ids):
                 installation = (
                     branch_inputs.pv_inverters_by_station[node_id]
@@ -1828,6 +1844,26 @@ def map_results(inputs: GraphInputs, stage1s: list[SizingResult],
             f"standard {DEFAULT_SWITCHGEAR_RATED_CURRENT_A:,.0f} A ring main unit "
             f"rating for those stations. Obtain the supplier's figure before a "
             f"design review."))
+
+    # Same fallback shape, for cable entry (ADR-0007): a station whose
+    # supplier publishes no cable entry is bound to the engine's 2 x 300 mm^2
+    # fallback for its circuit cables, never to no limit.
+    seen_defaulted_cable_entry: set[str] = set()
+    defaulted_cable_entry: list[str] = []
+    for branch in arch.branches:
+        for tx, _n in branch.layout.fleet:
+            if not tx.cable_entry_published and tx.display_name not in seen_defaulted_cable_entry:
+                seen_defaulted_cable_entry.add(tx.display_name)
+                defaulted_cable_entry.append(tx.display_name)
+    if defaulted_cable_entry:
+        names = ", ".join(defaulted_cable_entry)
+        warnings.append(GraphIssue(
+            "cable_entry_not_published",
+            f"No cable entry is published for {names} — using the standard "
+            f"{DEFAULT_CABLE_ENTRY_CABLES_PER_PHASE} x "
+            f"{DEFAULT_CABLE_ENTRY_MAX_CROSS_SECTION_MM2:.0f} mm^2 cable entry for "
+            f"those stations' circuit cables. Obtain the supplier's figure before "
+            f"a design review."))
 
     if math.isclose(inputs.ambient_c, 30.0, rel_tol=1e-9, abs_tol=1e-9):
         # A design asking for 30 °C silently reads a station's 40 °C figure

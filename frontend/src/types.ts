@@ -299,6 +299,15 @@ export interface TransformerInfo {
    *  `rmu_rated_current_a` below stays null when nothing was published. */
   switchgear_rated_current_a: number
   switchgear_rating_published: boolean
+  /** Simulated: the resolved cable entry — cables accepted per phase and
+   *  maximum cable cross-section — the engine bounds a circuit cable to at
+   *  this station's terminals, and whether the supplier published it or it
+   *  came from the 2 x 300 mm^2 engine fallback (ADR-0007). The raw
+   *  `cable_entry_cables_per_phase` / `cable_entry_max_cross_section_mm2`
+   *  below stay null when nothing was published. */
+  cable_entry_parallel_limit: number
+  cable_entry_cross_section_limit_mm2: number
+  cable_entry_published: boolean
   /** Typed parameters (never computed with) — see CONTEXT.md's "Simulated
    *  parameter / typed parameter" entry. `null` means the datasheet is
    *  silent on that field, not that the value is zero. Unset for every PV
@@ -333,6 +342,8 @@ export interface TransformerInfo {
   depth_mm: number | null
   weight_kg: number | null
   cable_entry: string | null
+  cable_entry_cables_per_phase: number | null
+  cable_entry_max_cross_section_mm2: number | null
   corrosion_class: string | null
   temp_min_c: number | null
   temp_max_c: number | null

@@ -52,6 +52,8 @@ function transformer(overrides: Partial<TransformerInfo> = {}): TransformerInfo 
     key: 'GENERIC_BESS_TX_2750_LV069', display_name: '2750 kVA - Generic', s_rated_kva_at_40c: 2750,
     hv_kv: null, lv_kv: 0.69, brand: 'Generic', uk_percent: 8, pk_kw: 27.5, p0_kw: 2.75,
     switchgear_rated_current_a: 630, switchgear_rating_published: true,
+    cable_entry_parallel_limit: 2, cable_entry_cross_section_limit_mm2: 300,
+    cable_entry_published: false,
     i0_percent: 0, model: null, vector_group: null, cooling: null, datasheet_url: null,
     s_rated_kva_at_30c: null,
     mv_kv_min: null, mv_kv_max: null, lv_winding_count: 1, insulation_level: null,
@@ -62,6 +64,7 @@ function transformer(overrides: Partial<TransformerInfo> = {}): TransformerInfo 
     cabinet_protection: null, surge_protection: null, ac_insulation_detection: null,
     cabinet_temp_control: null, ups: null,
     width_mm: null, height_mm: null, depth_mm: null, weight_kg: null, cable_entry: null,
+    cable_entry_cables_per_phase: null, cable_entry_max_cross_section_mm2: null,
     corrosion_class: null, temp_min_c: null, temp_max_c: null, humidity_min_pct: null,
     humidity_max_pct: null, altitude_max_m: null, communication: null, standards: null,
     datasheet_version: null, preliminary: false,
@@ -310,5 +313,30 @@ describe('switchgear rated current', () => {
     const tx = transformer({ switchgear_rated_current_a: 630, switchgear_rating_published: false })
     render(<SpecView target={{ kind: 'transformer_station', fleet_kind: 'pv', item: tx }} solutions={[]} transformers={[]} />)
     expect(screen.getByText(/630 A \(not published — standard rating assumed\)/)).toBeTruthy()
+  })
+})
+
+describe('cable entry (ADR-0007)', () => {
+  it('shows the simulated figure the engine reads, distinct from the typed provenance field', () => {
+    const tx = transformer({
+      cable_entry_parallel_limit: 3, cable_entry_cross_section_limit_mm2: 500,
+      cable_entry_published: true, cable_entry_cables_per_phase: 3,
+      cable_entry_max_cross_section_mm2: 500, cable_entry: 'Bottom entry',
+    })
+    render(<SpecView target={{ kind: 'transformer_station', fleet_kind: 'pv', item: tx }} solutions={[]} transformers={[]} />)
+    expect(screen.getByText('Cable entry (simulated)')).toBeTruthy()
+    expect(screen.getByText('3 x 500 mm²')).toBeTruthy()
+    // The typed datasheet-provenance field stays, unrelated to the simulated figure.
+    expect(screen.getByText('Cable entry')).toBeTruthy()
+    expect(screen.getByText('Bottom entry')).toBeTruthy()
+  })
+
+  it('marks a defaulted cable entry so it never reads as a supplier claim', () => {
+    const tx = transformer({
+      cable_entry_parallel_limit: 2, cable_entry_cross_section_limit_mm2: 300,
+      cable_entry_published: false,
+    })
+    render(<SpecView target={{ kind: 'transformer_station', fleet_kind: 'pv', item: tx }} solutions={[]} transformers={[]} />)
+    expect(screen.getByText(/2 x 300 mm² \(not published — standard entry assumed\)/)).toBeTruthy()
   })
 })

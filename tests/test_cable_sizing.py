@@ -93,6 +93,54 @@ def test_raises_when_nothing_fits():
                      cos_phi=1.0, sin_phi=0.0, max_loss_percent=1.30, max_parallel=1)
 
 
+# --- max_cross_section_mm2 (ADR-0007: a circuit segment's cable entry) ------
+
+
+def test_max_cross_section_excludes_larger_candidates():
+    # AL_630 (630 mm^2) would ordinarily win at high current; capped at
+    # 240 mm^2 it is excluded, so the smaller cable escalates parallel runs
+    # instead of cross-section.
+    sel = select_cable(_catalogue(), s_kva=49_644, v_kv=20, length_km=2.5,
+                       cos_phi=0.910, sin_phi=0.414, max_loss_percent=1.30,
+                       max_parallel=12, max_cross_section_mm2=240)
+    assert sel.cable.name == "AL_240"
+    assert sel.cable.cross_section_mm2 <= 240
+
+
+def test_max_cross_section_none_leaves_the_catalogue_unrestricted():
+    # The default (and export cables, which never pass this argument) picks
+    # exactly as before — today's behaviour is unchanged.
+    unbounded = select_cable(_catalogue(), s_kva=49_644, v_kv=20, length_km=2.5,
+                             cos_phi=0.910, sin_phi=0.414, max_loss_percent=1.30,
+                             max_parallel=12)
+    explicit_none = select_cable(_catalogue(), s_kva=49_644, v_kv=20, length_km=2.5,
+                                 cos_phi=0.910, sin_phi=0.414, max_loss_percent=1.30,
+                                 max_parallel=12, max_cross_section_mm2=None)
+    assert unbounded.cable.name == explicit_none.cable.name == "AL_630"
+
+
+def test_max_cross_section_raises_when_nothing_within_it_fits():
+    with pytest.raises(ValueError, match="No cable can carry"):
+        select_cable(_catalogue(), s_kva=49_644, v_kv=20, length_km=2.5,
+                     cos_phi=0.910, sin_phi=0.414, max_loss_percent=1.30,
+                     max_parallel=1, max_cross_section_mm2=240)
+
+
+def test_export_style_call_still_allows_more_than_two_parallel_runs():
+    # Export cables keep today's max_parallel behaviour (no cross-section
+    # cap, escalation up to whatever max_parallel the caller sets) — pinned
+    # here so a future change to the circuit-segment path cannot silently
+    # narrow the export path too.
+    big = [
+        Cable("AL_630", r_ohm_per_km=0.0469, x_ohm_per_km=0.098, b_us_per_km=95.0,
+              cross_section_mm2=630, rated_current_a=700, rated_voltage_kv=20),
+    ]
+    sel = select_cable(big, s_kva=140_000, v_kv=20, length_km=1.0,
+                       cos_phi=1.0, sin_phi=0.0, max_loss_percent=1.30,
+                       max_parallel=12)
+    assert sel.n_parallel > 2
+
+
 def test_autocable_in_chain_records_and_balances():
     chain = Chain([
         ChainElement(
