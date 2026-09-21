@@ -11,7 +11,7 @@ as a figure the engine reads. See CONTEXT.md "Cable entry" and ADR-0007.
 
 **Blocked by:** 01.
 
-**Status:** ready-for-agent
+**Status:** done
 
 - [ ] Catalogue load resolves an unpublished cable entry to 2 × 300 mm² and raises a notice (prior art: the 630 A switchgear fallback test)
 - [ ] Cable selection for a circuit segment never uses more parallel runs, or a larger cross-section, than the stricter of its two ends allows

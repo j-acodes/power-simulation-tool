@@ -1589,7 +1589,8 @@ def map_results(inputs: GraphInputs, stage1s: list[SizingResult],
                         "circuit_cable_entry_exceeded",
                         f"Circuit {circuit.index} segment {segment.index}: "
                         f"{segment.cable_label} — no cable in the catalogue fits "
-                        f"both ends' cable entry. Split the circuit or use a "
+                        f"both ends' cable entry. The span is shown but not sized "
+                        f"(zero losses assumed). Split the circuit or use a "
                         f"station with a larger cable entry there.",
                         edge_id=edge_id))
             for station, plan, node_id in zip(circuit.stations, plans, ids):

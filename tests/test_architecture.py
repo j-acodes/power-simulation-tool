@@ -644,6 +644,32 @@ def test_station_over_own_cable_entry_raises_before_any_cable_is_sized():
         size_circuits(layout, _catalogue())
 
 
+def test_arrange_plant_with_an_empty_cable_catalogue_skips_the_cable_entry_check():
+    # An empty (not None) cable_candidates means "no MV cable catalogue for
+    # this voltage yet" — a different problem from an inadmissible cable
+    # entry, so it must not raise the cable-entry hard error here either.
+    tx = replace(_tx_2500(), cable_entry_cables_per_phase=1,
+                 cable_entry_max_cross_section_mm2=50.0)
+    stage1 = _stage1(p_inv_kw=2_400.0, q_inv_kvar=500.0)
+    layout = arrange_plant(stage1, [(tx, 1)],
+                           trunk_length_km=0.8, spacing_km=0.35, v_mv_kv=20.0,
+                           cable_candidates=[])
+    assert layout.circuit_sizes == [1]
+
+
+def test_size_circuits_with_an_empty_cable_catalogue_raises_the_existing_no_cable_error():
+    # Same distinction as above at the size_circuits level: an empty
+    # catalogue must surface select_cable's own "no usable cables" error, not
+    # the cable-entry-specific one — even for a station whose own current
+    # would otherwise trip the cable-entry hard error.
+    tx = replace(_tx_2500(), cable_entry_cables_per_phase=1,
+                 cable_entry_max_cross_section_mm2=50.0)
+    stage1 = _stage1(p_inv_kw=2_400.0, q_inv_kvar=500.0)
+    layout = arrange_plant_manual(stage1, [[tx]], v_mv_kv=20.0)
+    with pytest.raises(ValueError, match="No usable cables in the catalogue"):
+        size_circuits(layout, [])
+
+
 def test_cable_candidates_narrows_stage1_grouping_to_admissible_circuits():
     # Two identical stations whose own current comfortably fits their own
     # switchgear (2000 A, generous) but whose SUM exceeds what the fallback
@@ -664,6 +690,25 @@ def test_cable_candidates_narrows_stage1_grouping_to_admissible_circuits():
                                 trunk_length_km=0.5, spacing_km=0.2, v_mv_kv=20.0,
                                 cable_candidates=_catalogue())
     assert cable_aware.circuit_sizes == [1, 1]
+
+
+def test_stage1_grouping_ceiling_also_respects_the_fixed_busbar_end():
+    # A station publishing a GENEROUS cable entry (4 x 630 mm^2) still gets
+    # grouped against the busbar-end ceiling: the trunk's other end is always
+    # the busbar, which has no station to publish a figure and so always
+    # falls back to 2 x 300 mm^2 (ADR-0007) — a station's own wide entry
+    # cannot widen that. Two such stations sum past the fallback's ~376 A
+    # ceiling (only AL_95 <= 300 mm^2 in this catalogue) even though each
+    # station's OWN entry would allow far more.
+    tx = Transformer("BIG", s_rated_kva_at_40c=9000, uk_percent=8.0, pk_kw=90.0,
+                     p0_kw=9.0, i0_percent=0.0, lv_kv=0.8, rmu_rated_current_a=2000.0,
+                     cable_entry_cables_per_phase=4, cable_entry_max_cross_section_mm2=630.0)
+    stage1 = _stage1(p_inv_kw=16_000.0, q_inv_kvar=0.0)
+
+    layout = arrange_plant(stage1, [(tx, 2)],
+                           trunk_length_km=0.5, spacing_km=0.2, v_mv_kv=20.0,
+                           cable_candidates=_catalogue())
+    assert layout.circuit_sizes == [1, 1]
 
 
 def test_charging_recorded_but_never_netted():

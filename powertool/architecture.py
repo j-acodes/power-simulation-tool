@@ -260,13 +260,16 @@ def arrange_plant(
     or "bess") is stamped on every station plan built here — see
     ``StationPlan.kind``.
 
-    ``cable_candidates``, when given, also bounds circuit grouping by each
-    station's own cable entry (ADR-0007): a station whose own current alone
-    cannot be carried within its own cable entry raises, and every circuit's
-    ceiling additionally respects the tighter of switchgear rating and cable
-    entry so Stage-1 planning never groups a circuit no cable could serve.
-    Omitted (the default), grouping considers switchgear only — the caller
-    has no cable catalogue in scope yet.
+    ``cable_candidates``, when given and non-empty, also bounds circuit
+    grouping by each station's own cable entry (ADR-0007): a station whose
+    own current alone cannot be carried within its own cable entry raises,
+    and every circuit's ceiling additionally respects the tightest of the
+    switchgear rating, the station's own cable entry, and the FIXED busbar-end
+    cable entry (the trunk's other end, which always falls back — no busbar
+    switchgear is sized/published yet) so Stage-1 planning never groups a
+    circuit no cable could serve. Omitted, or an empty list (no MV cable
+    catalogue available for this voltage yet), skips this entirely — grouping
+    considers switchgear only.
     """
     if trunk_length_km < 0 or spacing_km < 0:
         raise ValueError("Lengths must be non-negative")
@@ -300,7 +303,7 @@ def arrange_plant(
         plans.extend([plan] * count)  # identical figures for every unit of a model
 
     switchgear_ratings = [p.transformer.switchgear_rated_current_a for p in plans]
-    if cable_candidates is not None:
+    if cable_candidates:  # None or [] (no catalogue yet) both skip this
         cable_ceilings = [
             _cable_entry_ceiling_a(
                 cable_candidates, p.transformer.cable_entry_parallel_limit,
@@ -318,7 +321,17 @@ def arrange_plant(
                     f"{tx.cable_entry_cross_section_limit_mm2:g} mm^2 cable entry "
                     f"can carry. Pick a station with a larger cable entry."
                 )
-        circuit_ratings = [min(sw, c) for sw, c in zip(switchgear_ratings, cable_ceilings)]
+        # The trunk's OTHER end is always the busbar, which has no station to
+        # publish a cable entry — it counts as the engine's fixed fallback
+        # regardless of what this station itself publishes (ADR-0007), so
+        # grouping must respect it even for a station with a generous entry.
+        busbar_ceiling = _cable_entry_ceiling_a(
+            cable_candidates, DEFAULT_CABLE_ENTRY_CABLES_PER_PHASE,
+            DEFAULT_CABLE_ENTRY_MAX_CROSS_SECTION_MM2, max_utilization,
+        )
+        circuit_ratings = [
+            min(sw, c, busbar_ceiling) for sw, c in zip(switchgear_ratings, cable_ceilings)
+        ]
     else:
         circuit_ratings = switchgear_ratings
 
@@ -637,22 +650,27 @@ def size_circuits(
         # Same standing, for cable entry (ADR-0007): a station whose own
         # current alone cannot be carried within its own cable entry is a
         # hard error too, checked against the full catalogue (not yet bound
-        # by a neighbour — that per-segment narrowing happens below).
-        for plan in plans:
-            tx = plan.transformer
-            ceiling = _cable_entry_ceiling_a(
-                cable_candidates, tx.cable_entry_parallel_limit,
-                tx.cable_entry_cross_section_limit_mm2, max_utilization,
-            )
-            if plan.i_a > ceiling + 1e-9:
-                raise ValueError(
-                    f"Station transformer {tx.display_name} draws {plan.i_a:,.0f} A "
-                    f"on its own MV current in circuit {c_idx}, above the "
-                    f"{ceiling:,.0f} A its own {tx.cable_entry_parallel_limit} x "
-                    f"{tx.cable_entry_cross_section_limit_mm2:g} mm^2 cable entry "
-                    f"can carry. The catalogue entry is self-contradictory — fix "
-                    f"the datasheet or choose a different station."
+        # by a neighbour — that per-segment narrowing happens below). Skipped
+        # when the catalogue itself is empty (no MV cables for this voltage
+        # yet) — that is a different problem, and the segment walk below
+        # already surfaces it through select_cable's own "no usable cables"
+        # error rather than this cable-entry-specific one.
+        if cable_candidates:
+            for plan in plans:
+                tx = plan.transformer
+                ceiling = _cable_entry_ceiling_a(
+                    cable_candidates, tx.cable_entry_parallel_limit,
+                    tx.cable_entry_cross_section_limit_mm2, max_utilization,
                 )
+                if plan.i_a > ceiling + 1e-9:
+                    raise ValueError(
+                        f"Station transformer {tx.display_name} draws {plan.i_a:,.0f} A "
+                        f"on its own MV current in circuit {c_idx}; its own "
+                        f"{tx.cable_entry_parallel_limit} x "
+                        f"{tx.cable_entry_cross_section_limit_mm2:g} mm^2 cable entry "
+                        f"admits no catalogue cable able to carry it. Pick a station "
+                        f"with a larger cable entry or add larger cables."
+                    )
         stations = [
             StationResult(
                 index=k,
@@ -702,10 +720,11 @@ def size_circuits(
             # A circuit cable must fit the stricter cable entry of its two
             # ends (ADR-0007): the parallel-run limit is the lesser
             # cables-per-phase and the cross-section cap is the lesser
-            # maximum of the two. The far end is the NEXT station toward the
-            # substation (k - 2, 0-based) or, for the trunk (k == 1), the
-            # busbar — which has no station to publish a figure, so it counts
-            # as the same engine fallback (see components.py).
+            # maximum of the two. The other end is the ADJACENT station on
+            # the substation side — station k - 1, i.e. plans[k - 2] 0-based —
+            # or, for the trunk (k == 1), the busbar itself, which has no
+            # station to publish a figure, so it counts as the same engine
+            # fallback (see components.py).
             other_tx = plans[k - 2].transformer if k > 1 else None
             seg_max_parallel = min(
                 max_parallel,
@@ -731,11 +750,16 @@ def size_circuits(
                 )
             except ValueError:
                 # A forced section (the engineer picked the cable) is NEVER
-                # silently replaced — the existing contract. An auto-selected
-                # segment that no admissible cable fits still solves: it is
-                # recorded unsized and flagged at its edge, not a hard error
-                # (ADR-0007) — the engineer needs to see where to split it.
-                if is_forced:
+                # silently replaced — the existing contract. An empty
+                # candidate list is a different problem (no MV cable
+                # catalogue for this voltage at all) and keeps raising
+                # select_cable's own "no usable cables" error — that is not
+                # what the cable-entry bound is for. Only an auto-selected
+                # segment with a real, non-empty catalogue but no admissible
+                # cable within the bound still solves: it is recorded unsized
+                # and flagged at its edge (ADR-0007) — the engineer needs to
+                # see where to split it.
+                if is_forced or not candidates:
                     raise
                 sel = None
 

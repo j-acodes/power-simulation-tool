@@ -42,7 +42,7 @@ function transformer(overrides: Partial<TransformerInfo>): TransformerInfo {
     cabinet_protection: null, surge_protection: null, ac_insulation_detection: null,
     cabinet_temp_control: null, ups: null,
     width_mm: null, height_mm: null, depth_mm: null, weight_kg: null, cable_entry: null,
-  cable_entry_cables_per_phase: null, cable_entry_max_cross_section_mm2: null,
+    cable_entry_cables_per_phase: null, cable_entry_max_cross_section_mm2: null,
     corrosion_class: null, temp_min_c: null, temp_max_c: null, humidity_min_pct: null,
     humidity_max_pct: null, altitude_max_m: null, communication: null, standards: null,
     datasheet_version: null, preliminary: false,

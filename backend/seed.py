@@ -20,6 +20,7 @@ import math
 from powertool import ComponentDatabase, arrange_plant, size_generation
 from powertool.architecture import PlantLayout
 from powertool.components import DEFAULT_AMBIENT_C
+from powertool.graph import DEFAULT_RULES
 from powertool.sizing import SizingResult
 
 from .solve import build_chain
@@ -150,8 +151,13 @@ def seed_diagram(params: dict, db: ComponentDatabase) -> dict:
         ambient_c=DEFAULT_AMBIENT_C,
         # Stage-1 grouping only proposes circuits every segment can actually
         # be cabled for (ADR-0007) — the wizard has the MV cable catalogue in
-        # scope, so it opts into the cable-entry-aware ceiling.
+        # scope, so it opts into the cable-entry-aware ceiling. The wizard
+        # has no rules of its own yet (SeedRequest carries none) — the
+        # produced diagram's rules below are DEFAULT_RULES verbatim, so this
+        # reads the same named constant rather than a second literal that
+        # could drift from it.
         cable_candidates=db.cables_for_voltage(v_mv_kv),
+        max_utilization=DEFAULT_RULES["max_utilization"],
     )
 
     return _layout_to_diagram(layout, params, v_export_kv)
@@ -233,7 +239,7 @@ def _layout_to_diagram(layout: PlantLayout, params: dict, v_export_kv: float) ->
             "tiers": {"lv_kv": _LV_KV, "mv_kv": v_mv_kv,
                      "hv_kv": v_hv_kv if interconnection == "HV" else None},
             "rules": {
-                "max_utilization": 0.80,
+                "max_utilization": DEFAULT_RULES["max_utilization"],
                 "collection_loss_pct": 1.30,
                 "export_loss_pct_per_km": 0.10,
                 "max_loading": params["max_loading"],

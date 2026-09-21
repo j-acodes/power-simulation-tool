@@ -964,6 +964,33 @@ def test_mv_interconnection_sizes_the_drawn_export_run():
     assert "hv" not in results["nodes"]
 
 
+def test_export_cable_keeps_escalating_past_two_parallel_runs_through_the_real_path():
+    # ADR-0007 bounds circuit cables by cable entry, but export cables keep
+    # today's behaviour (this ticket's acceptance criterion) — pinned here
+    # through the actual solve path, not just cable_sizing's unit test, with
+    # a fleet large enough that even the biggest catalogue cable (AL_630,
+    # 600 A) needs more than 2 parallel runs to carry it.
+    nodes = [_node("poc", "poc", p_target_mw=45.0, pf=0.95), _node("bus", "busbar")]
+    edges = [_edge("e_poc", "poc", "bus", length_m=1000.0)]
+    previous = "bus"
+    for i in range(1, 6):
+        station_id = f"s{i}"
+        nodes.append(_node(
+            station_id, "station", mode="catalogue", model="HUAWEI_JUPITER9000",
+            pv_inverter="huawei-sun2000-330ktl-h1", inverter_count=30,
+            x=0.0, y=float(i)))
+        edges.append(_edge(f"e_t{i}", previous, station_id, length_m=300.0))
+        previous = station_id
+    diagram = {"schema_version": 1, "settings": _settings(), "nodes": nodes, "edges": edges}
+    assert validate_graph(diagram, db) == []
+
+    body = client.post("/api/solve", json=diagram).json()
+    assert body["issues"] == []
+    export = body["results"]["edges"]["e_poc"]
+    assert export["sized"]
+    assert export["n_parallel"] > 2
+
+
 def _hybrid_mv_export_diagram() -> dict:
     diagram = _minimal()
     diagram["nodes"][0]["props"]["p_target_bess_mw"] = 2.0
