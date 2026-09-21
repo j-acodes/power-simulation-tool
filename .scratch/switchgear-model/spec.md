@@ -1,6 +1,6 @@
 # Spec: Model the MV switchgear at both ends of every circuit
 
-**Status:** needs-triage — spec agreed in grilling 2026-09-21; not yet split into tickets.
+**Status:** split into tickets 01–07 under `issues/`, 2026-09-21.
 **Supersedes:** tickets 03 and 04 of `.scratch/mv-switchgear-limits/` (tickets 01–02 shipped).
 **Decision record:** ADR-0007, amending ADR-0001 and ADR-0006.
 
