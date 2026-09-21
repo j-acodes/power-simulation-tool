@@ -29,7 +29,12 @@ from reportlab.platypus import (
 )
 
 from .architecture import PlantArchitecture
-from .components import DEFAULT_AMBIENT_C, conversion_label, fleet_label
+from .components import (
+    DEFAULT_AMBIENT_C,
+    conversion_label,
+    fleet_label,
+    size_busbar_switchgear_rating,
+)
 from .sizing import SizingResult
 
 # RP Global "Colour Codes" brand sheet.
@@ -376,6 +381,38 @@ def _energy_rows(fleet: dict) -> list[list[str]]:
     return rows
 
 
+def _switchgear_cell(rated_a: float | None, i_a: float) -> str:
+    """One sized-busbar-switchgear value: the rating beside its current,
+    marked as sized — or, when the current clears the 4000 A ladder top, that
+    no standard rating admits it (ADR-0007)."""
+    if rated_a is not None:
+        return f"{_fmt(rated_a, 0)} A (sized) — {_fmt(i_a, 0)} A"
+    return f"not sized — {_fmt(i_a, 0)} A exceeds the 4,000 A ladder top"
+
+
+def _busbar_switchgear_rows(branch) -> list[list[str]]:
+    """Busbar, export switchgear and one feeder per circuit (ADR-0007). The
+    busbar and export switchgear share this branch's net busbar total —
+    auxiliary load included, the same net S the MV export cable is sized on
+    (``BranchArchitecture.p_busbar_kw`` / ``q_busbar_kvar`` already take it
+    out, see that property's docstring) — while each feeder is sized on its
+    own circuit's head current alone (``CircuitResult.i_trunk_a``)."""
+    busbar_i_a = branch.busbar_current_a
+    busbar_rated_a = size_busbar_switchgear_rating(busbar_i_a)
+    rows = [
+        ["Busbar", _switchgear_cell(busbar_rated_a, busbar_i_a)],
+        # Same current and rating in this ticket — they diverge once pins
+        # (a later ticket) let the export switchgear be checked against a
+        # rating it already has.
+        ["Export switchgear", _switchgear_cell(busbar_rated_a, busbar_i_a)],
+    ]
+    for circuit in branch.circuits:
+        feeder_rated_a = size_busbar_switchgear_rating(circuit.i_trunk_a)
+        rows.append([f"Circuit {circuit.index} feeder",
+                     _switchgear_cell(feeder_rated_a, circuit.i_trunk_a)])
+    return rows
+
+
 def _stage2(stage1s: list[SizingResult], arch: PlantArchitecture,
             fleets: list[dict] | None, ambient_c: float) -> list:
     # Loss percentages are quoted against the whole plant's refined conversion
@@ -426,6 +463,9 @@ def _stage2(stage1s: list[SizingResult], arch: PlantArchitecture,
         if n == 1:
             brows += plant_rows
         f.append(_table(["Quantity", "Value"], brows, [0.45, 0.55]))
+
+        f.append(Paragraph("Busbar switchgear", _H3))
+        f.append(_table(["Equipment", "Rating"], _busbar_switchgear_rows(branch), [0.45, 0.55]))
 
         f.append(Paragraph(f"Refined {device} requirement", _H3))
         delta = (refinement.s_inv_refined_kva / stage1s[i].s_inv_kva - 1) * 100

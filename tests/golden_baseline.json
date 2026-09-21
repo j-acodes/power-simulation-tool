@@ -32,11 +32,21 @@
           "circuit_sizes": [
             1
           ],
+          "export_i_a": 364.64227528067283,
+          "export_switchgear_rated_a": 630.0,
+          "feeder_i_a": [
+            367.71560268075416
+          ],
+          "feeder_switchgear_rated_a": [
+            630.0
+          ],
+          "i_a": 364.64227528067283,
           "kind": "busbar",
           "n_circuits": 1,
           "p_kw": 12050.0000000833,
           "q_kvar": 3954.209262227345,
           "s_kva": 12682.202919504642,
+          "switchgear_rated_a": 630.0,
           "v_kv": 20.0
         },
         "poc": {
@@ -191,11 +201,21 @@
           "circuit_sizes": [
             1
           ],
+          "export_i_a": 91.16056882322316,
+          "export_switchgear_rated_a": 630.0,
+          "feeder_i_a": [
+            92.87760371284112
+          ],
+          "feeder_switchgear_rated_a": [
+            630.0
+          ],
+          "i_a": 91.16056882322316,
           "kind": "busbar",
           "n_circuits": 1,
           "p_kw": 3050.0000001117196,
           "q_kvar": 996.0523156192106,
           "s_kva": 3208.523058376218,
+          "switchgear_rated_a": 630.0,
           "v_kv": 20.0
         },
         "poc": {
@@ -344,11 +364,21 @@
           "circuit_sizes": [
             1
           ],
+          "export_i_a": 91.16056882390491,
+          "export_switchgear_rated_a": 630.0,
+          "feeder_i_a": [
+            92.87760371352611
+          ],
+          "feeder_switchgear_rated_a": [
+            630.0
+          ],
+          "i_a": 91.16056882390491,
           "kind": "busbar",
           "n_circuits": 1,
           "p_kw": 3050.000000131218,
           "q_kvar": 996.0523156355229,
           "s_kva": 3208.5230583998173,
+          "switchgear_rated_a": 630.0,
           "v_kv": 20.0
         },
         "poc": {
@@ -503,11 +533,21 @@
           "circuit_sizes": [
             1
           ],
+          "export_i_a": 91.16056882322316,
+          "export_switchgear_rated_a": 630.0,
+          "feeder_i_a": [
+            92.87760371284112
+          ],
+          "feeder_switchgear_rated_a": [
+            630.0
+          ],
+          "i_a": 91.16056882322316,
           "kind": "busbar",
           "n_circuits": 1,
           "p_kw": 3050.0000001117196,
           "q_kvar": 996.0523156192106,
           "s_kva": 3208.523058376218,
+          "switchgear_rated_a": 630.0,
           "v_kv": 20.0
         },
         "poc": {
@@ -656,11 +696,21 @@
           "circuit_sizes": [
             1
           ],
+          "export_i_a": 91.16056882390491,
+          "export_switchgear_rated_a": 630.0,
+          "feeder_i_a": [
+            92.87760371352611
+          ],
+          "feeder_switchgear_rated_a": [
+            630.0
+          ],
+          "i_a": 91.16056882390491,
           "kind": "busbar",
           "n_circuits": 1,
           "p_kw": 3050.000000131218,
           "q_kvar": 996.0523156355229,
           "s_kva": 3208.5230583998173,
+          "switchgear_rated_a": 630.0,
           "v_kv": 20.0
         },
         "poc": {
@@ -837,22 +887,42 @@
           "circuit_sizes": [
             1
           ],
+          "export_i_a": 91.16056908127166,
+          "export_switchgear_rated_a": 630.0,
+          "feeder_i_a": [
+            92.87760397214636
+          ],
+          "feeder_switchgear_rated_a": [
+            630.0
+          ],
+          "i_a": 91.16056908127166,
           "kind": "busbar",
           "n_circuits": 1,
           "p_kw": 3050.000007673424,
           "q_kvar": 996.0523212411276,
           "s_kva": 3208.523067309588,
+          "switchgear_rated_a": 630.0,
           "v_kv": 20.0
         },
         "bus_b": {
           "circuit_sizes": [
             1
           ],
+          "export_i_a": 91.16056912596063,
+          "export_switchgear_rated_a": 630.0,
+          "feeder_i_a": [
+            92.51991944077967
+          ],
+          "feeder_switchgear_rated_a": [
+            630.0
+          ],
+          "i_a": 91.16056912596063,
           "kind": "busbar",
           "n_circuits": 1,
           "p_kw": 3040.0000089628106,
           "q_kvar": 994.0523222760507,
           "s_kva": 3198.396484789886,
+          "switchgear_rated_a": 630.0,
           "v_kv": 20.0
         },
         "poc": {
@@ -1081,11 +1151,21 @@
           "circuit_sizes": [
             1
           ],
+          "export_i_a": 91.16056882352743,
+          "export_switchgear_rated_a": 630.0,
+          "feeder_i_a": [
+            92.87760371314685
+          ],
+          "feeder_switchgear_rated_a": [
+            630.0
+          ],
+          "i_a": 91.16056882352743,
           "kind": "busbar",
           "n_circuits": 1,
           "p_kw": 3050.000000120448,
           "q_kvar": 996.0523156264114,
           "s_kva": 3208.523058386751,
+          "switchgear_rated_a": 630.0,
           "v_kv": 20.0
         },
         "poc": {
@@ -1250,11 +1330,21 @@
           "circuit_sizes": [
             1
           ],
+          "export_i_a": 86.60254039115375,
+          "export_switchgear_rated_a": 630.0,
+          "feeder_i_a": [
+            88.26772804621902
+          ],
+          "feeder_switchgear_rated_a": [
+            630.0
+          ],
+          "i_a": 86.60254039115375,
           "kind": "busbar",
           "n_circuits": 1,
           "p_kw": 3050.000000440283,
           "q_kvar": 10.00000007008676,
           "s_kva": 3050.0163938390774,
+          "switchgear_rated_a": 630.0,
           "v_kv": 20.0
         },
         "poc": {
@@ -1402,11 +1492,21 @@
           "circuit_sizes": [
             1
           ],
+          "export_i_a": 91.16056882278389,
+          "export_switchgear_rated_a": 630.0,
+          "feeder_i_a": [
+            91.40805630680313
+          ],
+          "feeder_switchgear_rated_a": [
+            630.0
+          ],
+          "i_a": 91.16056882278389,
           "kind": "busbar",
           "n_circuits": 1,
           "p_kw": 3000.0000000992277,
           "q_kvar": 986.0523156084824,
           "s_kva": 3157.8947369588204,
+          "switchgear_rated_a": 630.0,
           "v_kv": 20.0
         },
         "poc": {
@@ -1615,11 +1715,21 @@
             "circuit_sizes": [
               3
             ],
+            "export_i_a": 318.1294719196747,
+            "export_switchgear_rated_a": 630.0,
+            "feeder_i_a": [
+              326.00270984017675
+            ],
+            "feeder_switchgear_rated_a": [
+              630.0
+            ],
+            "i_a": 318.1294719196747,
             "kind": "busbar",
             "n_circuits": 1,
             "p_kw": 10292.476918401933,
             "q_kvar": 4598.313610586393,
             "s_kva": 11272.957428161459,
+            "switchgear_rated_a": 630.0,
             "v_kv": 20.0
           },
           "hv_tx": {
@@ -2426,11 +2536,33 @@
               4,
               4
             ],
+            "export_i_a": 3805.5532529065326,
+            "export_switchgear_rated_a": 4000.0,
+            "feeder_i_a": [
+              596.73761356527,
+              596.73761356527,
+              596.73761356527,
+              596.73761356527,
+              477.52712208718197,
+              477.52712208718197,
+              477.52712208718197
+            ],
+            "feeder_switchgear_rated_a": [
+              630.0,
+              630.0,
+              630.0,
+              630.0,
+              630.0,
+              630.0,
+              630.0
+            ],
+            "i_a": 3805.5532529065326,
             "kind": "busbar",
             "n_circuits": 7,
             "p_kw": 120737.0203602652,
             "q_kvar": 53553.556598472904,
             "s_kva": 132081.07930290748,
+            "switchgear_rated_a": 4000.0,
             "v_kv": 20.0
           },
           "hv_tx": {
@@ -3732,11 +3864,25 @@
               4,
               4
             ],
+            "export_i_a": 1441.059447834019,
+            "export_switchgear_rated_a": 1600.0,
+            "feeder_i_a": [
+              483.7328820648574,
+              483.7328820648574,
+              483.7328820648574
+            ],
+            "feeder_switchgear_rated_a": [
+              630.0,
+              630.0,
+              630.0
+            ],
+            "i_a": 1441.059447834019,
             "kind": "busbar",
             "n_circuits": 3,
             "p_kw": 45459.42276156598,
             "q_kvar": 21228.157505933894,
             "s_kva": 50171.643274976755,
+            "switchgear_rated_a": 1600.0,
             "v_kv": 20.0
           },
           "hv_tx": {
@@ -4432,11 +4578,25 @@
               4,
               4
             ],
+            "export_i_a": 1367.408532294088,
+            "export_switchgear_rated_a": 1600.0,
+            "feeder_i_a": [
+              459.1196226969703,
+              459.1196226969703,
+              459.1196226969703
+            ],
+            "feeder_switchgear_rated_a": [
+              630.0,
+              630.0,
+              630.0
+            ],
+            "i_a": 1367.408532294088,
             "kind": "busbar",
             "n_circuits": 3,
             "p_kw": 45250.00000008444,
             "q_kvar": 14850.784733110235,
             "s_kva": 47624.660704269816,
+            "switchgear_rated_a": 1600.0,
             "v_kv": 20.0
           },
           "poc": {

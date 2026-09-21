@@ -2,7 +2,10 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { Inspector } from './Inspector'
 import { EMPTY_DIAGRAM, useStore } from '../store'
-import type { BessSolutionInfo, CatalogueResponse, DiagramNode, PvInverterInfo, TransformerInfo } from '../types'
+import type {
+  BessSolutionInfo, BusbarNodeResult, CatalogueResponse, DiagramNode, PvInverterInfo,
+  SolveResults, TransformerInfo,
+} from '../types'
 
 const bessSolution: BessSolutionInfo = {
   key: 'sungrow-st6900ux-4h', display_name: 'PowerTitan 3.0 — ST6900UX-4H',
@@ -387,5 +390,56 @@ describe('Inspector — expand control for a placed station (ticket 06)', () => 
 
     expect(screen.getByRole('button', { name: 'Station transformer specification' })).toBeTruthy()
     expect(screen.queryByRole('button', { name: 'BESS solution specification' })).toBeNull()
+  })
+})
+
+/** Only the "Results" section reads `results` — the summary is never touched
+ * by the busbar case, so it is left empty rather than hand-built in full. */
+function withBusbarResult(busbar: BusbarNodeResult) {
+  useStore.setState({
+    diagram: { ...EMPTY_DIAGRAM, nodes: [{ id: 'bus', kind: 'busbar', x: 0, y: 0, props: {} }] },
+    selection: { type: 'node', id: 'bus' },
+    results: { edges: {}, nodes: { bus: busbar }, warnings: [], summary: {} } as unknown as SolveResults,
+  })
+}
+
+describe('Inspector — sized busbar switchgear (ticket 03)', () => {
+  beforeEach(() => {
+    useStore.setState({ selection: null, diagram: EMPTY_DIAGRAM, designMeta: null, results: null })
+  })
+
+  it('shows the busbar, export switchgear and each feeder, sized rating beside its current', () => {
+    withBusbarResult({
+      kind: 'busbar', p_kw: 3050, q_kvar: 996, s_kva: 3209, n_circuits: 2,
+      circuit_sizes: [1, 1], v_kv: 20,
+      i_a: 91.16, switchgear_rated_a: 630, export_i_a: 91.16, export_switchgear_rated_a: 630,
+      feeder_i_a: [92.88, 45.0], feeder_switchgear_rated_a: [630, 630],
+    })
+    render(<Inspector />)
+
+    // The busbar and export switchgear share this ticket's current and
+    // rating, so their rows read identically.
+    expect(screen.getAllByText('630 A (sized) — 91 A')).toHaveLength(2)
+    expect(screen.getByText('Busbar')).toBeTruthy()
+    expect(screen.getByText('Export switchgear')).toBeTruthy()
+    expect(screen.getByText('Circuit 1 feeder')).toBeTruthy()
+    expect(screen.getByText('Circuit 2 feeder')).toBeTruthy()
+    expect(screen.getByText('630 A (sized) — 93 A')).toBeTruthy()
+    expect(screen.getByText('630 A (sized) — 45 A')).toBeTruthy()
+  })
+
+  it('shows an unsized busbar or export switchgear that clears the 4000 A ladder top', () => {
+    withBusbarResult({
+      kind: 'busbar', p_kw: 145_000, q_kvar: 40_000, s_kva: 150_000, n_circuits: 1,
+      circuit_sizes: [13], v_kv: 20,
+      i_a: 4148, switchgear_rated_a: null, export_i_a: 4148, export_switchgear_rated_a: null,
+      feeder_i_a: [4148], feeder_switchgear_rated_a: [null],
+    })
+    render(<Inspector />)
+
+    const unsized = screen.getAllByText('not sized — 4,148 A exceeds the 4,000 A ladder top')
+    // Busbar and export switchgear share this ticket's current, and the
+    // circuit's one feeder carries the same total — three rows, same text.
+    expect(unsized).toHaveLength(3)
   })
 })

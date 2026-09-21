@@ -889,6 +889,14 @@ class BranchArchitecture:
     def q_busbar_kvar(self) -> float:
         return sum(c.q_busbar_kvar for c in self.circuits) - self.aux_q_kvar
 
+    @property
+    def busbar_current_a(self) -> float:
+        """The busbar's net current, auxiliary load included — what the busbar
+        and export switchgear are sized on (ADR-0007), the same net S the MV
+        export cable is sized on."""
+        return current_a(math.hypot(self.p_busbar_kw, self.q_busbar_kvar),
+                         self.layout.v_mv_kv)
+
 
 def size_branch(
     layout: PlantLayout,

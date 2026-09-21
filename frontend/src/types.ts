@@ -194,6 +194,21 @@ export interface BusbarNodeResult {
   n_circuits: number
   circuit_sizes: number[]
   v_kv: number
+  /** Sized busbar switchgear (ADR-0007): the busbar and export switchgear
+   * carry the same design-point current in this ticket — the busbar total,
+   * auxiliary load included — but are reported under separate keys because
+   * a later ticket (pins) lets an engineer check the export switchgear
+   * against a rating that then diverges from the busbar's own. `null` means
+   * the current exceeds the 4000 A top of the standard ladder — no
+   * admissible size, and the design is flagged rather than blocked. */
+  i_a: number
+  switchgear_rated_a: number | null
+  export_i_a: number
+  export_switchgear_rated_a: number | null
+  /** One feeder per circuit, same order as `circuit_sizes`: sized against
+   * that circuit's own head current, never the busbar's auxiliary load. */
+  feeder_i_a: number[]
+  feeder_switchgear_rated_a: (number | null)[]
 }
 
 export interface AuxNodeResult {

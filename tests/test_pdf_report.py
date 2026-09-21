@@ -116,6 +116,21 @@ def test_the_two_fleets_of_a_hybrid_are_presented_distinctly():
     assert "BESS fleet" in text
 
 
+def test_the_report_lists_the_sized_busbar_switchgear():
+    # ADR-0007: the busbar, export switchgear and each feeder, sized rating
+    # beside its current.
+    text = _story_text(_minimal())
+    assert "Busbar switchgear" in text
+    assert "Export switchgear" in text
+    assert "Circuit 1 feeder" in text
+    assert "630 A (sized)" in text
+
+
+def test_a_busbar_switchgear_section_appears_for_each_fleet_of_a_hybrid():
+    text = _story_text(_hybrid_with_drawn_bess(p_target_bess_mw=2.0))
+    assert text.count("Busbar switchgear") >= 2
+
+
 def test_a_single_fleet_report_keeps_stage_2_as_one_table():
     """A PV-only report must read exactly as it did before hybrids existed.
 

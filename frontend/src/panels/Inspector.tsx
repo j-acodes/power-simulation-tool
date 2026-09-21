@@ -470,6 +470,16 @@ function NodeProperties({ node }: { node: DiagramNode }) {
   )
 }
 
+/** One line of sized busbar switchgear (ADR-0007): the rating beside its
+ * current, marked as sized — or, when the current clears the 4000 A top of
+ * the standard ladder, that no standard rating admits it (a later ticket
+ * adds a pinned rating here instead). */
+function switchgearValue(ratedA: number | null, currentA: number): string {
+  return ratedA != null
+    ? `${fmt(ratedA, 0)} A (sized) — ${fmt(currentA, 0)} A`
+    : `not sized — ${fmt(currentA, 0)} A exceeds the 4,000 A ladder top`
+}
+
 /** Read-only computed results for one node, keyed by its id in the last solve
  * — exactly the figures map_results already provides for that kind. */
 function NodeResults({ result }: { result?: NodeResult }) {
@@ -496,6 +506,19 @@ function NodeResults({ result }: { result?: NodeResult }) {
           <Row label={`Total ${LABEL.activePowerMw}`} value={fmt(result.p_kw / 1000, 3)} />
           <Row label={`Total ${LABEL.reactivePowerMvar}`} value={fmt(result.q_kvar / 1000, 3)} />
           <Row label="Number of circuits" value={String(result.n_circuits)} />
+          <SectionTitle>Busbar switchgear</SectionTitle>
+          <Row label="Busbar" value={switchgearValue(result.switchgear_rated_a, result.i_a)} />
+          <Row
+            label="Export switchgear"
+            value={switchgearValue(result.export_switchgear_rated_a, result.export_i_a)}
+          />
+          {result.feeder_i_a.map((current, idx) => (
+            <Row
+              key={idx}
+              label={`Circuit ${idx + 1} feeder`}
+              value={switchgearValue(result.feeder_switchgear_rated_a[idx], current)}
+            />
+          ))}
         </>
       )
     case 'aux':

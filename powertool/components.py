@@ -94,6 +94,32 @@ DEFAULT_SWITCHGEAR_RATED_CURRENT_A = 630.0
 DEFAULT_CABLE_ENTRY_CABLES_PER_PHASE = 2
 DEFAULT_CABLE_ENTRY_MAX_CROSS_SECTION_MM2 = 300.0
 
+# Standard rating ladder for SIZED busbar switchgear — the busbar, one feeder
+# per circuit, and the export switchgear (ADR-0007, CONTEXT.md's "Busbar
+# switchgear"). Unlike a transformer station's switchgear, this equipment is
+# not a catalogue product with a published rating: the tool sizes each part to
+# the smallest standard rating that carries its design-point current, with no
+# utilization margin.
+BUSBAR_SWITCHGEAR_LADDER_A = (630.0, 800.0, 1250.0, 1600.0, 2000.0, 2500.0, 3150.0, 4000.0)
+
+
+def size_busbar_switchgear_rating(current_a: float) -> float | None:
+    """The smallest ``BUSBAR_SWITCHGEAR_LADDER_A`` rating [A] carrying
+    ``current_a``, or ``None`` when it exceeds the ladder's top (ADR-0007).
+
+    No utilization margin, mirroring ``switchgear_rated_current_a``. The
+    1e-9 tolerance matches the through-current-vs-rating comparisons
+    elsewhere in the engine, so a current of exactly one rating (e.g. exactly
+    630 A) resolves to that rating rather than escalating to the next size.
+    A current above the top of the ladder has no admissible size; the caller
+    still solves the design and flags it (ADR-0006's split) rather than
+    raising, since this function never sees the busbar node to point at.
+    """
+    for rating in BUSBAR_SWITCHGEAR_LADDER_A:
+        if current_a <= rating + 1e-9:
+            return rating
+    return None
+
 
 @dataclass
 class Transformer:

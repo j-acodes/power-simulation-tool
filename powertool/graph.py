@@ -61,10 +61,12 @@ from .components import (
     DEFAULT_CABLE_ENTRY_CABLES_PER_PHASE,
     DEFAULT_CABLE_ENTRY_MAX_CROSS_SECTION_MM2,
     DEFAULT_SWITCHGEAR_RATED_CURRENT_A,
+    BUSBAR_SWITCHGEAR_LADDER_A,
     Cable,
     PvInverter,
     PvInverterCapability,
     Transformer,
+    size_busbar_switchgear_rating,
 )
 from .sizing import SizingResult
 
@@ -1715,6 +1717,21 @@ def map_results(inputs: GraphInputs, stage1s: list[SizingResult],
 
         p_busbar = sum(c.p_busbar_kw for c in branch_arch.circuits)
         q_busbar = sum(c.q_busbar_kvar for c in branch_arch.circuits)
+        # Sized busbar switchgear (ADR-0007, CONTEXT.md's "Busbar switchgear",
+        # "Feeder", "Export switchgear"). The busbar and export switchgear are
+        # sized on the branch's NET busbar total — the same net S the MV
+        # export cable is sized on (BranchArchitecture.p_busbar_kw /
+        # q_busbar_kvar already take this branch's own auxiliary load out,
+        # see that property's docstring) — never on p_busbar/q_busbar above,
+        # which are the raw per-circuit deliveries shown as "p_kw"/"q_kvar".
+        # Each feeder is instead sized on its own circuit's head current
+        # (i_trunk_a), which auxiliary load never touches.
+        busbar_current_a = branch_arch.busbar_current_a
+        busbar_switchgear_rated_a = size_busbar_switchgear_rating(busbar_current_a)
+        feeder_current_a = [c.i_trunk_a for c in branch_arch.circuits]
+        feeder_switchgear_rated_a = [
+            size_busbar_switchgear_rating(i) for i in feeder_current_a
+        ]
         nodes[branch_inputs.busbar_id] = {
             "kind": "busbar",
             "p_kw": p_busbar,
@@ -1723,7 +1740,30 @@ def map_results(inputs: GraphInputs, stage1s: list[SizingResult],
             "n_circuits": len(branch_arch.circuits),
             "circuit_sizes": layout.circuit_sizes,
             "v_kv": layout.v_mv_kv,
+            # Busbar and export switchgear share the same design-point
+            # current in this ticket — they diverge once pins (a later
+            # ticket) let an engineer check the export switchgear against a
+            # rating it already has — so both are reported under their own
+            # keys rather than one shared pair.
+            "i_a": busbar_current_a,
+            "switchgear_rated_a": busbar_switchgear_rated_a,
+            "export_i_a": busbar_current_a,
+            "export_switchgear_rated_a": busbar_switchgear_rated_a,
+            "feeder_i_a": feeder_current_a,
+            "feeder_switchgear_rated_a": feeder_switchgear_rated_a,
         }
+        if busbar_switchgear_rated_a is None:
+            # No standard rating carries this busbar's current (ADR-0007) —
+            # the design still solves, flagged here, mirroring how a station
+            # over its own switchgear rated current is flagged rather than
+            # stopping the solve (ADR-0006).
+            warnings.append(GraphIssue(
+                "busbar_switchgear_no_admissible_rating",
+                f"Busbar '{branch_inputs.busbar_id}' carries {busbar_current_a:,.0f} A "
+                f"— above the {BUSBAR_SWITCHGEAR_LADDER_A[-1]:,.0f} A top of the "
+                f"standard busbar switchgear ladder. No standard rating fits; the "
+                f"busbar is shown but not sized.",
+                node_id=branch_inputs.busbar_id))
         for aux_id in branch_inputs.aux_ids:
             nodes[aux_id] = {"kind": "aux"}
         if branch_inputs.aux_ids:

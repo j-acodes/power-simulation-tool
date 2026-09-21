@@ -258,6 +258,107 @@ def test_circuit_over_switchgear_through_current_still_solves_flagged_at_offendi
     assert "642" in matches[0]["message"] or "630" in matches[0]["message"]
 
 
+def test_busbar_payload_reports_sized_ratings_for_busbar_export_and_each_feeder():
+    # ADR-0007: the busbar and export switchgear are sized on the busbar's net
+    # total (the aux node's own p_kw/q_kvar, reported separately, taken out);
+    # the one feeder is sized on its circuit's head current — the sending end
+    # of the trunk cable, cross-checked here against that cable's own s_kva
+    # rather than recomputed the same way the engine computes it.
+    result = client.post("/api/solve", json=_minimal()).json()
+
+    assert result["issues"] == []
+    bus = result["results"]["nodes"]["bus"]
+    aux = result["results"]["nodes"]["aux"]
+    trunk = result["results"]["edges"]["e_t1"]
+
+    expected_busbar_i = math.hypot(
+        bus["p_kw"] - aux["p_kw"], bus["q_kvar"] - aux["q_kvar"]
+    ) / (math.sqrt(3.0) * 20.0)
+    expected_feeder_i = trunk["s_kva"] / (math.sqrt(3.0) * 20.0)
+
+    assert bus["i_a"] == pytest.approx(expected_busbar_i)
+    assert bus["switchgear_rated_a"] == 630.0
+    # Busbar and export switchgear share this ticket's current, but each is
+    # reported under its own key — see the busbar payload's own comment.
+    assert bus["export_i_a"] == pytest.approx(expected_busbar_i)
+    assert bus["export_switchgear_rated_a"] == 630.0
+    assert bus["feeder_i_a"] == pytest.approx([expected_feeder_i])
+    assert bus["feeder_switchgear_rated_a"] == [630.0]
+
+
+def test_auxiliary_load_is_included_in_busbar_and_export_current_but_not_the_feeder():
+    # A near-zero-length trunk cable (1 m — zero itself is rejected, see
+    # ``missing_length``) leaves cable losses negligible, so the trunk's own
+    # p_kw/q_kvar match the busbar's raw p_kw/q_kvar to within a fraction of
+    # a kW. Whatever gap remains between the feeder's current (read straight
+    # off that near-lossless segment) and the busbar/export current is then
+    # attributable to the fixture's 50 kW / 10 kvar aux load alone
+    # (ADR-0007), not to cable losses along the way.
+    diagram = _minimal()
+    diagram["edges"][1]["length_m"] = 1.0  # bus -> s1
+
+    result = client.post("/api/solve", json=diagram).json()
+    assert result["issues"] == []
+    bus = result["results"]["nodes"]["bus"]
+    trunk = result["results"]["edges"]["e_t1"]
+
+    assert trunk["p_kw"] == pytest.approx(bus["p_kw"], abs=0.1)
+    assert trunk["q_kvar"] == pytest.approx(bus["q_kvar"], abs=0.1)
+    feeder_i = trunk["s_kva"] / (math.sqrt(3.0) * 20.0)
+    assert bus["feeder_i_a"] == pytest.approx([feeder_i])
+    # Aux is netted out of the busbar/export current, never the feeder's —
+    # the gap is at least 1 A (the fixture's aux is 50 kW / 10 kvar against a
+    # ~3 MW design), well above what the near-zero-length trunk's own cable
+    # loss alone could produce (a fraction of a kW).
+    assert bus["i_a"] < feeder_i - 1.0
+    assert bus["export_i_a"] < feeder_i - 1.0
+
+
+def test_busbar_total_above_4000a_still_solves_flagged_at_the_busbar_node():
+    # Thirteen identical stations chained on one circuit (ADR-0006 style
+    # topology, extended): each station's OWN current stays safely under its
+    # 630 A switchgear rating, but the busbar's combined total — everything
+    # this branch delivers, aux included — clears the 4000 A top of the
+    # standard busbar switchgear ladder. No admissible size exists; the
+    # design still solves in full and the busbar is flagged.
+    n_stations = 13
+    diagram = _minimal()
+    diagram["nodes"][0]["props"].update({"p_target_mw": 21.0 * n_stations / 2, "pf": 0.95})
+    diagram["nodes"][2]["props"].update({
+        "model": "SUNGROW_MVS3200",
+        "pv_inverter": "sungrow-sg350hx-20",
+        "inverter_count": 10,
+    })
+    prev = "s1"
+    for i in range(2, n_stations + 1):
+        sid = f"s{i}"
+        diagram["nodes"].append(_node(
+            sid, "station", mode="catalogue", model="SUNGROW_MVS3200",
+            pv_inverter="sungrow-sg350hx-20", inverter_count=10,
+        ))
+        diagram["edges"].append(_edge(f"e_t{i}", prev, sid, length_m=400.0))
+        prev = sid
+
+    result = solve_diagram(diagram, db)
+
+    assert result["issues"] == []
+    assert result["results"] is not None
+    nodes = result["results"]["nodes"]
+    for i in range(1, n_stations + 1):
+        assert nodes[f"s{i}"]["i_a"] < 630.0  # each station's OWN current is fine
+
+    bus = nodes["bus"]
+    assert bus["i_a"] > 4000.0
+    assert bus["switchgear_rated_a"] is None
+    assert bus["export_switchgear_rated_a"] is None
+    assert bus["feeder_switchgear_rated_a"] == [None]
+
+    warnings = result["results"]["warnings"]
+    matches = [w for w in warnings if w["code"] == "busbar_switchgear_no_admissible_rating"]
+    assert len(matches) == 1
+    assert matches[0]["node_id"] == "bus"
+
+
 def test_station_over_own_switchgear_rating_on_its_own_current_is_an_engine_error():
     # A single station whose OWN current alone (no downstream) already exceeds
     # its OWN switchgear rated current is a hard error: the catalogue is

@@ -9,12 +9,14 @@ import math
 import pytest
 
 from powertool.components import (
+    BUSBAR_SWITCHGEAR_LADDER_A,
     DEFAULT_CABLE_ENTRY_CABLES_PER_PHASE,
     DEFAULT_CABLE_ENTRY_MAX_CROSS_SECTION_MM2,
     DEFAULT_SWITCHGEAR_RATED_CURRENT_A,
     Cable,
     Transformer,
     current_a,
+    size_busbar_switchgear_rating,
 )
 
 
@@ -219,3 +221,16 @@ def test_cable_entry_rejects_a_non_integer_cables_per_phase():
 def test_cable_entry_rejects_a_nonpositive_published_cross_section():
     with pytest.raises(ValueError):
         _tx(cable_entry_cables_per_phase=2, cable_entry_max_cross_section_mm2=0)
+
+
+def test_size_busbar_switchgear_rating_picks_smallest_admissible_ladder_step():
+    # Exactly the bottom rung resolves to itself — no margin, and the 1e-9
+    # tolerance means it never spuriously escalates.
+    assert size_busbar_switchgear_rating(630.0) == 630.0
+    # One amp over steps up to the next rung.
+    assert size_busbar_switchgear_rating(631.0) == 800.0
+    # Exactly the top rung still resolves — it is admissible, not excluded.
+    assert size_busbar_switchgear_rating(4000.0) == 4000.0
+    # A hair over the top has no admissible size.
+    assert size_busbar_switchgear_rating(4000.1) is None
+    assert size_busbar_switchgear_rating(0.0) == BUSBAR_SWITCHGEAR_LADDER_A[0]
