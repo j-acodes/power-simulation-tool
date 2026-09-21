@@ -57,3 +57,10 @@ of it is trustworthy. A circuit that is collectively too heavy is a compliance f
 still solves and still reports its currents, because the engineer needs to see those currents to
 know where to split the circuit. Stage-1 planning may order stations to satisfy the limit; a
 drawn diagram is never silently rearranged.
+
+## Amendment: cable entry and busbar switchgear
+
+[ADR-0007](0007-busbar-switchgear-sized-several-busbars-per-fleet.md) keeps this record's
+station limit and its retirement of the flat cap, and removes the free parallel runs described
+under Consequences: circuit cables are now bounded by the cable entry of the switchgear at both
+ends, and the busbar end gains sized switchgear of its own.

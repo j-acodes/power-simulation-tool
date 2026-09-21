@@ -1,7 +1,7 @@
 # Open question: the switchgear's cable entry may be the real limit
 
 **Raised:** 2026-09-21, by the owner, after ticket 02 landed and before ticket 03 started.
-**Status:** needs-info — blocks the decision on ticket 03's scope, not ticket 03's code.
+**Status:** resolved 2026-09-21 — cable entry adopted in ADR-0007 and `.scratch/switchgear-model/spec.md`.
 
 ## The observation
 

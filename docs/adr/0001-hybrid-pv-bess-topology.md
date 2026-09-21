@@ -99,3 +99,10 @@ loss-refinement fixed point — the part named in the Consequences as the riskie
 and the one with no observable intermediate on the canvas. It was considered and explicitly
 deferred; if it is taken up, it needs a record that supersedes this one rather than an
 amendment to it.
+
+## Amendment: several busbars per fleet
+
+The rule of exactly one busbar per fleet kind is superseded by
+[ADR-0007](0007-busbar-switchgear-sized-several-busbars-per-fleet.md): a fleet may have several
+busbars in parallel, each exporting into the one shared HV transformer. The shared transformer,
+per-fleet loading and the multi-branch loss refinement described above are unchanged.

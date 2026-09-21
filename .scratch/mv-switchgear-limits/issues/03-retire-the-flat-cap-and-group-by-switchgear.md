@@ -17,7 +17,7 @@ parallel cables.
 
 **Blocked by:** 02.
 
-**Status:** ready-for-agent
+**Status:** wontfix — superseded by `.scratch/switchgear-model/spec.md` (ADR-0007), 2026-09-21.
 
 - [ ] `max_circuit_current_a` exists nowhere in the engine, backend, frontend, seed or report.
 - [ ] A saved design carrying the key solves and ignores it.

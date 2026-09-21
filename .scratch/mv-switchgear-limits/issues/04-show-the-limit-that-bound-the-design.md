@@ -8,7 +8,7 @@ a datasheet. The PDF report carries the same evidence, so the report supports it
 
 **Blocked by:** 03.
 
-**Status:** ready-for-agent
+**Status:** wontfix — superseded by `.scratch/switchgear-model/spec.md` (ADR-0007), 2026-09-21.
 
 - [ ] Results show each station's through current and the rating it was checked against.
 - [ ] A fallback-sourced rating is visibly marked as defaulted in results, specification view

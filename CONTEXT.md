@@ -20,16 +20,50 @@ stepping the export up to a higher voltage. Which one a design uses is a propert
 point of connection, not of any individual station.
 
 **Busbar**:
-The MV collection point that every circuit in a fleet hangs off. A busbar belongs to exactly
-one fleet kind; a design with more than one fleet has one busbar per fleet.
+An MV collection point that circuits hang off. A busbar belongs to exactly one fleet kind, and
+a fleet may have several busbars in parallel, each with its own export switchgear into the one
+shared HV transformer — or into the point of connection for an MV interconnection. Every busbar
+carries busbar switchgear, which the tool sizes.
 _Avoid_: bus, collector bus
+
+**Busbar switchgear**:
+The MV switchboard a busbar is built into: the busbar itself, one feeder per circuit, and the
+export switchgear that takes the busbar's total toward the grid. Unlike a transformer station's
+switchgear it is not a catalogue product — it is designed per project — so the tool **sizes**
+each part to the smallest standard rating that carries its design-point current (630, 800,
+1250, 1600, 2000, 2500, 3150 or 4000 A), with no utilization margin. An engineer may **pin** a
+rating instead; a pinned rating is checked, not sized, and one too small for its current is
+flagged while the design still solves. Only MV-side equipment is modelled; the HV side of an HV
+interconnection is not.
+_Avoid_: switchboard (in model names; fine in prose), RMU, MV panel
+
+**Feeder**:
+The panel of busbar switchgear that one circuit leaves the busbar through. Sized against the
+circuit's head current, the current in its first cable. A feeder is equipment, never the circuit
+itself: the chain of stations and its cables is the circuit.
+_Avoid_: feeder as a name for the circuit, outgoing panel, bay
+
+**Export switchgear**:
+The panel of busbar switchgear that carries the busbar's total, auxiliary load included, to
+the HV transformer or to the point of connection. Sized on the MV side only.
+_Avoid_: incomer (names the direction from the grid's side), transformer bay
+
+**Cable entry**:
+What a switchgear's terminals physically accept per cable run: a number of cables per phase
+and a maximum cross-section. A circuit cable must fit the stricter cable entry of its two ends,
+so it bounds both how many parallel runs a segment may use and how large each may be. A
+transformer station publishes one cable entry for its incoming and outgoing cables alike; an
+unpublished one falls back to two cables of 630 mm² with a notice. Export cables are not bound
+by it.
+_Avoid_: termination capacity, cable landing
 
 **Circuit**:
 One radial daisy chain of stations run off a busbar by a single MV cable: the busbar feeds
-the first station, that station feeds the next, and so on to the end of the chain. A fleet's
-stations are grouped into as many circuits as the switchgear rated current of the stations in
-them allows.
-_Avoid_: feeder, string (string is reserved for PV DC strings, a concept this tool does not model)
+the first station, that station feeds the next, and so on to the end of the chain. A circuit
+leaves its busbar through a feeder. A fleet's stations are grouped into as many circuits as the
+switchgear rated current and cable entry of the stations in them allow.
+_Avoid_: feeder (that is the panel a circuit leaves through), string (string is reserved for PV
+DC strings, a concept this tool does not model)
 
 **Station**:
 One MV/LV conversion point on the diagram: a transformer station, plus — depending on fleet
@@ -111,7 +145,8 @@ the model's own name for the concept is fleet kind)
 **Fleet**:
 The set of stations of one fleet kind behind one point of connection, sized and arranged as
 its own independent cascade. A hybrid design has two fleets — one PV, one BESS — each with
-its own busbar, its own circuits, and its own loading limit. Historically the word has meant
+its own busbars, its own circuits, and its own loading limit. Loading is uniform across a
+fleet, however many busbars it has. Historically the word has meant
 "every station in the design"; that usage is being retired in favour of "one fleet kind's
 stations," and code or prose that still means the old, undifferentiated sense should say so
 explicitly rather than relying on the bare word.

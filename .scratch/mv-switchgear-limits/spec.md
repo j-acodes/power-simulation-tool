@@ -1,6 +1,6 @@
 # Spec: Switchgear rated current bounds a circuit
 
-**Status:** ready-for-agent
+**Status:** tickets 01–02 shipped; 03–04 superseded by `.scratch/switchgear-model/spec.md` (ADR-0007).
 
 ## Problem Statement
 
