@@ -51,7 +51,7 @@ def _settings(hv_kv: float | None = None) -> dict:
     return {
         "tiers": {"lv_kv": 0.8, "mv_kv": 20.0, "hv_kv": hv_kv},
         "rules": {"max_utilization": 0.80, "collection_loss_pct": 1.30,
-                  "export_loss_pct_per_km": 0.10, "max_circuit_current_a": 400.0},
+                  "export_loss_pct_per_km": 0.10},
     }
 
 
@@ -355,6 +355,21 @@ def test_unknown_keys_are_ignored():
     diagram["nodes"][0]["props"]["colour"] = "red"
     diagram["edges"][0]["animated"] = True
     assert validate_graph(diagram, db) == []
+
+
+def test_saved_max_circuit_current_a_rule_is_ignored_not_read():
+    # ADR-0006 retired the flat 400 A planning cap outright — a design saved
+    # before the retirement may still carry the key in settings.rules, and it
+    # must be ignored (never fail, never change a number), same as any other
+    # unknown rule key: solve to the byte-identical result with or without it.
+    with_stray_key = _hv_diagram()
+    with_stray_key["settings"]["rules"]["max_circuit_current_a"] = 50.0
+    without = _hv_diagram()
+
+    with_result = solve_diagram(with_stray_key, db)
+    without_result = solve_diagram(without, db)
+    assert with_result["issues"] == without_result["issues"] == []
+    assert with_result == without_result
 
 
 def test_no_poc():
@@ -1033,16 +1048,6 @@ def test_forced_hybrid_mv_export_that_cannot_carry_is_an_engine_error():
     assert "No cable can carry" in body["issues"][0]["message"]
 
 
-def test_over_current_warning_points_at_the_trunk():
-    diagram = _hv_diagram()
-    diagram["settings"]["rules"]["max_circuit_current_a"] = 50.0
-    resp = client.post("/api/solve", json=diagram)
-    assert resp.status_code == 200
-    warnings = resp.json()["results"]["warnings"]
-    over = [w for w in warnings if w["code"] == "circuit_over_current"]
-    assert over and {w["edge_id"] for w in over} == {"e_a1", "e_b1"}
-
-
 # --- /api/solve -------------------------------------------------------------
 
 def test_solve_returns_issues_with_http_200():
@@ -1106,7 +1111,6 @@ def _auto_reference():
     fleet = [(db.transformer("HUAWEI_JUPITER9000"), 5),
              (db.transformer("HUAWEI_JUPITER3000"), 3)]
     layout = arrange_plant(stage1, fleet, max_loading=1.0,
-                           max_circuit_current_a=400.0,
                            trunk_length_km=TRUNK_M / 1000.0,
                            spacing_km=SPACING_M / 1000.0, v_mv_kv=V_MV_KV)
     lengths = {
@@ -1169,10 +1173,12 @@ def _drawn_example(layout) -> tuple[dict, list[list[str]], dict]:
 
 def test_golden_45mw_example_drawn_equals_the_auto_path():
     stage1, layout, arch = _auto_reference()
-    # Anchor the fixture: this is the arrangement the auto path produces today.
-    assert layout.circuit_sizes == [2, 2, 2, 1, 1]
+    # Anchor the fixture: this is the arrangement the auto path produces today
+    # (ADR-0006: each station's own 630 A fallback switchgear rating, not the
+    # retired flat 400 A cap — a materially bigger bound, fewer circuits).
+    assert layout.circuit_sizes == [4, 2, 2]
     assert [[p.transformer.s_rated_kva_at_40c for p in c] for c in layout.circuit_plans] == \
-           [[9000, 3300], [9000, 3300], [9000, 3300], [9000], [9000]]
+           [[9000, 3300, 3300, 3300], [9000, 9000], [9000, 9000]]
 
     diagram, station_ids, edge_ids = _drawn_example(layout)
     assert validate_graph(diagram, db) == []
@@ -1245,21 +1251,23 @@ def test_golden_rearranging_the_drawing_changes_the_numbers():
     _stage1, layout, arch = _auto_reference()
     diagram, _ids, _edges = _drawn_example(layout)
 
-    # Hang circuit 4's lone 9 MVA station off the end of circuit 1: four
-    # circuits now, one of them a three-station chain whose trunk carries much
-    # more power over the same lengths.
+    # Hang circuit 3's far 9 MVA station off the end of circuit 1's chain:
+    # circuit 1 grows to 5 stations, circuit 3 shrinks to its lone remaining
+    # one (still attached to the busbar), circuit 2 untouched.
     moved = {e["id"]: e for e in diagram["edges"]}
-    moved["c4_seg1"]["source"] = "s1_2"
+    moved["c3_seg2"]["source"] = "s1_4"
     resp = client.post("/api/solve", json=diagram)
     assert resp.status_code == 200
     body = resp.json()
     results = body["results"]
     assert body["issues"] == []
-    assert results["summary"]["circuit_sizes"] == [3, 2, 2, 1]
+    assert results["summary"]["circuit_sizes"] == [5, 2, 1]
     assert results["summary"]["total_cable_loss_kw"] > arch.total_cable_loss_kw
-    # ... and the drawing is now over the 400 A feeder cap, flagged on its trunk.
-    assert [w["edge_id"] for w in results["warnings"]
-            if w["code"] == "circuit_over_current"] == ["c1_seg1"]
+    # ... and circuit 1's near station now carries more than its own 630 A
+    # switchgear rated current in through current — flagged, never refused.
+    through_current_warnings = [
+        w for w in results["warnings"] if w["code"] == "switchgear_through_current_exceeded"]
+    assert [w["node_id"] for w in through_current_warnings] == ["s1_1"]
 
 
 def test_unrecognised_fleet_kind_is_rejected_not_coerced():

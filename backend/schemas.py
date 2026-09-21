@@ -89,7 +89,6 @@ class SeedRequest(BaseModel):
     max_loading: float = 1.0
     trunk_m: float
     spacing_m: float
-    max_circuit_current_a: float
     aux_p_kw: float = 0.0
     aux_q_kvar: float = 0.0
 
@@ -333,7 +332,6 @@ class RulesDefaults(BaseModel):
     max_utilization: float
     collection_loss_pct: float
     export_loss_pct_per_km: float
-    max_circuit_current_a: float
 
 
 class CatalogueDefaults(BaseModel):

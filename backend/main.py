@@ -54,10 +54,6 @@ from .solve import (
     solve_diagram,
 )
 
-# Stage-2 planning constant inherited from the deleted Streamlit UI — used only
-# for the catalogue's default-rules payload in M0 (no /solve endpoint yet).
-MAX_CIRCUIT_CURRENT_A = 400.0
-
 db = ComponentDatabase.load()
 
 engine = make_engine()
@@ -257,7 +253,6 @@ def get_catalogue() -> CatalogueResponse:
             max_utilization=MAX_UTILIZATION,
             collection_loss_pct=COLLECTION_LOSS_PCT,
             export_loss_pct_per_km=EXPORT_LOSS_PCT_PER_KM,
-            max_circuit_current_a=MAX_CIRCUIT_CURRENT_A,
         ),
     )
 

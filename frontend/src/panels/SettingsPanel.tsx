@@ -95,15 +95,6 @@ export function SettingsPanel() {
         />
       </label>
       <label className="field inline">
-        <span>Max circuit current (A)</span>
-        <input
-          type="number"
-          step={1}
-          value={rules.max_circuit_current_a}
-          onChange={(e) => updateSettings({ rules: { ...rules, max_circuit_current_a: e.target.valueAsNumber } })}
-        />
-      </label>
-      <label className="field inline">
         {/* Fixed choice, not a free number — a transformer station only ever
          *  publishes a rating at 30 or 40 °C (see ADR-0004), never anything
          *  interpolated between them. */}

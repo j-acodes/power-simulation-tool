@@ -90,8 +90,8 @@ def seed_diagram(params: dict, db: ComponentDatabase) -> dict:
     ``interconnection`` ("HV"|"MV"), ``v_hv_kv`` (required for HV),
     ``export_m``, ``v_mv_kv``, ``station_model`` (a catalogue key),
     ``pv_inverter`` (a paired catalogue key), ``inverter_count``,
-    ``max_loading``, ``trunk_m``, ``spacing_m``, ``max_circuit_current_a``,
-    optional ``aux_p_kw``/``aux_q_kvar``.
+    ``max_loading``, ``trunk_m``, ``spacing_m``, optional
+    ``aux_p_kw``/``aux_q_kvar``.
     """
     interconnection = params["interconnection"]
     v_mv_kv = params["v_mv_kv"]
@@ -139,7 +139,6 @@ def seed_diagram(params: dict, db: ComponentDatabase) -> dict:
 
     layout = arrange_plant(
         stage1, [(station, n)],
-        max_circuit_current_a=params["max_circuit_current_a"],
         trunk_length_km=params["trunk_m"] / 1000.0,
         spacing_km=params["spacing_m"] / 1000.0,
         v_mv_kv=v_mv_kv,
@@ -233,7 +232,6 @@ def _layout_to_diagram(layout: PlantLayout, params: dict, v_export_kv: float) ->
                 "max_utilization": 0.80,
                 "collection_loss_pct": 1.30,
                 "export_loss_pct_per_km": 0.10,
-                "max_circuit_current_a": params["max_circuit_current_a"],
                 "max_loading": params["max_loading"],
             },
         },

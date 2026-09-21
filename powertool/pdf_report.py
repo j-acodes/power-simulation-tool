@@ -419,8 +419,7 @@ def _stage2(stage1s: list[SizingResult], arch: PlantArchitecture,
             ["Fleet loading", f"{layout.fleet_loading * 100:.0f}%" + against_max
              + ("" if layout.loading_ok else "  ⚠ fleet undersized")],
             ["Worst trunk current",
-             f"{_fmt(max(c.i_trunk_a for c in branch.circuits), 0)} A"
-             f" (cap {_fmt(layout.max_circuit_current_a, 0)} A)"],
+             f"{_fmt(max(c.i_trunk_a for c in branch.circuits), 0)} A"],
         ]
         if fleet:
             brows += _energy_rows(fleet)

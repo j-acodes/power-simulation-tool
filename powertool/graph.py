@@ -15,7 +15,7 @@ Diagram schema (``schema_version`` 1)::
      "settings": {
         "tiers": {"lv_kv": 0.8, "mv_kv": 20.0, "hv_kv": 132.0},   # hv_kv null -> MV interconnection
         "rules": {"max_utilization": 0.80, "collection_loss_pct": 1.30,
-                  "export_loss_pct_per_km": 0.10, "max_circuit_current_a": 400.0}},
+                  "export_loss_pct_per_km": 0.10}},
      "nodes": [{"id": ..., "kind": "poc|hv_tx|busbar|station|aux",
                 "x": ..., "y": ..., "props": {...}}],
      "edges": [{"id": ..., "source": ..., "target": ..., "tier": "lv|mv|hv",
@@ -74,14 +74,15 @@ TIERS = ("lv", "mv", "hv")
 FLEET_KINDS = ("pv", "bess")
 
 # Rule defaults, inherited from the deleted Streamlit sidebar (max utilization 80 %,
-# collection loss budget 1.30 %, export budget 0.10 %/km) and the Stage-2
-# planning cap of 400 A per MV collector circuit. A diagram may override any of
-# them in ``settings.rules``.
+# collection loss budget 1.30 %, export budget 0.10 %/km). The Stage-2 planning
+# cap of 400 A per MV collector circuit is retired (ADR-0006): a circuit is now
+# bounded by each station's own switchgear rated current, read from the
+# catalogue, never a diagram rule. A diagram may override any rule below in
+# ``settings.rules``.
 DEFAULT_RULES = {
     "max_utilization": 0.80,
     "collection_loss_pct": 1.30,
     "export_loss_pct_per_km": 0.10,
-    "max_circuit_current_a": 400.0,
     "max_loading": 1.0,
     # The ambient a design sizes its transformer stations against — see
     # ADR-0004 and CONTEXT.md's "AC power at ambient" entry. A design saved
@@ -1205,7 +1206,6 @@ class GraphInputs:
     max_utilization: float
     collection_loss_pct: float
     export_loss_pct_per_km: float
-    max_circuit_current_a: float
     # The design's ambient — see ADR-0004. Read once here and threaded
     # explicitly down to the architecture layer, rather than every sizing
     # call site reaching back into the diagram or a global constant.
@@ -1460,7 +1460,6 @@ def graph_to_inputs(diagram: dict, db) -> GraphInputs:
         max_utilization=_rule(diagram, "max_utilization"),
         collection_loss_pct=_rule(diagram, "collection_loss_pct"),
         export_loss_pct_per_km=_rule(diagram, "export_loss_pct_per_km"),
-        max_circuit_current_a=_rule(diagram, "max_circuit_current_a"),
         ambient_c=ambient_c,
         hv_mode=hv_mode,
         hv_transformer=hv_transformer,
@@ -1696,13 +1695,6 @@ def map_results(inputs: GraphInputs, stage1s: list[SizingResult],
                         f"or use a higher-rated one.",
                         node_id=node_id,
                     ))
-            if not circuit.current_ok:
-                warnings.append(GraphIssue(
-                    "circuit_over_current",
-                    f"Circuit {circuit.index} draws {circuit.i_trunk_a:,.0f} A, above "
-                    f"the {layout.max_circuit_current_a:,.0f} A planning cap — move a "
-                    f"station to another circuit or raise the cap.",
-                    edge_id=branch_inputs.segment_edge_ids[(circuit.index, 1)]))
 
         p_busbar = sum(c.p_busbar_kw for c in branch_arch.circuits)
         q_busbar = sum(c.q_busbar_kvar for c in branch_arch.circuits)
@@ -1895,7 +1887,6 @@ def map_results(inputs: GraphInputs, stage1s: list[SizingResult],
             "loss_percent_of_p_inv": (arch.total_active_loss_kw / p_inv_refined * 100.0
                                       if p_inv_refined else None),
             "worst_trunk_current_a": max((c.i_trunk_a for c in branch.circuits), default=0.0),
-            "max_circuit_current_a": layout.max_circuit_current_a,
             "all_current_ok": arch.all_current_ok,
             "power_balance_ok": arch.power_balance_ok,
             "v_mv_kv": layout.v_mv_kv,
@@ -1931,8 +1922,6 @@ def map_results(inputs: GraphInputs, stage1s: list[SizingResult],
             "loss_percent_of_p_inv": (arch.total_active_loss_kw / p_inv_refined_total * 100.0
                                       if p_inv_refined_total else None),
             "worst_trunk_current_a": worst_trunk_current_a,
-            "max_circuit_current_a": max(b.layout.max_circuit_current_a
-                                         for b in arch.branches),
             "all_current_ok": arch.all_current_ok,
             "power_balance_ok": arch.power_balance_ok,
             "v_mv_kv": arch.branches[0].layout.v_mv_kv,

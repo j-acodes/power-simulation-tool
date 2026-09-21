@@ -6,7 +6,7 @@ Pinned here:
   * it SOLVES to a plant that meets the POC target within tolerance and does
     not overload the fleet;
   * seeding is deterministic (same params -> the same diagram) and every
-    circuit respects the current cap it was seeded with;
+    station stays within its own switchgear rated current (ADR-0006);
   * the MV-interconnection variant (no hv_tx node) also validates and solves.
 """
 
@@ -20,8 +20,9 @@ from powertool.graph import validate_graph
 client = TestClient(app)
 
 # The 45 MW reference plant: a single catalogue model, HV interconnection at
-# 132 kV, 20 kV MV collection, the Stage-2 planning cap of 400 A per circuit,
-# and the example plant's trunk/spacing (see frontend/src/example.ts).
+# 132 kV, 20 kV MV collection, and the example plant's trunk/spacing (see
+# frontend/src/example.ts). Circuit grouping is bounded by the station's own
+# switchgear rated current (ADR-0006), never a flat planning cap.
 REFERENCE_PARAMS = {
     "p_poc_mw": 45.0,
     "pf_target": 0.95,
@@ -35,7 +36,6 @@ REFERENCE_PARAMS = {
     "max_loading": 1.0,
     "trunk_m": 800.0,
     "spacing_m": 350.0,
-    "max_circuit_current_a": 400.0,
 }
 
 
@@ -127,7 +127,6 @@ def test_seed_via_api_matches_direct_call():
         "max_loading": REFERENCE_PARAMS["max_loading"],
         "trunk_m": REFERENCE_PARAMS["trunk_m"],
         "spacing_m": REFERENCE_PARAMS["spacing_m"],
-        "max_circuit_current_a": REFERENCE_PARAMS["max_circuit_current_a"],
     }
     resp = client.post("/api/seed", json=payload)
     assert resp.status_code == 200
@@ -150,7 +149,7 @@ def test_seed_api_rejects_count_above_the_station_pairing_maximum():
     assert "1 to 28" in resp.json()["detail"]
 
 
-def test_seeding_is_deterministic_and_circuits_respect_the_current_cap():
+def test_seeding_is_deterministic_and_every_station_respects_its_switchgear_rating():
     first = seed_diagram(REFERENCE_PARAMS, db)
     second = seed_diagram(REFERENCE_PARAMS, db)
     assert first == second
@@ -159,7 +158,6 @@ def test_seeding_is_deterministic_and_circuits_respect_the_current_cap():
     assert result["issues"] == []
     summary = result["results"]["summary"]
     assert summary["all_current_ok"]
-    assert summary["worst_trunk_current_a"] <= REFERENCE_PARAMS["max_circuit_current_a"] + 1e-6
     assert result["results"]["warnings"] == []
 
 

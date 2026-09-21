@@ -331,7 +331,7 @@ def _example_diagram() -> dict:
          "export_m": 0, "v_mv_kv": 20, "station_model": "SUNGROW_MVS8960",
          "pv_inverter": "sungrow-sg350hx-20", "inverter_count": 28,
          "max_loading": 0.9, "trunk_m": 400, "spacing_m": 200,
-         "max_circuit_current_a": 600, "aux_p_kw": 120, "aux_q_kvar": 40},
+         "aux_p_kw": 120, "aux_q_kvar": 40},
         db,
     )
 

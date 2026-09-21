@@ -315,7 +315,6 @@ def solve_architecture(inputs: GraphInputs, db: ComponentDatabase):
                                     p_head_kw=p_i, q_head_kvar=q_i)
         layout = arrange_plant_manual(
             stage1, branch.circuits,
-            max_circuit_current_a=inputs.max_circuit_current_a,
             v_mv_kv=inputs.v_mv_kv,
             max_loading=branch.max_loading,
             kind=branch.kind,

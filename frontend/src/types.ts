@@ -88,7 +88,6 @@ export interface RuleSettings {
   max_utilization: number
   collection_loss_pct: number
   export_loss_pct_per_km: number
-  max_circuit_current_a: number
   /** Plant-wide fleet loading limit. */
   max_loading?: number
   /** Per-fleet overrides; each falls back to `max_loading` when unset. */
@@ -258,7 +257,6 @@ export interface ResultsSummary {
   total_active_loss_kw: number
   loss_percent_of_p_inv: number | null
   worst_trunk_current_a: number
-  max_circuit_current_a: number
   all_current_ok: boolean
   power_balance_ok: boolean
   v_mv_kv: number
@@ -552,7 +550,6 @@ export interface SeedParams {
   max_loading: number
   trunk_m: number
   spacing_m: number
-  max_circuit_current_a: number
   aux_p_kw?: number
   aux_q_kvar?: number
 }

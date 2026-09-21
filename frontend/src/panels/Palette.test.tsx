@@ -66,7 +66,7 @@ const catalogue: CatalogueResponse = {
   cables: {},
   defaults: {
     tiers: { lv_kv: 0.8, mv_kv: 20, hv_kv: 132 },
-    rules: { max_utilization: 0.8, collection_loss_pct: 1.3, export_loss_pct_per_km: 0.1, max_circuit_current_a: 400 },
+    rules: { max_utilization: 0.8, collection_loss_pct: 1.3, export_loss_pct_per_km: 0.1 },
   },
   bess_solutions: [bessSolution],
   bess_transformers: [bessTransformer],

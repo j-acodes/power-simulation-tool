@@ -36,7 +36,6 @@ function summary(overrides: Partial<ResultsSummary> = {}): ResultsSummary {
     all_current_ok: true,
     fleet_loading: 0.83,
     worst_trunk_current_a: 417,
-    max_circuit_current_a: 600,
     branches: [fleet()],
     ...overrides,
   } as ResultsSummary

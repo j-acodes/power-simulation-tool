@@ -6,10 +6,11 @@ power never flows in a single feeder. This module performs Stage 2:
 
   1. Count the LV/MV transformers needed to carry the required inverter power
      (user-selected model and maximum loading factor).
-  2. Group them into MV collector circuits capped by a maximum current per
-     circuit. The per-station current is CALCULATED from the actual MV-side
-     power flow (LV share plus the transformer's own losses pushed through),
-     not assumed from the nameplate.
+  2. Group them into MV collector circuits bounded by each station's own
+     switchgear rated current (ADR-0006). The per-station current is
+     CALCULATED from the actual MV-side power flow (LV share plus the
+     transformer's own losses pushed through), not assumed from the
+     nameplate.
   3. (size_architecture, added in later steps) Size every daisy-chain cable
      segment separately for the cumulative power it actually carries, recompute
      the plant losses, and refine the inverter requirement.
@@ -63,12 +64,12 @@ class PlantLayout:
     """The arrangement decisions for the plant, before any cable is sized.
 
     The fleet (transformer models and counts) comes from Stage 1; the tool no
-    longer invents a count. Stations are grouped into circuits respecting the
-    max current per circuit; within each circuit, position 0 is NEAREST the
-    substation and stations are ordered biggest-rating first — the trunk
-    carries everything regardless, and keeping the big stations close to the
-    busbar minimises the power flowing through the long tail segments (lowest
-    cable losses).
+    longer invents a count. Stations are grouped into circuits respecting each
+    station's own switchgear rated current (ADR-0006); within each circuit,
+    position 0 is NEAREST the substation and stations are ordered
+    biggest-rating first — the trunk carries everything regardless, and
+    keeping the big stations close to the busbar minimises the power flowing
+    through the long tail segments (lowest cable losses).
 
     Lengths apply to every circuit alike: ``trunk_length_km`` from the
     substation to the first station, ``spacing_km`` between consecutive
@@ -77,7 +78,6 @@ class PlantLayout:
 
     fleet: list[tuple[Transformer, int]]
     circuit_plans: list[list[StationPlan]]  # [circuit][position], 0 = nearest substation
-    max_circuit_current_a: float
     trunk_length_km: float
     spacing_km: float
     v_mv_kv: float
@@ -111,46 +111,70 @@ class PlantLayout:
         return f"{self.n_circuits} ({'+'.join(str(s) for s in self.circuit_sizes)})"
 
 
-def assign_circuits(i_stations: list[float], i_max_a: float) -> list[list[int]]:
-    """Group station indices into MV circuits respecting the current cap.
+def assign_circuits(i_stations: list[float], i_ratings: list[float]) -> list[list[int]]:
+    """Group station indices into MV circuits, each bounded by the switchgear
+    rated current of the stations placed in it (ADR-0006), not by a flat cap.
 
-    Fewest circuits first (searching up from the total-current lower bound),
-    then balanced: stations are placed biggest-current-first onto the
-    least-loaded circuit that still fits (LPT heuristic). With identical
-    stations this reproduces the balanced split (18 stations capped at 5 per
-    circuit -> sizes [5, 5, 4, 4]); with a mixed fleet it balances the circuit
-    currents.
+    Fewest circuits first (searching up from a lower bound), then balanced:
+    stations are placed biggest-current-first onto the least-loaded circuit
+    that still fits (LPT heuristic). A circuit's ceiling while packing is the
+    MINIMUM switchgear rating among the stations already in it, including the
+    candidate.
+    # ponytail: min(circuit ratings) is conservative for a mixed-rating
+    # circuit — a station's own position may carry less than the full circuit
+    # total, so its own rating alone could allow more. Exact per-position
+    # packing is possible if mixed ratings within one circuit ever need
+    # tighter packing; with biggest-station-nearest ordering every position's
+    # through current is <= the circuit total, so this ceiling is safe.
+
+    With identical stations this reproduces the balanced split (18 stations at
+    a 380 A rating -> sizes [5, 5, 4, 4]); with a mixed fleet it balances the
+    circuit currents within each circuit's own ceiling.
     """
     if not i_stations:
         raise ValueError("Need at least one station to arrange circuits")
+    if len(i_ratings) != len(i_stations):
+        raise ValueError("Need exactly one switchgear rating per station")
     if any(i <= 0 for i in i_stations):
         raise ValueError("Station currents must be positive")
-    worst = max(i_stations)
-    if worst > i_max_a + 1e-9:
-        raise ValueError(
-            f"One station alone draws {worst:,.0f} A, above the {i_max_a:,.0f} A "
-            f"circuit limit. Raise the max current per circuit or pick smaller "
-            f"transformers."
-        )
+    if any(r <= 0 for r in i_ratings):
+        raise ValueError("Switchgear ratings must be positive")
+    for idx, (current, rating) in enumerate(zip(i_stations, i_ratings)):
+        if current > rating + 1e-9:
+            raise ValueError(
+                f"Station {idx} alone draws {current:,.0f} A, above its own "
+                f"{rating:,.0f} A switchgear rated current. Pick a station with "
+                f"a higher-rated switchgear."
+            )
 
     order = sorted(range(len(i_stations)), key=lambda i: -i_stations[i])
-    lower = max(1, math.ceil(sum(i_stations) / i_max_a - 1e-9))
+    # A circuit's ceiling can never exceed the highest rating in the whole
+    # fleet (min of a subset <= max of the full set), so this bounds the
+    # circuit count the same way the flat-cap lower bound used to.
+    lower = max(1, math.ceil(sum(i_stations) / max(i_ratings) - 1e-9))
     for n_circuits in range(lower, len(i_stations) + 1):
         bins: list[list[int]] = [[] for _ in range(n_circuits)]
         loads = [0.0] * n_circuits
+        ceilings = [math.inf] * n_circuits
         feasible = True
         for idx in order:
-            fitting = [j for j in range(n_circuits)
-                       if loads[j] + i_stations[idx] <= i_max_a + 1e-9]
+            fitting = []
+            for j in range(n_circuits):
+                ceiling = min(ceilings[j], i_ratings[idx])
+                if loads[j] + i_stations[idx] <= ceiling + 1e-9:
+                    fitting.append(j)
             if not fitting:
                 feasible = False
                 break
             j = min(fitting, key=lambda j: loads[j])
             bins[j].append(idx)
             loads[j] += i_stations[idx]
+            ceilings[j] = min(ceilings[j], i_ratings[idx])
         if feasible:
             return [b for b in bins if b]
-    raise AssertionError("unreachable: one station per circuit always fits the cap")
+    raise AssertionError(
+        "unreachable: one station per circuit always fits its own rating"
+    )
 
 
 def station_mv_output(
@@ -180,7 +204,6 @@ def arrange_plant(
     stage1: SizingResult,
     fleet: list[tuple[Transformer, int]],
     *,
-    max_circuit_current_a: float,
     trunk_length_km: float,
     spacing_km: float,
     v_mv_kv: float,
@@ -194,8 +217,10 @@ def arrange_plant(
     Every station runs at the same per-unit loading r = S_inv / S_fleet, so its
     LV share of the inverter P and Q is proportional to its rating; its MV-side
     output (share minus its own transformer losses) sets its current, which
-    drives the circuit grouping. Within each circuit the biggest stations sit
-    nearest the substation (see PlantLayout). ``max_loading`` is a check
+    drives the circuit grouping — each circuit bounded by the switchgear
+    rated current of the stations placed in it (ADR-0006), not a flat cap.
+    Within each circuit the biggest stations sit nearest the substation (see
+    PlantLayout). ``max_loading`` is a check
     threshold only: the layout is still produced when exceeded, with
     ``loading_ok = False`` so the caller can warn. ``kind`` (fleet kind, "pv"
     or "bess") is stamped on every station plan built here — see
@@ -232,7 +257,10 @@ def arrange_plant(
         )
         plans.extend([plan] * count)  # identical figures for every unit of a model
 
-    bins = assign_circuits([p.i_a for p in plans], max_circuit_current_a)
+    bins = assign_circuits(
+        [p.i_a for p in plans],
+        [p.transformer.switchgear_rated_current_a for p in plans],
+    )
     circuit_plans = [
         sorted((plans[i] for i in b), key=lambda p: -p.transformer.rating_at(ambient_c))
         for b in bins
@@ -243,7 +271,6 @@ def arrange_plant(
     return PlantLayout(
         fleet=fleet,
         circuit_plans=circuit_plans,
-        max_circuit_current_a=max_circuit_current_a,
         trunk_length_km=trunk_length_km,
         spacing_km=spacing_km,
         v_mv_kv=v_mv_kv,
@@ -258,7 +285,6 @@ def arrange_plant_manual(
     stage1: SizingResult,
     circuits: list[list[Transformer]],
     *,
-    max_circuit_current_a: float,
     v_mv_kv: float,
     max_loading: float = 1.0,
     kind: str = "pv",
@@ -288,10 +314,13 @@ def arrange_plant_manual(
     at ambient for transitional diagram contracts; a positive value makes that
     station use explicit conversion capacity.
 
-    Nothing raises when the drawing exceeds a limit: a circuit above the current
-    cap is flagged downstream by ``CircuitResult.current_ok`` and an undersized
-    fleet by ``loading_ok``. ``max_loading`` is a check threshold only, exactly
-    as in :func:`arrange_plant`.
+    Nothing raises when the drawing exceeds a limit: a station carrying more
+    than its own switchgear rated current in through current is flagged
+    downstream (``StationResult.through_current_a`` vs.
+    ``Transformer.switchgear_rated_current_a`` — see ``powertool.graph``'s
+    ``switchgear_through_current_exceeded`` warning) and an undersized fleet
+    by ``loading_ok``. ``max_loading`` is a check threshold only, exactly as
+    in :func:`arrange_plant`.
 
     ``trunk_length_km`` / ``spacing_km`` are meaningless for a drawn plant (each
     run has its own length) and are set to a 1.0 km PLACEHOLDER. Callers must
@@ -380,7 +409,6 @@ def arrange_plant_manual(
     return PlantLayout(
         fleet=fleet,
         circuit_plans=circuit_plans,
-        max_circuit_current_a=max_circuit_current_a,
         trunk_length_km=1.0,  # placeholder: drawn plants pass segment_lengths
         spacing_km=1.0,
         v_mv_kv=v_mv_kv,
@@ -460,7 +488,6 @@ class CircuitResult:
     stations: list[StationResult]
     segments: list[SegmentResult]  # same order as stations; index 1 = trunk
     i_trunk_a: float  # current entering the trunk (the circuit's maximum)
-    current_ok: bool  # i_trunk_a <= the layout's max circuit current
     p_busbar_kw: float
     q_busbar_kvar: float
 
@@ -625,7 +652,6 @@ def size_circuits(
                 stations=stations,
                 segments=segments,
                 i_trunk_a=i_trunk_a,
-                current_ok=i_trunk_a <= layout.max_circuit_current_a + 1e-9,
                 p_busbar_kw=p,
                 q_busbar_kvar=q,
             )
@@ -1087,7 +1113,19 @@ class PlantArchitecture:
 
     @property
     def all_current_ok(self) -> bool:
-        return all(c.current_ok for b in self.branches for c in b.circuits)
+        """Every station's through current stays within its OWN switchgear
+        rated current (ADR-0006) — no flat circuit cap. Reads exactly the
+        figures ``switchgear_through_current_exceeded`` warns on, positionally
+        pairing each branch's ``CircuitResult.stations`` with its layout's
+        ``circuit_plans`` (built together, same order, in ``size_circuits``).
+        """
+        return all(
+            station.through_current_a
+            <= plan.transformer.switchgear_rated_current_a + 1e-9
+            for branch in self.branches
+            for circuit, plans in zip(branch.circuits, branch.layout.circuit_plans)
+            for station, plan in zip(circuit.stations, plans)
+        )
 
 
 _MAX_REFINE_ITERATIONS = 50  # geometric convergence; a handful of passes suffice
