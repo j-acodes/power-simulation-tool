@@ -66,6 +66,7 @@ from .components import (
     PvInverter,
     PvInverterCapability,
     Transformer,
+    busbar_switchgear_rating,
     size_busbar_switchgear_rating,
 )
 from .sizing import SizingResult
@@ -1001,6 +1002,38 @@ def _check_props(nodes, tree, db, diagram, issues) -> None:
                     issues.append(GraphIssue(
                         "bad_props",
                         f"Aux load '{nid}' has a non-numeric {key}.", node_id=nid))
+        elif kind == "busbar":
+            # Busbar switchgear pins (ADR-0007, ticket 04): optional per-part
+            # ratings that are checked instead of sized. Absent or null means
+            # "sized", handled entirely downstream; present-but-unusable is a
+            # structural error here, same style as every other prop check.
+            for key, label in (
+                ("busbar_switchgear_pin_a", "a pinned busbar switchgear rating"),
+                ("export_switchgear_pin_a", "a pinned export switchgear rating"),
+            ):
+                if key in props and props[key] is not None:
+                    value = _num(props.get(key))
+                    if value is None or value <= 0:
+                        issues.append(GraphIssue(
+                            "bad_props",
+                            f"Busbar '{nid}' has {label} of {props[key]!r}; it "
+                            f"must be a positive number.", node_id=nid))
+            pins = props.get("feeder_switchgear_pins_a")
+            if pins is not None:
+                if not isinstance(pins, dict):
+                    issues.append(GraphIssue(
+                        "bad_props",
+                        f"Busbar '{nid}' has feeder_switchgear_pins_a that is "
+                        f"not an object of edge id to rating.", node_id=nid))
+                else:
+                    for edge_id, value in pins.items():
+                        num = _num(value)
+                        if num is None or num <= 0:
+                            issues.append(GraphIssue(
+                                "bad_props",
+                                f"Busbar '{nid}' pins feeder '{edge_id}' to "
+                                f"{value!r}; a pinned feeder switchgear rating "
+                                f"must be a positive number.", node_id=nid))
 
 
 def _check_discharge_duration(nodes: dict[str, dict], db, diagram: dict,
@@ -1156,6 +1189,16 @@ class BranchInputs:
     export_length_km: float = 0.0
     export_candidates: list[Cable] | None = None
     export_forced: bool = False
+    # Busbar switchgear pins (ADR-0007, ticket 04): an engineer's own rating
+    # for the busbar or the export switchgear, checked instead of sized; None
+    # means sized, exactly as ticket 03 shipped. Feeder pins are keyed by
+    # their TRUNK edge id (the circuit's first cable, busbar -> first
+    # station — ``segment_edge_ids[(c, 1)]``) because that is the stable
+    # identity the diagram and the editor both already key on; a key that
+    # names no trunk edge of this busbar is simply never looked up.
+    switchgear_pin_a: float | None = None
+    export_switchgear_pin_a: float | None = None
+    feeder_switchgear_pins_a: dict[str, float] = field(default_factory=dict)
 
     @property
     def fleet(self) -> list[tuple[Transformer, int]]:
@@ -1325,6 +1368,19 @@ def graph_to_inputs(diagram: dict, db) -> GraphInputs:
         if p_target_kw <= 0:
             continue  # the topology gate: a zero-target busbar is no branch
 
+        # Busbar switchgear pins (ADR-0007, ticket 04). validate_graph has
+        # already rejected a present-but-unusable value, so this trusts what
+        # it finds, same as every other prop read in this function.
+        busbar_props = _props(nodes[busbar_id])
+        switchgear_pin_a = _num(busbar_props.get("busbar_switchgear_pin_a"))
+        export_switchgear_pin_a = _num(busbar_props.get("export_switchgear_pin_a"))
+        feeder_switchgear_pins_a = {
+            edge_id: num for edge_id, num in (
+                (edge_id, _num(value))
+                for edge_id, value in _dict(busbar_props.get("feeder_switchgear_pins_a")).items()
+            ) if num is not None
+        }
+
         circuits: list[list[Transformer]] = []
         station_ids: list[list[str]] = []
         segment_edge_ids: dict[tuple[int, int], str] = {}
@@ -1451,6 +1507,9 @@ def graph_to_inputs(diagram: dict, db) -> GraphInputs:
             export_length_km=mv_export_length_km if mv_export_applicable else 0.0,
             export_candidates=mv_export_candidates,
             export_forced=mv_export_forced if mv_export_applicable else False,
+            switchgear_pin_a=switchgear_pin_a,
+            export_switchgear_pin_a=export_switchgear_pin_a,
+            feeder_switchgear_pins_a=feeder_switchgear_pins_a,
         ))
 
     return GraphInputs(
@@ -1539,6 +1598,18 @@ def branches_summary(inputs, arch, stage1s) -> list[dict]:
             "e_delivered_kwh": branch_inputs.e_delivered_kwh,
             "e_required_kwh": branch_inputs.e_required_kwh,
             "energy_ok": branch_inputs.energy_ok,
+            # Busbar switchgear pins (ADR-0007, ticket 04), for the PDF's
+            # "(sized)" / "(pinned)" marking — see _busbar_switchgear_rows.
+            # The feeder list is resolved to circuit order (None where that
+            # circuit's trunk edge carries no pin), the same order
+            # branch_arch.circuits and feeder_i_a already use.
+            "switchgear_pin_a": branch_inputs.switchgear_pin_a,
+            "export_switchgear_pin_a": branch_inputs.export_switchgear_pin_a,
+            "feeder_switchgear_pins_a": [
+                branch_inputs.feeder_switchgear_pins_a.get(
+                    branch_inputs.segment_edge_ids[(c.index, 1)])
+                for c in branch_arch.circuits
+            ],
         })
     return out
 
@@ -1717,20 +1788,43 @@ def map_results(inputs: GraphInputs, stage1s: list[SizingResult],
 
         p_busbar = sum(c.p_busbar_kw for c in branch_arch.circuits)
         q_busbar = sum(c.q_busbar_kvar for c in branch_arch.circuits)
-        # Sized busbar switchgear (ADR-0007, CONTEXT.md's "Busbar switchgear",
+        # Busbar switchgear (ADR-0007, CONTEXT.md's "Busbar switchgear",
         # "Feeder", "Export switchgear"). The busbar and export switchgear are
-        # sized on the branch's NET busbar total — the same net S the MV
+        # SIZED on the branch's NET busbar total — the same net S the MV
         # export cable is sized on (BranchArchitecture.p_busbar_kw /
         # q_busbar_kvar already take this branch's own auxiliary load out,
         # see that property's docstring) — never on p_busbar/q_busbar above,
         # which are the raw per-circuit deliveries shown as "p_kw"/"q_kvar".
         # Each feeder is instead sized on its own circuit's head current
         # (i_trunk_a), which auxiliary load never touches.
+        #
+        # Ticket 04: any of the three may instead be PINNED by the engineer
+        # (BranchInputs.switchgear_pin_a / export_switchgear_pin_a /
+        # feeder_switchgear_pins_a) — a pinned rating is reported exactly as
+        # pinned, never resized, and is checked against its current rather
+        # than sized. Busbar and export switchgear still share one current;
+        # a pin is the only way they diverge.
         busbar_current_a = branch_arch.busbar_current_a
-        busbar_switchgear_rated_a = size_busbar_switchgear_rating(busbar_current_a)
+        sized_switchgear_a = size_busbar_switchgear_rating(busbar_current_a)
+        busbar_pin_a = branch_inputs.switchgear_pin_a
+        export_pin_a = branch_inputs.export_switchgear_pin_a
+        busbar_switchgear_rated_a = busbar_switchgear_rating(busbar_current_a, busbar_pin_a)
+        export_switchgear_rated_a = busbar_switchgear_rating(busbar_current_a, export_pin_a)
+
         feeder_current_a = [c.i_trunk_a for c in branch_arch.circuits]
+        # The trunk edge of circuit c.index is segment_edge_ids[(c.index, 1)]
+        # (the module docstring's positional bijection) — the stable id a
+        # feeder pin is keyed by.
+        feeder_edge_ids = [
+            branch_inputs.segment_edge_ids[(c.index, 1)] for c in branch_arch.circuits
+        ]
+        feeder_pins_a = [
+            branch_inputs.feeder_switchgear_pins_a.get(edge_id)
+            for edge_id in feeder_edge_ids
+        ]
         feeder_switchgear_rated_a = [
-            size_busbar_switchgear_rating(i) for i in feeder_current_a
+            busbar_switchgear_rating(i, pin)
+            for pin, i in zip(feeder_pins_a, feeder_current_a)
         ]
         nodes[branch_inputs.busbar_id] = {
             "kind": "busbar",
@@ -1741,29 +1835,59 @@ def map_results(inputs: GraphInputs, stage1s: list[SizingResult],
             "circuit_sizes": layout.circuit_sizes,
             "v_kv": layout.v_mv_kv,
             # Busbar and export switchgear share the same design-point
-            # current in this ticket — they diverge once pins (a later
-            # ticket) let an engineer check the export switchgear against a
-            # rating it already has — so both are reported under their own
-            # keys rather than one shared pair.
+            # current — a pin is the only way their rating diverges — so
+            # both are reported under their own keys rather than one shared
+            # pair.
             "i_a": busbar_current_a,
             "switchgear_rated_a": busbar_switchgear_rated_a,
+            "switchgear_pinned": busbar_pin_a is not None,
             "export_i_a": busbar_current_a,
-            "export_switchgear_rated_a": busbar_switchgear_rated_a,
+            "export_switchgear_rated_a": export_switchgear_rated_a,
+            "export_switchgear_pinned": export_pin_a is not None,
             "feeder_i_a": feeder_current_a,
             "feeder_switchgear_rated_a": feeder_switchgear_rated_a,
+            "feeder_switchgear_pinned": [pin is not None for pin in feeder_pins_a],
+            "feeder_edge_ids": feeder_edge_ids,
         }
-        if busbar_switchgear_rated_a is None:
-            # No standard rating carries this busbar's current (ADR-0007) —
-            # the design still solves, flagged here, mirroring how a station
+        # No standard rating carries this current (ADR-0007) — only reported
+        # for a part that is SIZED: a pinned part is checked against its pin
+        # instead, never against the ladder top, however high its current.
+        unsized_parts = []
+        if busbar_pin_a is None and sized_switchgear_a is None:
+            unsized_parts.append("busbar")
+        if export_pin_a is None and sized_switchgear_a is None:
+            unsized_parts.append("export switchgear")
+        if unsized_parts:
+            # The design still solves, flagged here, mirroring how a station
             # over its own switchgear rated current is flagged rather than
             # stopping the solve (ADR-0006).
             warnings.append(GraphIssue(
                 "busbar_switchgear_no_admissible_rating",
                 f"Busbar '{branch_inputs.busbar_id}' carries {busbar_current_a:,.0f} A "
                 f"— above the {BUSBAR_SWITCHGEAR_LADDER_A[-1]:,.0f} A top of the "
-                f"standard busbar switchgear ladder. No standard rating fits; the "
-                f"busbar is shown but not sized.",
+                f"standard busbar switchgear ladder. No standard rating fits the "
+                f"{' and '.join(unsized_parts)}; shown but not sized.",
                 node_id=branch_inputs.busbar_id))
+
+        # A pinned rating too small for its current still solves — the
+        # design is flagged at the busbar, naming the part and the shortfall
+        # (ADR-0007, ticket 04's central case).
+        def _pin_shortfall(label: str, pin: float | None, current: float) -> None:
+            if pin is not None and current > pin + 1e-9:
+                warnings.append(GraphIssue(
+                    "busbar_switchgear_pin_undersized",
+                    f"Busbar '{branch_inputs.busbar_id}': {label} is pinned to "
+                    f"{pin:,.0f} A, {current - pin:,.0f} A short of its "
+                    f"{current:,.0f} A current.",
+                    node_id=branch_inputs.busbar_id))
+
+        _pin_shortfall("the busbar switchgear", busbar_pin_a, busbar_current_a)
+        _pin_shortfall("the export switchgear", export_pin_a, busbar_current_a)
+        for circuit, pin, current in zip(branch_arch.circuits, feeder_pins_a, feeder_current_a):
+            first_station = branch_inputs.station_ids[circuit.index - 1][0]
+            _pin_shortfall(
+                f"the feeder for circuit {circuit.index} (feeding '{first_station}')",
+                pin, current)
         for aux_id in branch_inputs.aux_ids:
             nodes[aux_id] = {"kind": "aux"}
         if branch_inputs.aux_ids:

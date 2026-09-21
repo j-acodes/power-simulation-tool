@@ -121,6 +121,12 @@ def size_busbar_switchgear_rating(current_a: float) -> float | None:
     return None
 
 
+def busbar_switchgear_rating(current_a: float, pin_a: float | None = None) -> float | None:
+    """A busbar switchgear part's rating [A]: its pin when the engineer set
+    one — checked, never resized — otherwise the sized rating (ADR-0007)."""
+    return pin_a if pin_a is not None else size_busbar_switchgear_rating(current_a)
+
+
 @dataclass
 class Transformer:
     """A two-winding transformer, defined by its nameplate / factory-test data.

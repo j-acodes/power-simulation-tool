@@ -126,6 +126,17 @@ def test_the_report_lists_the_sized_busbar_switchgear():
     assert "630 A (sized)" in text
 
 
+def test_a_pinned_busbar_switchgear_rating_is_marked_pinned_not_sized():
+    # ADR-0007, ticket 04: a pinned rating is reported exactly as pinned, and
+    # the still-unpinned parts (export switchgear, the feeder) keep reading
+    # as sized.
+    diagram = _minimal()
+    diagram["nodes"][1]["props"]["busbar_switchgear_pin_a"] = 800.0
+    text = _story_text(diagram)
+    assert "800 A (pinned)" in text
+    assert "630 A (sized)" in text  # export switchgear and the feeder
+
+
 def test_a_busbar_switchgear_section_appears_for_each_fleet_of_a_hybrid():
     text = _story_text(_hybrid_with_drawn_bess(p_target_bess_mw=2.0))
     assert text.count("Busbar switchgear") >= 2

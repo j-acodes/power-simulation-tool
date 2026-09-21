@@ -412,8 +412,10 @@ describe('Inspector — sized busbar switchgear (ticket 03)', () => {
     withBusbarResult({
       kind: 'busbar', p_kw: 3050, q_kvar: 996, s_kva: 3209, n_circuits: 2,
       circuit_sizes: [1, 1], v_kv: 20,
-      i_a: 91.16, switchgear_rated_a: 630, export_i_a: 91.16, export_switchgear_rated_a: 630,
+      i_a: 91.16, switchgear_rated_a: 630, switchgear_pinned: false,
+      export_i_a: 91.16, export_switchgear_rated_a: 630, export_switchgear_pinned: false,
       feeder_i_a: [92.88, 45.0], feeder_switchgear_rated_a: [630, 630],
+      feeder_switchgear_pinned: [false, false], feeder_edge_ids: ['e_t1', 'e_t2'],
     })
     render(<Inspector />)
 
@@ -432,8 +434,10 @@ describe('Inspector — sized busbar switchgear (ticket 03)', () => {
     withBusbarResult({
       kind: 'busbar', p_kw: 145_000, q_kvar: 40_000, s_kva: 150_000, n_circuits: 1,
       circuit_sizes: [13], v_kv: 20,
-      i_a: 4148, switchgear_rated_a: null, export_i_a: 4148, export_switchgear_rated_a: null,
+      i_a: 4148, switchgear_rated_a: null, switchgear_pinned: false,
+      export_i_a: 4148, export_switchgear_rated_a: null, export_switchgear_pinned: false,
       feeder_i_a: [4148], feeder_switchgear_rated_a: [null],
+      feeder_switchgear_pinned: [false], feeder_edge_ids: ['e_t1'],
     })
     render(<Inspector />)
 
@@ -441,5 +445,62 @@ describe('Inspector — sized busbar switchgear (ticket 03)', () => {
     // Busbar and export switchgear share this ticket's current, and the
     // circuit's one feeder carries the same total — three rows, same text.
     expect(unsized).toHaveLength(3)
+  })
+})
+
+describe('Inspector — pinned busbar switchgear (ticket 04)', () => {
+  beforeEach(() => {
+    useStore.setState({ selection: null, diagram: EMPTY_DIAGRAM, designMeta: null, results: null })
+  })
+
+  it('marks a pinned rating as pinned rather than sized', () => {
+    withBusbarResult({
+      kind: 'busbar', p_kw: 3050, q_kvar: 996, s_kva: 3209, n_circuits: 1,
+      circuit_sizes: [1], v_kv: 20,
+      i_a: 4500, switchgear_rated_a: 4000, switchgear_pinned: true,
+      export_i_a: 4500, export_switchgear_rated_a: null, export_switchgear_pinned: false,
+      feeder_i_a: [92.88], feeder_switchgear_rated_a: [4000],
+      feeder_switchgear_pinned: [true], feeder_edge_ids: ['e_t1'],
+    })
+    render(<Inspector />)
+
+    expect(screen.getByText('4,000 A (pinned) — 4,500 A')).toBeTruthy() // busbar, pinned though above 4000 A
+    expect(screen.getByText('not sized — 4,500 A exceeds the 4,000 A ladder top')).toBeTruthy() // export, still sized
+    expect(screen.getByText('4,000 A (pinned) — 93 A')).toBeTruthy() // feeder, pinned
+  })
+
+  it('sets and clears each pin from the busbar properties, keyed by the trunk edge for a feeder', () => {
+    useStore.setState({
+      diagram: {
+        ...EMPTY_DIAGRAM,
+        nodes: [
+          { id: 'bus', kind: 'busbar', x: 0, y: 0, props: {} },
+          { id: 's1', kind: 'station', x: 0, y: 0, props: {} },
+        ],
+        edges: [
+          { id: 'e_t1', source: 'bus', target: 's1', tier: 'mv', sizing: { mode: 'auto' } },
+        ],
+      },
+      selection: { type: 'node', id: 'bus' },
+      results: null,
+    })
+    render(<Inspector />)
+
+    fireEvent.change(screen.getByLabelText('Busbar pin'), { target: { value: '800' } })
+    fireEvent.change(screen.getByLabelText('Export switchgear pin'), { target: { value: '1600' } })
+    fireEvent.change(screen.getByLabelText('Feeder pin → s1'), { target: { value: '2500' } })
+
+    let node = useStore.getState().diagram.nodes[0]
+    expect(node.props.busbar_switchgear_pin_a).toBe(800)
+    expect(node.props.export_switchgear_pin_a).toBe(1600)
+    expect(node.props.feeder_switchgear_pins_a).toEqual({ e_t1: 2500 })
+
+    fireEvent.change(screen.getByLabelText('Busbar pin'), { target: { value: '' } })
+    fireEvent.change(screen.getByLabelText('Feeder pin → s1'), { target: { value: '' } })
+
+    node = useStore.getState().diagram.nodes[0]
+    expect(node.props.busbar_switchgear_pin_a).toBeNull()
+    expect(node.props.export_switchgear_pin_a).toBe(1600) // untouched
+    expect(node.props.feeder_switchgear_pins_a).toEqual({})
   })
 })

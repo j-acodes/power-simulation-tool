@@ -33,7 +33,7 @@ from .components import (
     DEFAULT_AMBIENT_C,
     conversion_label,
     fleet_label,
-    size_busbar_switchgear_rating,
+    busbar_switchgear_rating,
 )
 from .sizing import SizingResult
 
@@ -381,35 +381,50 @@ def _energy_rows(fleet: dict) -> list[list[str]]:
     return rows
 
 
-def _switchgear_cell(rated_a: float | None, i_a: float) -> str:
-    """One sized-busbar-switchgear value: the rating beside its current,
-    marked as sized — or, when the current clears the 4000 A ladder top, that
-    no standard rating admits it (ADR-0007)."""
+def _switchgear_cell(rated_a: float | None, i_a: float, *, pinned: bool = False) -> str:
+    """One busbar-switchgear value: the rating beside its current, marked as
+    sized or pinned (ADR-0007) — or, for a SIZED part whose current clears
+    the 4000 A ladder top, that no standard rating admits it. A pinned
+    rating is never "not sized": it is checked against the pin, however high
+    the current, so ``rated_a`` is always present when ``pinned`` is True."""
+    if pinned:
+        return f"{_fmt(rated_a, 0)} A (pinned) — {_fmt(i_a, 0)} A"
     if rated_a is not None:
         return f"{_fmt(rated_a, 0)} A (sized) — {_fmt(i_a, 0)} A"
     return f"not sized — {_fmt(i_a, 0)} A exceeds the 4,000 A ladder top"
 
 
-def _busbar_switchgear_rows(branch) -> list[list[str]]:
+def _busbar_switchgear_rows(branch, fleet: dict | None = None) -> list[list[str]]:
     """Busbar, export switchgear and one feeder per circuit (ADR-0007). The
     busbar and export switchgear share this branch's net busbar total —
     auxiliary load included, the same net S the MV export cable is sized on
     (``BranchArchitecture.p_busbar_kw`` / ``q_busbar_kvar`` already take it
     out, see that property's docstring) — while each feeder is sized on its
-    own circuit's head current alone (``CircuitResult.i_trunk_a``)."""
+    own circuit's head current alone (``CircuitResult.i_trunk_a``).
+
+    ``fleet`` is this branch's own entry from :func:`powertool.graph.
+    branches_summary` (ticket 04): its pin keys, when set, are reported
+    exactly as pinned instead of the sized value. Omit it (engine-level
+    callers with no diagram) and every part reads as sized, unchanged from
+    ticket 03.
+    """
     busbar_i_a = branch.busbar_current_a
-    busbar_rated_a = size_busbar_switchgear_rating(busbar_i_a)
+    busbar_pin = fleet.get("switchgear_pin_a") if fleet else None
+    export_pin = fleet.get("export_switchgear_pin_a") if fleet else None
     rows = [
-        ["Busbar", _switchgear_cell(busbar_rated_a, busbar_i_a)],
-        # Same current and rating in this ticket — they diverge once pins
-        # (a later ticket) let the export switchgear be checked against a
-        # rating it already has.
-        ["Export switchgear", _switchgear_cell(busbar_rated_a, busbar_i_a)],
+        ["Busbar", _switchgear_cell(
+            busbar_switchgear_rating(busbar_i_a, busbar_pin), busbar_i_a,
+            pinned=busbar_pin is not None)],
+        ["Export switchgear", _switchgear_cell(
+            busbar_switchgear_rating(busbar_i_a, export_pin), busbar_i_a,
+            pinned=export_pin is not None)],
     ]
-    for circuit in branch.circuits:
-        feeder_rated_a = size_busbar_switchgear_rating(circuit.i_trunk_a)
-        rows.append([f"Circuit {circuit.index} feeder",
-                     _switchgear_cell(feeder_rated_a, circuit.i_trunk_a)])
+    feeder_pins = fleet.get("feeder_switchgear_pins_a") if fleet else None
+    for idx, circuit in enumerate(branch.circuits):
+        pin = feeder_pins[idx] if feeder_pins else None
+        rows.append([f"Circuit {circuit.index} feeder", _switchgear_cell(
+            busbar_switchgear_rating(circuit.i_trunk_a, pin), circuit.i_trunk_a,
+            pinned=pin is not None)])
     return rows
 
 
@@ -465,7 +480,8 @@ def _stage2(stage1s: list[SizingResult], arch: PlantArchitecture,
         f.append(_table(["Quantity", "Value"], brows, [0.45, 0.55]))
 
         f.append(Paragraph("Busbar switchgear", _H3))
-        f.append(_table(["Equipment", "Rating"], _busbar_switchgear_rows(branch), [0.45, 0.55]))
+        f.append(_table(["Equipment", "Rating"], _busbar_switchgear_rows(branch, fleet),
+                        [0.45, 0.55]))
 
         f.append(Paragraph(f"Refined {device} requirement", _H3))
         delta = (refinement.s_inv_refined_kva / stage1s[i].s_inv_kva - 1) * 100

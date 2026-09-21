@@ -194,21 +194,32 @@ export interface BusbarNodeResult {
   n_circuits: number
   circuit_sizes: number[]
   v_kv: number
-  /** Sized busbar switchgear (ADR-0007): the busbar and export switchgear
-   * carry the same design-point current in this ticket — the busbar total,
-   * auxiliary load included — but are reported under separate keys because
-   * a later ticket (pins) lets an engineer check the export switchgear
-   * against a rating that then diverges from the busbar's own. `null` means
-   * the current exceeds the 4000 A top of the standard ladder — no
-   * admissible size, and the design is flagged rather than blocked. */
+  /** Busbar switchgear (ADR-0007): the busbar and export switchgear carry
+   * the same design-point current — the busbar total, auxiliary load
+   * included — but are reported under separate keys because a pin (ticket
+   * 04) lets an engineer check the export switchgear against a rating that
+   * then diverges from the busbar's own. `null` means the current exceeds
+   * the 4000 A top of the standard ladder — no admissible size, and the
+   * design is flagged rather than blocked; `null` never occurs for a
+   * PINNED part, which is checked against its pin however high the
+   * current. */
   i_a: number
   switchgear_rated_a: number | null
+  /** Whether `switchgear_rated_a` is the engineer's own pin rather than a
+   * sized value (ADR-0007, ticket 04). */
+  switchgear_pinned: boolean
   export_i_a: number
   export_switchgear_rated_a: number | null
+  export_switchgear_pinned: boolean
   /** One feeder per circuit, same order as `circuit_sizes`: sized against
    * that circuit's own head current, never the busbar's auxiliary load. */
   feeder_i_a: number[]
   feeder_switchgear_rated_a: (number | null)[]
+  feeder_switchgear_pinned: boolean[]
+  /** Each feeder's trunk edge id, same order as `feeder_i_a` — what a
+   * feeder pin (`feeder_switchgear_pins_a` on the busbar's props) is keyed
+   * by, so the editor can tie a result row back to its pin control. */
+  feeder_edge_ids: string[]
 }
 
 export interface AuxNodeResult {

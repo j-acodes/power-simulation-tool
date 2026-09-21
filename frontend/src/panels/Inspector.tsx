@@ -11,7 +11,51 @@ import { Row, SectionTitle } from '../components/DetailRows'
 import { ModalShell, useConfirmDialog } from '../components/Modal'
 import { SpecView } from '../components/SpecView'
 import type { SpecViewTarget } from '../components/SpecView'
-import type { DiagramEdge, DiagramNode, EdgeResult, NodeResult, TransformerInfo } from '../types'
+import type { Diagram, DiagramEdge, DiagramNode, EdgeResult, NodeResult, TransformerInfo } from '../types'
+
+/** Standard busbar-switchgear rating ladder (ADR-0007) — mirrors
+ * BUSBAR_SWITCHGEAR_LADDER_A in powertool/components.py. Offered as pin
+ * choices alongside "Sized". */
+const SWITCHGEAR_LADDER_A = [630, 800, 1250, 1600, 2000, 2500, 3150, 4000] as const
+
+/** A busbar's trunk edges: the edges straight off the busbar that feed a
+ * station (the circuit's first cable — see powertool/graph.py's
+ * `segment_edge_ids[(c, 1)]`), in the diagram's own edge order, which is
+ * also circuit order. What a feeder pin is keyed by. */
+function trunkEdgesOf(diagram: Diagram, busbarId: string): DiagramEdge[] {
+  const stationIds = new Set(diagram.nodes.filter((n) => n.kind === 'station').map((n) => n.id))
+  return diagram.edges.filter(
+    (e) => (e.source === busbarId && stationIds.has(e.target))
+      || (e.target === busbarId && stationIds.has(e.source)),
+  )
+}
+
+/** One pin control: "Sized" clears the pin (patches the key to `null`), or a
+ * standard ladder rating pins it exactly (ADR-0007, ticket 04). */
+function SwitchgearPinSelect({
+  label,
+  pinnedA,
+  onChange,
+}: {
+  label: string
+  pinnedA: number | null
+  onChange: (value: number | null) => void
+}) {
+  return (
+    <label className="field">
+      <span>{label}</span>
+      <select
+        value={pinnedA != null ? String(pinnedA) : ''}
+        onChange={(e) => onChange(e.target.value === '' ? null : Number(e.target.value))}
+      >
+        <option value="">Sized</option>
+        {SWITCHGEAR_LADDER_A.map((a) => (
+          <option key={a} value={a}>{a} A</option>
+        ))}
+      </select>
+    </label>
+  )
+}
 
 function NumberField({
   label,
@@ -435,21 +479,53 @@ function NodeProperties({ node }: { node: DiagramNode }) {
         </>
       )}
       {node.kind === 'busbar' && (
-        <label className="field">
-          <span>Fleet kind</span>
-          {/* A kind another busbar already occupies is disabled rather than
-              hidden: the engineer can see the option exists and why it is not
-              available, and cannot use this control to create the duplicate the
-              palette and the canvas both refuse. */}
-          <select value={String(props.fleet_kind ?? 'pv')} onChange={(e) => patch({ fleet_kind: e.target.value })}>
-            {(['pv', 'bess'] as const).map((kind) => (
-              <option key={kind} value={kind} disabled={takenBusbarSlots(diagram, node.id).has(kind)}>
-                {kind === 'pv' ? 'PV' : 'BESS'}
-                {takenBusbarSlots(diagram, node.id).has(kind) ? ' — already used' : ''}
-              </option>
-            ))}
-          </select>
-        </label>
+        <>
+          <label className="field">
+            <span>Fleet kind</span>
+            {/* A kind another busbar already occupies is disabled rather than
+                hidden: the engineer can see the option exists and why it is not
+                available, and cannot use this control to create the duplicate the
+                palette and the canvas both refuse. */}
+            <select value={String(props.fleet_kind ?? 'pv')} onChange={(e) => patch({ fleet_kind: e.target.value })}>
+              {(['pv', 'bess'] as const).map((kind) => (
+                <option key={kind} value={kind} disabled={takenBusbarSlots(diagram, node.id).has(kind)}>
+                  {kind === 'pv' ? 'PV' : 'BESS'}
+                  {takenBusbarSlots(diagram, node.id).has(kind) ? ' — already used' : ''}
+                </option>
+              ))}
+            </select>
+          </label>
+          <SectionTitle>Switchgear pins</SectionTitle>
+          {/* An engineer's own rating, checked instead of sized (ADR-0007,
+              ticket 04). "Sized" clears the pin. */}
+          <SwitchgearPinSelect
+            label="Busbar pin"
+            pinnedA={typeof props.busbar_switchgear_pin_a === 'number' ? props.busbar_switchgear_pin_a : null}
+            onChange={(v) => patch({ busbar_switchgear_pin_a: v })}
+          />
+          <SwitchgearPinSelect
+            label="Export switchgear pin"
+            pinnedA={typeof props.export_switchgear_pin_a === 'number' ? props.export_switchgear_pin_a : null}
+            onChange={(v) => patch({ export_switchgear_pin_a: v })}
+          />
+          {trunkEdgesOf(diagram, node.id).map((edge) => {
+            const station = edge.source === node.id ? edge.target : edge.source
+            const pins = (props.feeder_switchgear_pins_a ?? {}) as Record<string, number>
+            return (
+              <SwitchgearPinSelect
+                key={edge.id}
+                label={`Feeder pin → ${station}`}
+                pinnedA={typeof pins[edge.id] === 'number' ? pins[edge.id] : null}
+                onChange={(v) => {
+                  const next = { ...pins }
+                  if (v == null) delete next[edge.id]
+                  else next[edge.id] = v
+                  patch({ feeder_switchgear_pins_a: next })
+                }}
+              />
+            )
+          })}
+        </>
       )}
       <button type="button" className="danger" onClick={() => removeNode(node.id)}>
         Delete block
@@ -470,11 +546,13 @@ function NodeProperties({ node }: { node: DiagramNode }) {
   )
 }
 
-/** One line of sized busbar switchgear (ADR-0007): the rating beside its
- * current, marked as sized — or, when the current clears the 4000 A top of
- * the standard ladder, that no standard rating admits it (a later ticket
- * adds a pinned rating here instead). */
-function switchgearValue(ratedA: number | null, currentA: number): string {
+/** One line of busbar switchgear (ADR-0007): the rating beside its current,
+ * marked as sized or pinned (ticket 04) — or, for a SIZED part whose current
+ * clears the 4000 A top of the standard ladder, that no standard rating
+ * admits it. A pinned rating is never "not sized": it is checked against
+ * the pin however high the current. */
+function switchgearValue(ratedA: number | null, currentA: number, pinned: boolean): string {
+  if (pinned) return `${fmt(ratedA ?? 0, 0)} A (pinned) — ${fmt(currentA, 0)} A`
   return ratedA != null
     ? `${fmt(ratedA, 0)} A (sized) — ${fmt(currentA, 0)} A`
     : `not sized — ${fmt(currentA, 0)} A exceeds the 4,000 A ladder top`
@@ -507,16 +585,23 @@ function NodeResults({ result }: { result?: NodeResult }) {
           <Row label={`Total ${LABEL.reactivePowerMvar}`} value={fmt(result.q_kvar / 1000, 3)} />
           <Row label="Number of circuits" value={String(result.n_circuits)} />
           <SectionTitle>Busbar switchgear</SectionTitle>
-          <Row label="Busbar" value={switchgearValue(result.switchgear_rated_a, result.i_a)} />
+          <Row
+            label="Busbar"
+            value={switchgearValue(result.switchgear_rated_a, result.i_a, result.switchgear_pinned)}
+          />
           <Row
             label="Export switchgear"
-            value={switchgearValue(result.export_switchgear_rated_a, result.export_i_a)}
+            value={switchgearValue(
+              result.export_switchgear_rated_a, result.export_i_a, result.export_switchgear_pinned,
+            )}
           />
           {result.feeder_i_a.map((current, idx) => (
             <Row
               key={idx}
               label={`Circuit ${idx + 1} feeder`}
-              value={switchgearValue(result.feeder_switchgear_rated_a[idx], current)}
+              value={switchgearValue(
+                result.feeder_switchgear_rated_a[idx], current, result.feeder_switchgear_pinned[idx],
+              )}
             />
           ))}
         </>

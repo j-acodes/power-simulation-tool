@@ -359,6 +359,169 @@ def test_busbar_total_above_4000a_still_solves_flagged_at_the_busbar_node():
     assert matches[0]["node_id"] == "bus"
 
 
+# --- pinned busbar switchgear (ADR-0007, ticket 04) --------------------------
+
+def _two_circuit_diagram() -> dict:
+    """Two independent single-station circuits off one busbar (``e_t1`` feeds
+    ``s1``, ``e_t2`` feeds ``s2``) — for feeder pin tests, where the trunk
+    edge <-> circuit mapping must be exact rather than assumed."""
+    diagram = _minimal()
+    diagram["nodes"].append(_node(
+        "s2", "station", mode="catalogue", model="HUAWEI_JUPITER3000",
+        pv_inverter="huawei-sun2000-330ktl-h1", inverter_count=11,
+    ))
+    diagram["edges"].append(_edge("e_t2", "bus", "s2", length_m=800.0))
+    return diagram
+
+
+def test_pinned_busbar_switchgear_is_reported_exactly_as_pinned_not_resized():
+    diagram = _minimal()
+    diagram["nodes"][1]["props"]["export_switchgear_pin_a"] = 800.0  # above the sized 630 A
+
+    result = solve_diagram(diagram, db)
+    assert result["issues"] == []
+    bus = result["results"]["nodes"]["bus"]
+    assert bus["export_switchgear_rated_a"] == 800.0
+    assert bus["export_switchgear_pinned"] is True
+    # The sibling part (busbar) is untouched by the export pin — still sized.
+    assert bus["switchgear_rated_a"] == 630.0
+    assert bus["switchgear_pinned"] is False
+
+
+def test_removing_a_pin_returns_that_part_to_sizing():
+    diagram = _minimal()
+    diagram["nodes"][1]["props"]["busbar_switchgear_pin_a"] = None
+
+    result = solve_diagram(diagram, db)
+    assert result["issues"] == []
+    bus = result["results"]["nodes"]["bus"]
+    assert bus["switchgear_rated_a"] == 630.0
+    assert bus["switchgear_pinned"] is False
+
+
+def test_pinned_rating_below_current_solves_and_flags_shortfall_at_the_busbar():
+    diagram = _minimal()
+    diagram["nodes"][1]["props"]["busbar_switchgear_pin_a"] = 50.0  # well below ~91 A
+
+    result = solve_diagram(diagram, db)
+    assert result["issues"] == []  # a pinned shortfall still solves (ADR-0007)
+    bus = result["results"]["nodes"]["bus"]
+    assert bus["switchgear_rated_a"] == 50.0
+    assert bus["switchgear_pinned"] is True
+
+    warnings = result["results"]["warnings"]
+    matches = [w for w in warnings if w["code"] == "busbar_switchgear_pin_undersized"]
+    assert len(matches) == 1
+    assert matches[0]["node_id"] == "bus"
+    assert "busbar switchgear" in matches[0]["message"]
+    assert "50" in matches[0]["message"]
+    # A pinned part is checked against its pin, never the ladder top, so no
+    # "no admissible rating" warning fires alongside the shortfall.
+    assert not any(w["code"] == "busbar_switchgear_no_admissible_rating" for w in warnings)
+
+
+def test_pinned_feeder_below_current_names_its_circuit_and_first_station():
+    diagram = _minimal()
+    diagram["nodes"][1]["props"]["feeder_switchgear_pins_a"] = {"e_t1": 10.0}
+
+    result = solve_diagram(diagram, db)
+    assert result["issues"] == []
+    warnings = result["results"]["warnings"]
+    matches = [w for w in warnings if w["code"] == "busbar_switchgear_pin_undersized"]
+    assert len(matches) == 1
+    assert matches[0]["node_id"] == "bus"
+    assert "circuit 1" in matches[0]["message"]
+    assert "s1" in matches[0]["message"]
+
+
+def test_feeder_pin_is_keyed_by_the_trunk_edge_and_pins_only_that_feeder():
+    # Two independent circuits off one busbar; pinning e_t1 (circuit 1's
+    # trunk) must leave e_t2 (circuit 2's trunk) sized, following the drawn
+    # edge id rather than circuit position.
+    diagram = _two_circuit_diagram()
+    diagram["nodes"][1]["props"]["feeder_switchgear_pins_a"] = {"e_t1": 4000.0}
+
+    assert validate_graph(diagram, db) == []
+    result = solve_diagram(diagram, db)
+    assert result["issues"] == []
+    bus = result["results"]["nodes"]["bus"]
+
+    assert bus["feeder_edge_ids"] == ["e_t1", "e_t2"]
+    assert bus["feeder_switchgear_rated_a"][0] == 4000.0
+    assert bus["feeder_switchgear_pinned"][0] is True
+    assert bus["feeder_switchgear_rated_a"][1] == 630.0
+    assert bus["feeder_switchgear_pinned"][1] is False
+
+
+def test_feeder_pin_keyed_by_a_non_trunk_edge_id_is_ignored():
+    diagram = _minimal()
+    diagram["nodes"][1]["props"]["feeder_switchgear_pins_a"] = {"e_aux": 4000.0}  # not a trunk edge
+
+    assert validate_graph(diagram, db) == []
+    result = solve_diagram(diagram, db)
+    assert result["issues"] == []
+    bus = result["results"]["nodes"]["bus"]
+    assert bus["feeder_switchgear_rated_a"] == [630.0]
+    assert bus["feeder_switchgear_pinned"] == [False]
+
+
+def test_pinned_busbar_above_4000a_is_checked_against_the_pin_not_the_ladder():
+    # Same 13-station over-4000A topology as the sized case above, but the
+    # busbar is pinned high enough to carry it: no "no admissible rating"
+    # warning for the busbar, while the still-unpinned export switchgear
+    # (same current) keeps its own.
+    n_stations = 13
+    diagram = _minimal()
+    diagram["nodes"][0]["props"].update({"p_target_mw": 21.0 * n_stations / 2, "pf": 0.95})
+    diagram["nodes"][1]["props"]["busbar_switchgear_pin_a"] = 5000.0
+    diagram["nodes"][2]["props"].update({
+        "model": "SUNGROW_MVS3200",
+        "pv_inverter": "sungrow-sg350hx-20",
+        "inverter_count": 10,
+    })
+    prev = "s1"
+    for i in range(2, n_stations + 1):
+        sid = f"s{i}"
+        diagram["nodes"].append(_node(
+            sid, "station", mode="catalogue", model="SUNGROW_MVS3200",
+            pv_inverter="sungrow-sg350hx-20", inverter_count=10,
+        ))
+        diagram["edges"].append(_edge(f"e_t{i}", prev, sid, length_m=400.0))
+        prev = sid
+
+    result = solve_diagram(diagram, db)
+    assert result["issues"] == []
+    bus = result["results"]["nodes"]["bus"]
+    assert bus["i_a"] > 4000.0
+    assert bus["switchgear_rated_a"] == 5000.0
+    assert bus["switchgear_pinned"] is True
+    assert bus["export_switchgear_rated_a"] is None
+    assert bus["export_switchgear_pinned"] is False
+
+    warnings = result["results"]["warnings"]
+    matches = [w for w in warnings if w["code"] == "busbar_switchgear_no_admissible_rating"]
+    assert len(matches) == 1
+    assert "fits the export switchgear;" in matches[0]["message"]
+
+
+def test_busbar_pin_props_reject_non_positive_or_non_numeric_values():
+    diagram = _minimal()
+    diagram["nodes"][1]["props"]["busbar_switchgear_pin_a"] = -5.0
+    assert "bad_props" in _codes(validate_graph(diagram, db))
+
+    diagram = _minimal()
+    diagram["nodes"][1]["props"]["export_switchgear_pin_a"] = "not-a-number"
+    assert "bad_props" in _codes(validate_graph(diagram, db))
+
+    diagram = _minimal()
+    diagram["nodes"][1]["props"]["feeder_switchgear_pins_a"] = {"e_t1": 0}
+    assert "bad_props" in _codes(validate_graph(diagram, db))
+
+    diagram = _minimal()
+    diagram["nodes"][1]["props"]["feeder_switchgear_pins_a"] = "not-a-dict"
+    assert "bad_props" in _codes(validate_graph(diagram, db))
+
+
 def test_station_over_own_switchgear_rating_on_its_own_current_is_an_engine_error():
     # A single station whose OWN current alone (no downstream) already exceeds
     # its OWN switchgear rated current is a hard error: the catalogue is

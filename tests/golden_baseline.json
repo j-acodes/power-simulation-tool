@@ -33,9 +33,16 @@
             1
           ],
           "export_i_a": 364.64227528067283,
+          "export_switchgear_pinned": false,
           "export_switchgear_rated_a": 630.0,
+          "feeder_edge_ids": [
+            "e_t1"
+          ],
           "feeder_i_a": [
             367.71560268075416
+          ],
+          "feeder_switchgear_pinned": [
+            false
           ],
           "feeder_switchgear_rated_a": [
             630.0
@@ -46,6 +53,7 @@
           "p_kw": 12050.0000000833,
           "q_kvar": 3954.209262227345,
           "s_kva": 12682.202919504642,
+          "switchgear_pinned": false,
           "switchgear_rated_a": 630.0,
           "v_kv": 20.0
         },
@@ -92,6 +100,10 @@
             "e_delivered_kwh": 13808.0,
             "e_required_kwh": 48000.0,
             "energy_ok": false,
+            "export_switchgear_pin_a": null,
+            "feeder_switchgear_pins_a": [
+              null
+            ],
             "fleet_loading": 3.842376292159707,
             "kind": "bess",
             "loading_ok": false,
@@ -108,7 +120,8 @@
             "q_inv_refined_kvar": 8660.57224301523,
             "s_fleet_kva": 4000,
             "s_inv_kva": 14893.596611148403,
-            "s_inv_refined_kva": 15369.505168638827
+            "s_inv_refined_kva": 15369.505168638827,
+            "switchgear_pin_a": null
           }
         ],
         "circuit_sizes": [
@@ -202,9 +215,16 @@
             1
           ],
           "export_i_a": 91.16056882322316,
+          "export_switchgear_pinned": false,
           "export_switchgear_rated_a": 630.0,
+          "feeder_edge_ids": [
+            "e_t1"
+          ],
           "feeder_i_a": [
             92.87760371284112
+          ],
+          "feeder_switchgear_pinned": [
+            false
           ],
           "feeder_switchgear_rated_a": [
             630.0
@@ -215,6 +235,7 @@
           "p_kw": 3050.0000001117196,
           "q_kvar": 996.0523156192106,
           "s_kva": 3208.523058376218,
+          "switchgear_pinned": false,
           "switchgear_rated_a": 630.0,
           "v_kv": 20.0
         },
@@ -261,6 +282,10 @@
             "e_delivered_kwh": 6904.0,
             "e_required_kwh": 12000.0,
             "energy_ok": false,
+            "export_switchgear_pin_a": null,
+            "feeder_switchgear_pins_a": [
+              null
+            ],
             "fleet_loading": 0.8303130007157762,
             "kind": "bess",
             "loading_ok": true,
@@ -277,7 +302,8 @@
             "q_inv_refined_kvar": 1217.4827468047451,
             "s_fleet_kva": 4000,
             "s_inv_kva": 3389.0203670639617,
-            "s_inv_refined_kva": 3321.2520028631047
+            "s_inv_refined_kva": 3321.2520028631047,
+            "switchgear_pin_a": null
           }
         ],
         "circuit_sizes": [
@@ -365,9 +391,16 @@
             1
           ],
           "export_i_a": 91.16056882390491,
+          "export_switchgear_pinned": false,
           "export_switchgear_rated_a": 630.0,
+          "feeder_edge_ids": [
+            "e_t1"
+          ],
           "feeder_i_a": [
             92.87760371352611
+          ],
+          "feeder_switchgear_pinned": [
+            false
           ],
           "feeder_switchgear_rated_a": [
             630.0
@@ -378,6 +411,7 @@
           "p_kw": 3050.000000131218,
           "q_kvar": 996.0523156355229,
           "s_kva": 3208.5230583998173,
+          "switchgear_pinned": false,
           "switchgear_rated_a": 630.0,
           "v_kv": 20.0
         },
@@ -424,6 +458,10 @@
             "e_delivered_kwh": 6904.0,
             "e_required_kwh": 12000.0,
             "energy_ok": false,
+            "export_switchgear_pin_a": null,
+            "feeder_switchgear_pins_a": [
+              null
+            ],
             "fleet_loading": 1.2271356645257567,
             "kind": "bess",
             "loading_ok": false,
@@ -440,7 +478,8 @@
             "q_inv_refined_kvar": 1327.2900209032643,
             "s_fleet_kva": 2750,
             "s_inv_kva": 3434.3119494002517,
-            "s_inv_refined_kva": 3374.6230774458313
+            "s_inv_refined_kva": 3374.6230774458313,
+            "switchgear_pin_a": null
           }
         ],
         "circuit_sizes": [
@@ -534,9 +573,16 @@
             1
           ],
           "export_i_a": 91.16056882322316,
+          "export_switchgear_pinned": false,
           "export_switchgear_rated_a": 630.0,
+          "feeder_edge_ids": [
+            "e_t1"
+          ],
           "feeder_i_a": [
             92.87760371284112
+          ],
+          "feeder_switchgear_pinned": [
+            false
           ],
           "feeder_switchgear_rated_a": [
             630.0
@@ -547,6 +593,7 @@
           "p_kw": 3050.0000001117196,
           "q_kvar": 996.0523156192106,
           "s_kva": 3208.523058376218,
+          "switchgear_pinned": false,
           "switchgear_rated_a": 630.0,
           "v_kv": 20.0
         },
@@ -593,6 +640,10 @@
             "e_delivered_kwh": 13808.0,
             "e_required_kwh": 12000.0,
             "energy_ok": true,
+            "export_switchgear_pin_a": null,
+            "feeder_switchgear_pins_a": [
+              null
+            ],
             "fleet_loading": 0.8303130007157762,
             "kind": "bess",
             "loading_ok": true,
@@ -609,7 +660,8 @@
             "q_inv_refined_kvar": 1217.4827468047451,
             "s_fleet_kva": 4000,
             "s_inv_kva": 3389.0203670639617,
-            "s_inv_refined_kva": 3321.2520028631047
+            "s_inv_refined_kva": 3321.2520028631047,
+            "switchgear_pin_a": null
           }
         ],
         "circuit_sizes": [
@@ -697,9 +749,16 @@
             1
           ],
           "export_i_a": 91.16056882390491,
+          "export_switchgear_pinned": false,
           "export_switchgear_rated_a": 630.0,
+          "feeder_edge_ids": [
+            "e_t1"
+          ],
           "feeder_i_a": [
             92.87760371352611
+          ],
+          "feeder_switchgear_pinned": [
+            false
           ],
           "feeder_switchgear_rated_a": [
             630.0
@@ -710,6 +769,7 @@
           "p_kw": 3050.000000131218,
           "q_kvar": 996.0523156355229,
           "s_kva": 3208.5230583998173,
+          "switchgear_pinned": false,
           "switchgear_rated_a": 630.0,
           "v_kv": 20.0
         },
@@ -755,6 +815,10 @@
             "e_delivered_kwh": null,
             "e_required_kwh": null,
             "energy_ok": null,
+            "export_switchgear_pin_a": null,
+            "feeder_switchgear_pins_a": [
+              null
+            ],
             "fleet_loading": 1.2271356645257567,
             "kind": "bess",
             "loading_ok": false,
@@ -771,7 +835,8 @@
             "q_inv_refined_kvar": 1327.2900209032643,
             "s_fleet_kva": 2750,
             "s_inv_kva": 3434.3119494002517,
-            "s_inv_refined_kva": 3374.6230774458313
+            "s_inv_refined_kva": 3374.6230774458313,
+            "switchgear_pin_a": null
           }
         ],
         "circuit_sizes": [
@@ -888,9 +953,16 @@
             1
           ],
           "export_i_a": 91.16056908127166,
+          "export_switchgear_pinned": false,
           "export_switchgear_rated_a": 630.0,
+          "feeder_edge_ids": [
+            "e_t1"
+          ],
           "feeder_i_a": [
             92.87760397214636
+          ],
+          "feeder_switchgear_pinned": [
+            false
           ],
           "feeder_switchgear_rated_a": [
             630.0
@@ -901,6 +973,7 @@
           "p_kw": 3050.000007673424,
           "q_kvar": 996.0523212411276,
           "s_kva": 3208.523067309588,
+          "switchgear_pinned": false,
           "switchgear_rated_a": 630.0,
           "v_kv": 20.0
         },
@@ -909,9 +982,16 @@
             1
           ],
           "export_i_a": 91.16056912596063,
+          "export_switchgear_pinned": false,
           "export_switchgear_rated_a": 630.0,
+          "feeder_edge_ids": [
+            "e_tb1"
+          ],
           "feeder_i_a": [
             92.51991944077967
+          ],
+          "feeder_switchgear_pinned": [
+            false
           ],
           "feeder_switchgear_rated_a": [
             630.0
@@ -922,6 +1002,7 @@
           "p_kw": 3040.0000089628106,
           "q_kvar": 994.0523222760507,
           "s_kva": 3198.396484789886,
+          "switchgear_pinned": false,
           "switchgear_rated_a": 630.0,
           "v_kv": 20.0
         },
@@ -997,6 +1078,10 @@
             "e_delivered_kwh": null,
             "e_required_kwh": null,
             "energy_ok": null,
+            "export_switchgear_pin_a": null,
+            "feeder_switchgear_pins_a": [
+              null
+            ],
             "fleet_loading": 1.0137034205940367,
             "kind": "pv",
             "loading_ok": false,
@@ -1013,7 +1098,8 @@
             "q_inv_refined_kvar": 1267.7560128277132,
             "s_fleet_kva": 3300,
             "s_inv_kva": 3410.737424023738,
-            "s_inv_refined_kva": 3345.221287960321
+            "s_inv_refined_kva": 3345.221287960321,
+            "switchgear_pin_a": null
           },
           {
             "bess_aux_p_kw": 0.0,
@@ -1026,6 +1112,10 @@
             "e_delivered_kwh": 6904.0,
             "e_required_kwh": 12000.0,
             "energy_ok": false,
+            "export_switchgear_pin_a": null,
+            "feeder_switchgear_pins_a": [
+              null
+            ],
             "fleet_loading": 1.2221994621185222,
             "kind": "bess",
             "loading_ok": false,
@@ -1042,7 +1132,8 @@
             "q_inv_refined_kvar": 1321.9996996212662,
             "s_fleet_kva": 2750,
             "s_inv_kva": 3425.302191254551,
-            "s_inv_refined_kva": 3361.0485208259356
+            "s_inv_refined_kva": 3361.0485208259356,
+            "switchgear_pin_a": null
           }
         ],
         "circuit_sizes": [
@@ -1152,9 +1243,16 @@
             1
           ],
           "export_i_a": 91.16056882352743,
+          "export_switchgear_pinned": false,
           "export_switchgear_rated_a": 630.0,
+          "feeder_edge_ids": [
+            "e_t1"
+          ],
           "feeder_i_a": [
             92.87760371314685
+          ],
+          "feeder_switchgear_pinned": [
+            false
           ],
           "feeder_switchgear_rated_a": [
             630.0
@@ -1165,6 +1263,7 @@
           "p_kw": 3050.000000120448,
           "q_kvar": 996.0523156264114,
           "s_kva": 3208.523058386751,
+          "switchgear_pinned": false,
           "switchgear_rated_a": 630.0,
           "v_kv": 20.0
         },
@@ -1221,6 +1320,10 @@
             "e_delivered_kwh": null,
             "e_required_kwh": null,
             "energy_ok": null,
+            "export_switchgear_pin_a": null,
+            "feeder_switchgear_pins_a": [
+              null
+            ],
             "fleet_loading": 1.0137034175755788,
             "kind": "pv",
             "loading_ok": false,
@@ -1237,7 +1340,8 @@
             "q_inv_refined_kvar": 1267.7560055958807,
             "s_fleet_kva": 3300,
             "s_inv_kva": 3409.791790203582,
-            "s_inv_refined_kva": 3345.2212779994097
+            "s_inv_refined_kva": 3345.2212779994097,
+            "switchgear_pin_a": null
           }
         ],
         "circuit_sizes": [
@@ -1331,9 +1435,16 @@
             1
           ],
           "export_i_a": 86.60254039115375,
+          "export_switchgear_pinned": false,
           "export_switchgear_rated_a": 630.0,
+          "feeder_edge_ids": [
+            "e_t1"
+          ],
           "feeder_i_a": [
             88.26772804621902
+          ],
+          "feeder_switchgear_pinned": [
+            false
           ],
           "feeder_switchgear_rated_a": [
             630.0
@@ -1344,6 +1455,7 @@
           "p_kw": 3050.000000440283,
           "q_kvar": 10.00000007008676,
           "s_kva": 3050.0163938390774,
+          "switchgear_pinned": false,
           "switchgear_rated_a": 630.0,
           "v_kv": 20.0
         },
@@ -1400,6 +1512,10 @@
             "e_delivered_kwh": null,
             "e_required_kwh": null,
             "energy_ok": null,
+            "export_switchgear_pin_a": null,
+            "feeder_switchgear_pins_a": [
+              null
+            ],
             "fleet_loading": 0.9392860684042877,
             "kind": "pv",
             "loading_ok": true,
@@ -1416,7 +1532,8 @@
             "q_inv_refined_kvar": 243.3893340249334,
             "s_fleet_kva": 3300,
             "s_inv_kva": 3171.3302506722443,
-            "s_inv_refined_kva": 3099.6440257341496
+            "s_inv_refined_kva": 3099.6440257341496,
+            "switchgear_pin_a": null
           }
         ],
         "circuit_sizes": [
@@ -1493,9 +1610,16 @@
             1
           ],
           "export_i_a": 91.16056882278389,
+          "export_switchgear_pinned": false,
           "export_switchgear_rated_a": 630.0,
+          "feeder_edge_ids": [
+            "e_t1"
+          ],
           "feeder_i_a": [
             91.40805630680313
+          ],
+          "feeder_switchgear_pinned": [
+            false
           ],
           "feeder_switchgear_rated_a": [
             630.0
@@ -1506,6 +1630,7 @@
           "p_kw": 3000.0000000992277,
           "q_kvar": 986.0523156084824,
           "s_kva": 3157.8947369588204,
+          "switchgear_pinned": false,
           "switchgear_rated_a": 630.0,
           "v_kv": 20.0
         },
@@ -1562,6 +1687,10 @@
             "e_delivered_kwh": null,
             "e_required_kwh": null,
             "energy_ok": null,
+            "export_switchgear_pin_a": null,
+            "feeder_switchgear_pins_a": [
+              null
+            ],
             "fleet_loading": 0.9971399635440533,
             "kind": "pv",
             "loading_ok": true,
@@ -1578,7 +1707,8 @@
             "q_inv_refined_kvar": 1248.952106535954,
             "s_fleet_kva": 3300,
             "s_inv_kva": 3359.684019232086,
-            "s_inv_refined_kva": 3290.561879695376
+            "s_inv_refined_kva": 3290.561879695376,
+            "switchgear_pin_a": null
           }
         ],
         "circuit_sizes": [
@@ -1716,9 +1846,16 @@
               3
             ],
             "export_i_a": 318.1294719196747,
+            "export_switchgear_pinned": false,
             "export_switchgear_rated_a": 630.0,
+            "feeder_edge_ids": [
+              "c1_seg1"
+            ],
             "feeder_i_a": [
               326.00270984017675
+            ],
+            "feeder_switchgear_pinned": [
+              false
             ],
             "feeder_switchgear_rated_a": [
               630.0
@@ -1729,6 +1866,7 @@
             "p_kw": 10292.476918401933,
             "q_kvar": 4598.313610586393,
             "s_kva": 11272.957428161459,
+            "switchgear_pinned": false,
             "switchgear_rated_a": 630.0,
             "v_kv": 20.0
           },
@@ -1854,6 +1992,10 @@
               "e_delivered_kwh": null,
               "e_required_kwh": null,
               "energy_ok": null,
+              "export_switchgear_pin_a": null,
+              "feeder_switchgear_pins_a": [
+                null
+              ],
               "fleet_loading": 0.8750117534721877,
               "kind": "pv",
               "loading_ok": true,
@@ -1870,7 +2012,8 @@
               "q_inv_refined_kvar": 5430.261657119242,
               "s_fleet_kva": 13440,
               "s_inv_kva": 11796.428335964636,
-              "s_inv_refined_kva": 11760.157966666204
+              "s_inv_refined_kva": 11760.157966666204,
+              "switchgear_pin_a": null
             }
           ],
           "circuit_sizes": [
@@ -2537,7 +2680,17 @@
               4
             ],
             "export_i_a": 3805.5532529065326,
+            "export_switchgear_pinned": false,
             "export_switchgear_rated_a": 4000.0,
+            "feeder_edge_ids": [
+              "c1_seg1",
+              "c2_seg1",
+              "c3_seg1",
+              "c4_seg1",
+              "c5_seg1",
+              "c6_seg1",
+              "c7_seg1"
+            ],
             "feeder_i_a": [
               596.73761356527,
               596.73761356527,
@@ -2546,6 +2699,15 @@
               477.52712208718197,
               477.52712208718197,
               477.52712208718197
+            ],
+            "feeder_switchgear_pinned": [
+              false,
+              false,
+              false,
+              false,
+              false,
+              false,
+              false
             ],
             "feeder_switchgear_rated_a": [
               630.0,
@@ -2562,6 +2724,7 @@
             "p_kw": 120737.0203602652,
             "q_kvar": 53553.556598472904,
             "s_kva": 132081.07930290748,
+            "switchgear_pinned": false,
             "switchgear_rated_a": 4000.0,
             "v_kv": 20.0
           },
@@ -3534,6 +3697,16 @@
               "e_delivered_kwh": null,
               "e_required_kwh": null,
               "energy_ok": null,
+              "export_switchgear_pin_a": null,
+              "feeder_switchgear_pins_a": [
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null
+              ],
               "fleet_loading": 0.9654766966779019,
               "kind": "pv",
               "loading_ok": false,
@@ -3550,7 +3723,8 @@
               "q_inv_refined_kvar": 64346.70204822345,
               "s_fleet_kva": 143360,
               "s_inv_kva": 139587.64273310697,
-              "s_inv_refined_kva": 138410.73923574403
+              "s_inv_refined_kva": 138410.73923574403,
+              "switchgear_pin_a": null
             }
           ],
           "circuit_sizes": [
@@ -3865,11 +4039,22 @@
               4
             ],
             "export_i_a": 1441.059447834019,
+            "export_switchgear_pinned": false,
             "export_switchgear_rated_a": 1600.0,
+            "feeder_edge_ids": [
+              "c1_seg1",
+              "c2_seg1",
+              "c3_seg1"
+            ],
             "feeder_i_a": [
               483.7328820648574,
               483.7328820648574,
               483.7328820648574
+            ],
+            "feeder_switchgear_pinned": [
+              false,
+              false,
+              false
             ],
             "feeder_switchgear_rated_a": [
               630.0,
@@ -3882,6 +4067,7 @@
             "p_kw": 45459.42276156598,
             "q_kvar": 21228.157505933894,
             "s_kva": 50171.643274976755,
+            "switchgear_pinned": false,
             "switchgear_rated_a": 1600.0,
             "v_kv": 20.0
           },
@@ -4270,6 +4456,12 @@
               "e_delivered_kwh": null,
               "e_required_kwh": null,
               "energy_ok": null,
+              "export_switchgear_pin_a": null,
+              "feeder_switchgear_pins_a": [
+                null,
+                null,
+                null
+              ],
               "fleet_loading": 0.9799444954095283,
               "kind": "pv",
               "loading_ok": false,
@@ -4286,7 +4478,8 @@
               "q_inv_refined_kvar": 25388.374465964265,
               "s_fleet_kva": 53760,
               "s_inv_kva": 52979.71749944514,
-              "s_inv_refined_kva": 52681.81607321624
+              "s_inv_refined_kva": 52681.81607321624,
+              "switchgear_pin_a": null
             }
           ],
           "circuit_sizes": [
@@ -4579,11 +4772,22 @@
               4
             ],
             "export_i_a": 1367.408532294088,
+            "export_switchgear_pinned": false,
             "export_switchgear_rated_a": 1600.0,
+            "feeder_edge_ids": [
+              "c1_seg1",
+              "c2_seg1",
+              "c3_seg1"
+            ],
             "feeder_i_a": [
               459.1196226969703,
               459.1196226969703,
               459.1196226969703
+            ],
+            "feeder_switchgear_pinned": [
+              false,
+              false,
+              false
             ],
             "feeder_switchgear_rated_a": [
               630.0,
@@ -4596,6 +4800,7 @@
             "p_kw": 45250.00000008444,
             "q_kvar": 14850.784733110235,
             "s_kva": 47624.660704269816,
+            "switchgear_pinned": false,
             "switchgear_rated_a": 1600.0,
             "v_kv": 20.0
           },
@@ -4973,6 +5178,12 @@
               "e_delivered_kwh": null,
               "e_required_kwh": null,
               "energy_ok": null,
+              "export_switchgear_pin_a": null,
+              "feeder_switchgear_pins_a": [
+                null,
+                null,
+                null
+              ],
               "fleet_loading": 0.9203949564989472,
               "kind": "pv",
               "loading_ok": false,
@@ -4989,7 +5200,8 @@
               "q_inv_refined_kvar": 18522.301634572956,
               "s_fleet_kva": 53760,
               "s_inv_kva": 51096.52470806917,
-              "s_inv_refined_kva": 49480.4328613834
+              "s_inv_refined_kva": 49480.4328613834,
+              "switchgear_pin_a": null
             }
           ],
           "circuit_sizes": [
