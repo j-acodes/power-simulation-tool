@@ -53,7 +53,7 @@ What a switchgear's terminals physically accept per cable run: a number of cable
 and a maximum cross-section. A circuit cable must fit the stricter cable entry of its two ends,
 so it bounds both how many parallel runs a segment may use and how large each may be. A
 transformer station publishes one cable entry for its incoming and outgoing cables alike; an
-unpublished one falls back to two cables of 630 mm² with a notice. Export cables are not bound
+unpublished one falls back to two cables of 300 mm² with a notice. Export cables are not bound
 by it.
 _Avoid_: termination capacity, cable landing
 

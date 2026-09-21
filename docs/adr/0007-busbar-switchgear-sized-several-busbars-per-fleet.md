@@ -11,7 +11,7 @@ We now model the MV switchgear at both ends of every circuit:
 - **Transformer stations** keep their catalogue switchgear rated current (ADR-0006), with the
   630 A fallback, checked against each station's through current.
 - **Cable entry** — cables per phase and maximum cross-section — becomes a simulated catalogue
-  parameter on each transformer station, falling back in the engine to two cables of 630 mm²
+  parameter on each transformer station, falling back in the engine to two cables of 300 mm²
   with a notice. A circuit cable must fit the stricter cable entry of its two ends. Export
   cables are exempt.
 - **Busbar switchgear** — the busbar, one feeder per circuit, and the MV export switchgear — is
@@ -41,8 +41,8 @@ switchboard, so that no part of one switchboard is treated differently from anot
 The terminals of a feeder or a station's switchgear accept a bounded number of cables per phase,
 each up to a bounded cross-section. A model that adds parallel runs freely produces trunk
 segments no one can terminate. Bounding circuit cables by the stricter of their two ends puts
-that physical limit back. On today's catalogue it rarely binds against 630 A — two 630 mm²
-cables give 960 A usable at the 0.80 utilization — but it binds as soon as a station publishes
+that physical limit back. On today's catalogue it rarely binds against 630 A — two 300 mm²
+cables give 664 A usable at the 0.80 utilization — but it binds as soon as a station publishes
 a smaller entry. Export cables carry a whole busbar's current and routinely need more parallel
 runs than any circuit entry allows; bounding them the same way would fail almost every design,
 so they keep today's parallel-run behaviour.
@@ -77,3 +77,10 @@ this ships.
 
 Out of scope: short-circuit and short-time withstand of the sized switchgear, HV-side
 switchgear, one HV transformer per busbar, and installation derating of cable ampacity.
+
+## Amendment: 300 mm² fallback
+
+At implementation (2026-09-21) the owner lowered the cable-entry fallback from 2 × 630 mm² to
+2 × 300 mm², and the same figure applies at the busbar end of a circuit. Two 300 mm² cables still
+carry more than a 630 A station switchgear allows, so the station rating stays the usual binding
+limit.
