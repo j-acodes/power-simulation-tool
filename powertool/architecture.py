@@ -120,12 +120,6 @@ def assign_circuits(i_stations: list[float], i_ratings: list[float]) -> list[lis
     that still fits (LPT heuristic). A circuit's ceiling while packing is the
     MINIMUM switchgear rating among the stations already in it, including the
     candidate.
-    # ponytail: min(circuit ratings) is conservative for a mixed-rating
-    # circuit — a station's own position may carry less than the full circuit
-    # total, so its own rating alone could allow more. Exact per-position
-    # packing is possible if mixed ratings within one circuit ever need
-    # tighter packing; with biggest-station-nearest ordering every position's
-    # through current is <= the circuit total, so this ceiling is safe.
 
     With identical stations this reproduces the balanced split (18 stations at
     a 380 A rating -> sizes [5, 5, 4, 4]); with a mixed fleet it balances the
@@ -160,6 +154,10 @@ def assign_circuits(i_stations: list[float], i_ratings: list[float]) -> list[lis
         for idx in order:
             fitting = []
             for j in range(n_circuits):
+                # ponytail: min(circuit ratings) is conservative for a
+                # mixed-rating circuit — a downstream station carries less than
+                # the circuit total, so its own rating alone could allow more.
+                # Pack per position if mixed-rating circuits ever need it.
                 ceiling = min(ceilings[j], i_ratings[idx])
                 if loads[j] + i_stations[idx] <= ceiling + 1e-9:
                     fitting.append(j)

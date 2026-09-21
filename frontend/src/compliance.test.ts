@@ -101,10 +101,10 @@ describe('evaluateCompliance', () => {
     expect(verdict.reasons[0]).toContain('114%')
   })
 
-  it('fails on a circuit over its current cap', () => {
-    const verdict = evaluateCompliance(results({ all_current_ok: false, worst_trunk_current_a: 812 }), [])
+  it('fails when a station exceeds its switchgear rated current', () => {
+    const verdict = evaluateCompliance(results({ all_current_ok: false }), [])
     expect(verdict.compliant).toBe(false)
-    expect(verdict.reasons[0]).toContain('812 A')
+    expect(verdict.reasons[0]).toContain('switchgear rated current')
   })
 
   it('reports every failing criterion at once', () => {

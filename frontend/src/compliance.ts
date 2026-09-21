@@ -86,8 +86,7 @@ export function evaluateCompliance(results: SolveResults, issues: Issue[]): Comp
 
   if (!summary.all_current_ok) {
     reasons.push(
-      `A station exceeds its switchgear rated current — worst trunk current ` +
-        `${summary.worst_trunk_current_a.toFixed(0)} A.`,
+      'A station exceeds its switchgear rated current — see the warnings for which.',
     )
   }
 

@@ -164,7 +164,11 @@ function PlantSummary({ results }: { results: SolveResults }) {
         <Row label="MV circuits" value={`${s.n_circuits} (${s.circuit_sizes.join(', ')})`} />
         <Row
           label="Worst trunk current"
-          value={`${fmt(s.worst_trunk_current_a, 0)} A${s.all_current_ok ? '' : ' — OVER SWITCHGEAR RATING'}`}
+          value={`${fmt(s.worst_trunk_current_a, 0)} A`}
+        />
+        <Row
+          label="Station switchgear"
+          value={s.all_current_ok ? 'Every station within its rating' : 'A STATION IS OVER ITS RATING — see warnings'}
         />
         <Row label="Cable losses" value={`${fmt(s.total_cable_loss_kw, 1)} kW`} />
         <Row label="Transformer losses" value={`${fmt(s.total_transformer_loss_kw, 1)} kW`} />

@@ -49,7 +49,7 @@ def test_hand_computed_anchor_before_regenerating_the_baseline():
 
     Circuit grouping (assign_circuits, ADR-0006): packing bounds each circuit
     by the NOMINAL station currents (never the real, loss-reduced through
-    current — see architecture.assign_circuits' ``# ponytail`` note). 16
+    current, which downstream cable losses only ever reduce). 16
     stations draw 16 * 68.793783 = 1100.700528 A, so the lower bound is
     ceil(1100.700528 / 630) = 2 circuits of 8, each 8 * 68.793783 =
     550.350264 A — inside the published 630 A rating. The retired 400 A cap
@@ -57,14 +57,18 @@ def test_hand_computed_anchor_before_regenerating_the_baseline():
     so 3 circuits cannot hold 16 and it needed [4, 4, 4, 4]: this anchor is
     chosen so the two rules disagree.
 
-    Trunk through current (position 1, nearest the substation): unlike the
-    packing ceiling above, this is the REAL segment-walk figure — station
-    output summed toward the substation MINUS the series losses of the 7
-    cable spans already crossed (ADR-0006's amendment: real through current
-    is always <= the nominal 8 * 68.793783 = 550.350264 A packing bound,
-    which is why packing on the nominal figure is conservative, never
-    optimistic). This is the same "3 stations minus the cable losses already
-    consumed" arithmetic as test_segment_loading_cumulative_and_decreasing.
+    Trunk through current (position 1, nearest the substation): the REAL
+    segment-walk figure, the eight station outputs less the series losses of
+    the 7 spans downstream of the trunk (spans 2-8, cables as the selector
+    chose them at 0.5 km trunk / 0.2 km spacing):
+      sum dP = 14.544646 + 7.883582 + 7.047718 + 7.250591 + 6.728368
+               + 4.650095 + 1.163080 = 49.268080 kW
+      sum dQ = 7.483667 + 9.574376 + 6.863742 + 4.667568 + 2.857707
+               + 1.396391 + 0.349265 = 33.192716 kvar
+      P = 8 * 2378.8 - 49.268080 = 18981.131920 kW
+      Q = 8 * -142.870572 - 33.192716 = -1176.157292 kvar
+      I_trunk = hypot(P, Q) / (sqrt(3) * 20) = 19017.537036 / 34.641016
+              = 548.989006 A  (below the 550.350264 A nominal packing bound)
     """
     tx = ComponentDatabase.load().transformer("SUNGROW_MVS3200")
     assert tx.s_rated_kva_at_40c == 3200
@@ -93,13 +97,11 @@ def test_hand_computed_anchor_before_regenerating_the_baseline():
     nominal_bound = 8 * plan.i_a  # == 550.350264 A, the packing ceiling used above
     assert abs(nominal_bound - 550.350264) < 1e-5
     assert nominal_bound > 400.0  # would not fit under the retired cap
+    spans = circuits[0].segments[1:]
+    assert abs(sum(sg.dp_kw for sg in spans) - 49.268080) < 1e-5
+    assert abs(sum(sg.dq_series_kvar for sg in spans) - 33.192716) < 1e-5
     for circuit in circuits:
-        # Real through current is strictly BELOW the nominal packing bound
-        # (intervening cable losses), and only modestly so at this length —
-        # the same "minus the cable losses already consumed" shape as
-        # test_segment_loading_cumulative_and_decreasing.
-        assert circuit.i_trunk_a < nominal_bound
-        assert circuit.i_trunk_a > nominal_bound * 0.97
+        assert abs(circuit.i_trunk_a - 548.989006) < 1e-5
     assert circuits[0].i_trunk_a == circuits[1].i_trunk_a  # identical circuits
 
 
