@@ -469,6 +469,27 @@ describe('Inspector — pinned busbar switchgear (ticket 04)', () => {
     expect(screen.getByText('4,000 A (pinned) — 93 A')).toBeTruthy() // feeder, pinned
   })
 
+  it('offers both fleet kinds on a busbar even when another busbar already uses one (ticket 05)', () => {
+    useStore.setState({
+      diagram: {
+        ...EMPTY_DIAGRAM,
+        nodes: [
+          { id: 'bus', kind: 'busbar', x: 0, y: 0, props: { fleet_kind: 'pv' } },
+          { id: 'bus2', kind: 'busbar', x: 0, y: 0, props: { fleet_kind: 'pv' } },
+        ],
+      },
+      selection: { type: 'node', id: 'bus2' },
+      results: null,
+    })
+    render(<Inspector />)
+
+    const select = screen.getByLabelText('Fleet kind') as HTMLSelectElement
+    const options = Array.from(select.options)
+    expect(options).toHaveLength(2)
+    expect(options.every((o) => !o.disabled)).toBe(true)
+    expect(options.map((o) => o.textContent)).toEqual(['PV', 'BESS'])
+  })
+
   it('sets and clears each pin from the busbar properties, keyed by the trunk edge for a feeder', () => {
     useStore.setState({
       diagram: {

@@ -1,7 +1,7 @@
 import { fireEvent, render, screen } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { Palette } from './Palette'
-import { useStore } from '../store'
+import { EMPTY_DIAGRAM, useStore } from '../store'
 import type { BessSolutionInfo, CatalogueResponse, TransformerInfo } from '../types'
 
 const bessSolution: BessSolutionInfo = {
@@ -83,7 +83,22 @@ vi.mock('../hooks/useCatalogue', () => ({
 
 describe('Palette (ticket 06)', () => {
   beforeEach(() => {
-    useStore.setState({ selection: null, designMeta: null })
+    useStore.setState({ selection: null, designMeta: null, diagram: EMPTY_DIAGRAM })
+  })
+
+  it('still offers a PV busbar once one is already on the canvas (ticket 05)', () => {
+    useStore.setState({
+      diagram: {
+        ...EMPTY_DIAGRAM,
+        nodes: [{ id: 'bus1', kind: 'busbar', x: 0, y: 0, props: { fleet_kind: 'pv' } }],
+      },
+    })
+
+    render(<Palette />)
+
+    // A fleet's branch may hold more than one busbar in parallel: a second
+    // PV busbar is a valid drop, so the palette item is not hidden.
+    expect(screen.getByText('MV busbar — PV')).toBeTruthy()
   })
 
   it('lists BESS solutions as their own selectable, non-draggable palette items', () => {

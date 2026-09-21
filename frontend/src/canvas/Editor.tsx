@@ -12,7 +12,7 @@ import {
 import '@xyflow/react/dist/style.css'
 import { useStore } from '../store'
 import type { DiagramNode, NodeKind } from '../types'
-import { canConnect, defaultLengthM, inferTier, takenBusbarSlots } from './connect'
+import { canConnect, defaultLengthM, inferTier } from './connect'
 import { AuxNode } from './nodes/AuxNode'
 import { BusbarNode } from './nodes/BusbarNode'
 import { HvTxNode } from './nodes/HvTxNode'
@@ -135,13 +135,9 @@ function FlowCanvas() {
       if (!raw) return
       const payload = JSON.parse(raw) as PaletteDropPayload
       if (payload.kind === 'poc' && diagram.nodes.some((n) => n.kind === 'poc')) return
-      // One busbar PER FLEET KIND, not one per plant: a hybrid needs two. A
-      // dropped busbar always declares its kind (the palette says which), so
-      // the check reads the declaration rather than the derived kind.
-      if (payload.kind === 'busbar') {
-        const dropped = payload.props.fleet_kind === 'bess' ? 'bess' : 'pv'
-        if (takenBusbarSlots(diagram).has(dropped)) return
-      }
+      // A fleet's branch may hold more than one busbar in parallel (ticket
+      // 05), so a second busbar of a kind already on the canvas is a
+      // perfectly valid drop — nothing here restricts it.
       const position = screenToFlowPosition({ x: event.clientX, y: event.clientY })
       addNode({ id: crypto.randomUUID(), kind: payload.kind, x: position.x, y: position.y, props: payload.props })
     },

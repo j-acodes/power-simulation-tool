@@ -1590,16 +1590,21 @@ def test_unrecognised_fleet_kind_is_rejected_not_coerced():
 
 # --- hybrid topology: one busbar per fleet kind (ticket 05) -----------------
 
-def test_duplicate_busbar_is_rejected_and_named():
-    # A second busbar of a kind that already exists is the relaxed rule's
-    # narrower replacement for the old plant-wide multiple_busbar.
+def test_a_second_busbar_of_the_same_kind_is_accepted():
+    # Ticket 05 supersedes the old duplicate_busbar rule (which itself
+    # superseded the older plant-wide multiple_busbar): a fleet's branch may
+    # hold more than one busbar in parallel, each with its own station.
     diagram = _minimal()
     diagram["nodes"].append(_node("bus2", "busbar"))  # defaults to "pv", same as "bus"
+    diagram["nodes"].append(_node(
+        "s2", "station", mode="catalogue", model="HUAWEI_JUPITER3000",
+        pv_inverter="huawei-sun2000-330ktl-h1", inverter_count=11,
+    ))
     diagram["edges"].append(_edge("e_bus2", "poc", "bus2", length_m=0.0))
+    diagram["edges"].append(_edge("e_t2", "bus2", "s2", length_m=800.0))
     issues = validate_graph(diagram, db)
-    assert "duplicate_busbar" in _codes(issues)
-    assert any(i.node_id == "bus2" for i in issues if i.code == "duplicate_busbar")
-    # The old plant-wide code must not fire any more.
+    assert issues == []
+    assert "duplicate_busbar" not in _codes(issues)
     assert "multiple_busbar" not in _codes(issues)
 
 
@@ -1689,3 +1694,144 @@ def test_published_switchgear_rating_raises_no_notice():
     assert result["issues"] == []
     assert not any(w["code"] == "switchgear_rating_not_published"
                    for w in result["results"]["warnings"])
+
+
+# --- ticket 05: several busbars per fleet ------------------------------------
+
+def _hv_diagram_two_busbars() -> dict:
+    """_hv_diagram, but circuit b1->b2 hangs from a SECOND busbar under the
+    same shared HV transformer instead of the first — same stations, same
+    circuits, same lengths, only which busbar owns which circuit differs."""
+    diagram = _hv_diagram()
+    diagram["nodes"].append(_node("bus2", "busbar"))
+    diagram["edges"].append(_edge("e_sub2", "hv", "bus2"))
+    for edge in diagram["edges"]:
+        if edge["id"] == "e_b1":
+            edge["source"] = "bus2"
+    return diagram
+
+
+def _two_pv_busbars_mv() -> dict:
+    """Two PV busbars straight off the POC (MV interconnection, no HV
+    transformer): each gets its own real-length MV export run."""
+    diagram = _minimal()
+    for edge in diagram["edges"]:
+        if edge["id"] == "e_poc":
+            edge["length_m"] = 300.0
+    diagram["nodes"].append(_node("bus2", "busbar"))
+    diagram["nodes"].append(_node(
+        "s2", "station", mode="catalogue", model="HUAWEI_JUPITER3000",
+        pv_inverter="huawei-sun2000-330ktl-h1", inverter_count=11,
+    ))
+    diagram["edges"].append(_edge("e_poc2", "poc", "bus2", length_m=500.0))
+    diagram["edges"].append(_edge("e_t2", "bus2", "s2", length_m=800.0))
+    return diagram
+
+
+def test_two_pv_busbars_under_one_hv_transformer_each_report_their_own_circuits():
+    diagram = _hv_diagram_two_busbars()
+    assert validate_graph(diagram, db) == []
+    result = solve_diagram(diagram, db)
+    assert result["issues"] == []
+    nodes = result["results"]["nodes"]
+    bus1, bus2 = nodes["bus"], nodes["bus2"]
+    assert bus1["kind"] == "busbar" and bus2["kind"] == "busbar"
+    assert bus1["n_circuits"] == 1 and bus1["circuit_sizes"] == [1]  # a1
+    assert bus2["n_circuits"] == 1 and bus2["circuit_sizes"] == [2]  # b1, b2
+    # Each busbar has its own feeders and switchgear, not shared or summed.
+    assert bus1["feeder_edge_ids"] == ["e_a1"]
+    assert bus2["feeder_edge_ids"] == ["e_b1"]
+    assert bus1["switchgear_rated_a"] is not None
+    assert bus2["switchgear_rated_a"] is not None
+    assert bus1["i_a"] != bus2["i_a"]
+    # Stations still solve under the fleet-continuous circuit numbering the
+    # module docstring promises, whichever busbar they are drawn against.
+    assert nodes["a1"]["circuit"] == 1
+    assert nodes["b1"]["circuit"] == 2 and nodes["b2"]["circuit"] == 2
+
+
+def test_two_pv_busbars_in_mv_interconnection_each_size_their_own_export_cable():
+    diagram = _two_pv_busbars_mv()
+    assert validate_graph(diagram, db) == []
+    result = solve_diagram(diagram, db)
+    assert result["issues"] == []
+    edges = result["results"]["edges"]
+    assert edges["e_poc"]["sized"] is True
+    assert edges["e_poc2"]["sized"] is True
+    # Different real lengths (300 m vs 500 m) drawn for each busbar's own run
+    # produce different losses — proof each was sized on ITS OWN busbar power
+    # and length, not one shared plant-level line.
+    assert edges["e_poc"]["length_m"] == pytest.approx(300.0)
+    assert edges["e_poc2"]["length_m"] == pytest.approx(500.0)
+    assert edges["e_poc"]["dp_kw"] != edges["e_poc2"]["dp_kw"]
+
+
+def test_every_station_in_the_fleet_runs_at_the_same_loading_across_busbars():
+    diagram = _hv_diagram_two_busbars()
+    result = solve_diagram(diagram, db)
+    assert result["issues"] == []
+    nodes = result["results"]["nodes"]
+    fleet_loading = result["results"]["summary"]["fleet_loading"]
+    for station_id in ("a1", "b1", "b2"):
+        assert nodes[station_id]["loading"] == pytest.approx(fleet_loading)
+
+
+def test_splitting_one_busbars_circuits_across_two_leaves_poc_compliance_intact():
+    """Same stations, same circuits, same lengths — only whether b1/b2 hang
+    off the SAME busbar as a1 (baseline, _hv_diagram) or a SECOND one under
+    the same HV transformer (_hv_diagram_two_busbars) differs. Compliance,
+    station loadings and circuit/segment figures must not move; only the
+    busbar/export-side figures (which node reports which circuit) differ."""
+    one_busbar = solve_diagram(_hv_diagram(), db)
+    two_busbars = solve_diagram(_hv_diagram_two_busbars(), db)
+    assert one_busbar["issues"] == [] and two_busbars["issues"] == []
+
+    for result in (one_busbar, two_busbars):
+        summary = result["results"]["summary"]
+        assert summary["p_poc_refined_delivered_kw"] >= 20_000.0 - 1e-6
+
+    one_nodes, two_nodes = one_busbar["results"]["nodes"], two_busbars["results"]["nodes"]
+    one_edges, two_edges = one_busbar["results"]["edges"], two_busbars["results"]["edges"]
+    for station_id in ("a1", "b1", "b2"):
+        assert one_nodes[station_id] == two_nodes[station_id], station_id
+    for edge_id in ("e_a1", "e_b1", "e_b2"):
+        assert one_edges[edge_id] == two_edges[edge_id], edge_id
+
+
+def test_aux_attaches_to_the_busbar_it_is_drawn_against():
+    """The DIRECT attachment point — which busbar's own total absorbs an aux
+    load — is per busbar, checked here at the reported aux figures (which
+    read straight off ``BusbarInputs.aux_p_kw``/``aux_q_kvar``, independent of
+    the solve). The reported switchgear CURRENT additionally reflects the
+    fleet-wide refinement correction (loading stays per FLEET, not per
+    busbar — see CONTEXT.md's Auxiliary load entry — so a change anywhere in
+    the fleet ripples to every busbar's current a little); that isolation is
+    checked without the refinement confound in
+    test_architecture.py::test_splitting_circuits_into_two_sections_isolates_each_sections_own_aux.
+    """
+    diagram = _hv_diagram_two_busbars()
+    diagram["nodes"].append(_node("aux2", "aux", p_kw=80.0, q_kvar=20.0))
+    diagram["edges"].append(_edge("e_aux2", "bus2", "aux2"))
+
+    result = solve_diagram(diagram, db)
+    assert result["issues"] == []
+    nodes = result["results"]["nodes"]
+    assert nodes["aux2"]["p_kw"] == pytest.approx(80.0)
+    assert nodes["aux2"]["q_kvar"] == pytest.approx(20.0)
+    # bus's own long-standing aux load (e_aux, inherited from _hv_diagram) is
+    # unaffected by the second aux load drawn against bus2.
+    assert nodes["aux"]["p_kw"] == pytest.approx(120.0)
+    assert nodes["aux"]["q_kvar"] == pytest.approx(40.0)
+
+
+def test_station_under_the_wrong_kind_busbar_is_still_rejected_with_two_busbars():
+    diagram = _hv_diagram_two_busbars()
+    for node in diagram["nodes"]:
+        if node["id"] == "bus2":
+            node["props"]["fleet_kind"] = "pv"
+        if node["id"] == "b1":
+            node["props"]["fleet_kind"] = "bess"
+    issues = validate_graph(diagram, db)
+    codes = {i.code for i in issues}
+    assert "busbar_kind_mismatch" in codes
+    assert any(i.node_id == "b1" for i in issues if i.code == "busbar_kind_mismatch")

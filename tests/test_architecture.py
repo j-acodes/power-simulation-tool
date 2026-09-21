@@ -25,6 +25,7 @@ from powertool import (
 )
 from powertool import architecture
 from powertool.architecture import (
+    BusbarSection,
     arrange_plant,
     arrange_plant_manual,
     assign_circuits,
@@ -1205,3 +1206,98 @@ def test_manual_arrangement_kind_flows_through_to_station_result():
 
     branch = size_branch(layout, _catalogue(), segment_lengths=_lengths_of(layout))
     assert all(st.kind == "bess" for c in branch.circuits for st in c.stations)
+
+
+# --- BusbarSection: several busbars per branch (ticket 05) -------------------
+
+def test_no_sections_argument_builds_one_implicit_section_matching_the_scalar_aux_path():
+    stage1, layout = _full_plant_inputs()
+    branch = size_branch(layout, _catalogue(), aux_p_kw=120.0, aux_q_kvar=40.0)
+
+    assert len(branch.sections) == 1
+    section = branch.sections[0]
+    assert section.circuit_indices == [c.index for c in branch.circuits]
+    assert (section.aux_p_kw, section.aux_q_kvar) == (120.0, 40.0)
+    assert branch.aux_p_kw == pytest.approx(120.0)
+    assert branch.aux_q_kvar == pytest.approx(40.0)
+    # Byte-identical: the branch-level totals are exactly the sole section's
+    # own totals (a sum over one element), the same arithmetic as before this
+    # ticket split circuits into sections at all.
+    assert branch.p_busbar_kw == section.p_busbar_kw
+    assert branch.q_busbar_kvar == section.q_busbar_kvar
+
+
+def test_splitting_circuits_into_two_sections_isolates_each_sections_own_aux():
+    # 4 circuits (indices 1-4); split 1,2 onto busbar "a" and 3,4 onto "b".
+    stage1, layout = _full_plant_inputs()
+    base = size_branch(
+        layout, _catalogue(),
+        sections=[
+            BusbarSection(busbar_id="a", circuit_indices=[1, 2]),
+            BusbarSection(busbar_id="b", circuit_indices=[3, 4]),
+        ],
+    )
+    with_aux_on_b = size_branch(
+        layout, _catalogue(),
+        sections=[
+            BusbarSection(busbar_id="a", circuit_indices=[1, 2]),
+            BusbarSection(busbar_id="b", circuit_indices=[3, 4],
+                         aux_p_kw=200.0, aux_q_kvar=40.0),
+        ],
+    )
+    section_a_base, section_b_base = base.sections
+    section_a_aux, section_b_aux = with_aux_on_b.sections
+
+    # Busbar A's own current is untouched by an aux load drawn on busbar B —
+    # size_branch never lets one busbar's aux leak into another's total.
+    assert section_a_aux.busbar_current_a == pytest.approx(section_a_base.busbar_current_a)
+    assert section_a_aux.p_busbar_kw == pytest.approx(section_a_base.p_busbar_kw)
+    # Busbar B's own current absorbs the direct subtraction.
+    assert section_b_aux.p_busbar_kw == pytest.approx(section_b_base.p_busbar_kw - 200.0)
+    assert section_b_aux.busbar_current_a < section_b_base.busbar_current_a
+    # The fleet-level (branch) total still sees the whole 200 kW / 40 kvar.
+    assert with_aux_on_b.aux_p_kw == pytest.approx(base.aux_p_kw + 200.0)
+    assert with_aux_on_b.aux_q_kvar == pytest.approx(base.aux_q_kvar + 40.0)
+
+
+def test_each_sections_own_export_cable_is_sized_on_its_own_busbar_total():
+    stage1, layout = _full_plant_inputs()
+    branch = size_branch(
+        layout, _catalogue(),
+        sections=[
+            BusbarSection(busbar_id="a", circuit_indices=[1, 2],
+                         export_edge_id="exp_a", export_length_km=1.0,
+                         export_candidates=_catalogue()),
+            BusbarSection(busbar_id="b", circuit_indices=[3, 4],
+                         export_edge_id="exp_b", export_length_km=3.0,
+                         export_candidates=_catalogue()),
+        ],
+    )
+    section_a, section_b = branch.sections
+    assert section_a.mv_export is not None and section_b.mv_export is not None
+    assert section_a.mv_export.s_kva == pytest.approx(
+        math.hypot(section_a.p_busbar_kw, section_a.q_busbar_kvar))
+    assert section_b.mv_export.s_kva == pytest.approx(
+        math.hypot(section_b.p_busbar_kw, section_b.q_busbar_kvar))
+    assert section_a.mv_export.length_km == 1.0
+    assert section_b.mv_export.length_km == 3.0
+    # Different length AND different circuit membership -> different losses;
+    # neither section's export cable was sized on the OTHER's total.
+    assert section_a.mv_export.dp_kw != section_b.mv_export.dp_kw
+
+
+def test_recompute_branch_preserves_the_section_partition():
+    stage1, layout = _full_plant_inputs()
+    branch = size_branch(
+        layout, _catalogue(),
+        sections=[
+            BusbarSection(busbar_id="a", circuit_indices=[1, 2], aux_p_kw=50.0),
+            BusbarSection(busbar_id="b", circuit_indices=[3, 4], aux_p_kw=200.0),
+        ],
+    )
+    recomputed = architecture.recompute_branch(branch, stage1, 1.2)
+
+    assert len(recomputed.sections) == 2
+    assert [s.busbar_id for s in recomputed.sections] == ["a", "b"]
+    assert [s.circuit_indices for s in recomputed.sections] == [[1, 2], [3, 4]]
+    assert [s.aux_p_kw for s in recomputed.sections] == [50.0, 200.0]

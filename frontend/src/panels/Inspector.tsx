@@ -4,7 +4,6 @@ import { CollapsiblePanel } from './CollapsiblePanel'
 import { LABEL } from '../labels'
 import { useCatalogue } from '../hooks/useCatalogue'
 import { useStore } from '../store'
-import { takenBusbarSlots } from '../canvas/connect'
 import { permitsFleetKind } from '../technology'
 import { defaultInverterSelection } from '../inverterDefaults'
 import { Row, SectionTitle } from '../components/DetailRows'
@@ -482,15 +481,13 @@ function NodeProperties({ node }: { node: DiagramNode }) {
         <>
           <label className="field">
             <span>Fleet kind</span>
-            {/* A kind another busbar already occupies is disabled rather than
-                hidden: the engineer can see the option exists and why it is not
-                available, and cannot use this control to create the duplicate the
-                palette and the canvas both refuse. */}
+            {/* A fleet's branch may hold more than one busbar in parallel
+                (ticket 05): a kind another busbar already uses is not
+                disabled here, on the palette, or on the canvas drop. */}
             <select value={String(props.fleet_kind ?? 'pv')} onChange={(e) => patch({ fleet_kind: e.target.value })}>
               {(['pv', 'bess'] as const).map((kind) => (
-                <option key={kind} value={kind} disabled={takenBusbarSlots(diagram, node.id).has(kind)}>
+                <option key={kind} value={kind}>
                   {kind === 'pv' ? 'PV' : 'BESS'}
-                  {takenBusbarSlots(diagram, node.id).has(kind) ? ' — already used' : ''}
                 </option>
               ))}
             </select>

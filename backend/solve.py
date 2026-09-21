@@ -22,7 +22,7 @@ from powertool import (
     size_generation,
     size_generation_pq,
 )
-from powertool.architecture import size_branch, size_plant
+from powertool.architecture import BusbarSection, size_branch, size_plant
 from powertool.graph import (
     BranchInputs,
     GraphInputs,
@@ -153,8 +153,15 @@ def build_chain(
 # ---------------------------------------------------------------------------
 
 def _uses_shared_export(inputs: GraphInputs) -> bool:
-    """Whether the legacy single/shared export step owns the POC run."""
-    return inputs.hv_tx_id is not None or len(inputs.branches) == 1
+    """Whether the single shared export step owns the POC run — an HV
+    interconnection (one physical line after the shared transformer,
+    whatever the fleet count), or an MV interconnection with only ONE busbar
+    drawn on the WHOLE PLANT (``n_busbars``, not ``len(branches)``: a single
+    fleet may itself hold more than one busbar since ticket 05, in which case
+    each busbar sizes its own MV export run instead — see
+    ``mv_export_applicable`` in :func:`powertool.graph.graph_to_inputs`, this
+    rule's exact complement)."""
+    return inputs.hv_tx_id is not None or inputs.n_busbars <= 1
 
 
 def build_export_chain(inputs: GraphInputs, db: ComponentDatabase) -> Chain:
@@ -333,10 +340,12 @@ def solve_architecture(inputs: GraphInputs, db: ComponentDatabase):
             max_loss_percent_base=inputs.collection_loss_pct,
             segment_lengths=branch.segment_lengths,
             segment_candidates=branch.segment_candidates,
-            # DRAWN aux only. The BESS solutions' own auxiliary draw is
-            # deliberately absent from the sizing cascade: a battery station's
-            # PCS is sized for export duty alone, and the container auxiliaries
-            # are fed from a separate supply rather than from the batteries.
+            export_loss_percent_per_km=inputs.export_loss_pct_per_km,
+            # DRAWN aux only, per busbar (ticket 05). The BESS solutions' own
+            # auxiliary draw is deliberately absent from the sizing cascade: a
+            # battery station's PCS is sized for export duty alone, and the
+            # container auxiliaries are fed from a separate supply rather than
+            # from the batteries.
             #
             # Keeping it out of the Stage-1 chain alone was not enough. The
             # refinement drives each branch's DELIVERED power up to its target,
@@ -347,13 +356,19 @@ def solve_architecture(inputs: GraphInputs, db: ComponentDatabase):
             #
             # The draw is reported per branch instead (see the branch summary),
             # because the site still has to supply it.
-            aux_p_kw=branch.aux_p_kw,
-            aux_q_kvar=branch.aux_q_kvar,
-            export_edge_id=branch.export_edge_id,
-            export_length_km=branch.export_length_km,
-            export_candidates=branch.export_candidates,
-            export_loss_percent_per_km=inputs.export_loss_pct_per_km,
-            export_forced=branch.export_forced,
+            sections=[
+                BusbarSection(
+                    busbar_id=busbar.busbar_id,
+                    circuit_indices=busbar.circuit_indices,
+                    aux_p_kw=busbar.aux_p_kw,
+                    aux_q_kvar=busbar.aux_q_kvar,
+                    export_edge_id=busbar.export_edge_id,
+                    export_length_km=busbar.export_length_km,
+                    export_candidates=busbar.export_candidates,
+                    export_forced=busbar.export_forced,
+                )
+                for busbar in branch.busbars
+            ],
         )
         stage1s.append(stage1)
         layouts.append(layout)

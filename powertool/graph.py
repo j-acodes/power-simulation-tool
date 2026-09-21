@@ -33,11 +33,13 @@ Topology contract (checked by :func:`validate_graph`)::
     poc --(hv edge = export cable)-- hv_tx --(mv)-- busbar --(mv trunk)-- station -- station ...
     poc --(mv edge = MV interconnection)--------- busbar --(mv)-- aux
 
-One busbar per fleet kind ("pv" / "bess") is allowed, each parented by the
-shared MV/HV transformer (or directly by the POC for an MV interconnection) —
-a hybrid plant is two independent MV cascades sharing one export step. A
-station's own fleet kind must agree with the busbar its circuit hangs from
-(``busbar_kind_mismatch``); an aux load may hang from any busbar.
+Any number of busbars is allowed per fleet kind ("pv" / "bess"), each parented
+by the shared MV/HV transformer (or directly by the POC for an MV
+interconnection) — a hybrid plant is two independent MV cascades sharing one
+export step, and each cascade may itself hold more than one busbar in
+parallel (ticket 05). A station's own fleet kind must agree with the busbar
+its circuit hangs from (``busbar_kind_mismatch``); an aux load may hang from
+any busbar.
 
 Edges are drawn undirected; the direction is derived by rooting the graph at the
 POC, so an edge drawn "backwards" still reads correctly. Power flows the other
@@ -525,63 +527,17 @@ def _bess_container_count(props: dict, db, solution) -> int | None:
     return pairings.get(solution.name)
 
 
-def _stations_under(nodes: dict[str, dict], edges: list[dict],
-                    busbar_id: str) -> list[str]:
-    """The stations reachable from a busbar through station-to-station links.
+def _busbars(nodes: dict[str, dict], edges: list[dict]) -> list[str]:
+    """Every drawn MV busbar's node id.
 
-    Undirected on purpose: edges are drawn either way round and this runs
-    before the tree is rooted, so it cannot lean on parentage.
+    Ticket 05 lifts the old one-busbar-per-fleet-kind rule
+    (``duplicate_busbar``): a fleet's branch may hold more than one busbar in
+    parallel, so nothing here rejects a second one of a kind already seen —
+    every busbar on the canvas is valid on its own. ``busbar_kind_mismatch``
+    (see :func:`_check_roles`) still catches a station drawn against a busbar
+    of the wrong fleet kind.
     """
-    found: list[str] = []
-    seen = {busbar_id}
-    frontier = [busbar_id]
-    while frontier:
-        current = frontier.pop()
-        for edge in edges:
-            for near, far in ((edge.get("source"), edge.get("target")),
-                              (edge.get("target"), edge.get("source"))):
-                if near != current or far in seen or far not in nodes:
-                    continue
-                if nodes[far]["kind"] != "station":
-                    continue
-                seen.add(far)
-                found.append(far)
-                frontier.append(far)
-    return found
-
-
-def _busbars(nodes: dict[str, dict], edges: list[dict],
-             issues: list[GraphIssue]) -> dict[str, str]:
-    """One busbar id per fleet kind ("pv" / "bess") — the relaxed single-busbar
-    rule: a second busbar of a kind already seen is a ``duplicate_busbar``,
-    naming the extra one and excluding it from the map, rather than the old
-    plant-wide ``multiple_busbar``.
-
-    The kind is the EFFECTIVE one (see :func:`_effective_busbar_kind`), not the
-    declared one, so the slot a busbar occupies here is the same answer as the
-    fleet it is later sized as. Reading the bare "pv" default instead would put
-    a pre-hybrid BESS plant's undeclared busbar in the PV slot while
-    :func:`graph_to_inputs` solved that same busbar as a BESS branch — and
-    adding a PV busbar to upgrade that plant to a hybrid would come back as a
-    duplicate of a busbar that is not PV at all.
-
-    Station membership is walked over the raw edges rather than the rooted
-    tree: this runs before the tree exists, because the tree needs a POC and
-    this check gates it.
-    """
-    by_kind: dict[str, str] = {}
-    for nid, node in nodes.items():
-        if node["kind"] != "busbar":
-            continue
-        kind = _effective_busbar_kind(nodes, nid, _stations_under(nodes, edges, nid))
-        if kind in by_kind:
-            issues.append(GraphIssue(
-                "duplicate_busbar",
-                f"A {kind!r} MV busbar already exists — remove '{nid}'.",
-                node_id=nid))
-            continue
-        by_kind[kind] = nid
-    return by_kind
+    return [nid for nid, node in nodes.items() if node["kind"] == "busbar"]
 
 
 # --- validation --------------------------------------------------------------
@@ -1080,7 +1036,7 @@ def validate_graph(diagram: dict, db) -> list[GraphIssue]:
 
     poc_id = _singleton(nodes, "poc", issues, "no_poc", "multiple_poc",
                         "Point of Connection")
-    busbars = _busbars(nodes, edges, issues)
+    busbars = _busbars(nodes, edges)
     if not busbars:
         issues.append(GraphIssue("no_busbar", "The diagram needs an MV busbar."))
     if poc_id is None or not busbars:
@@ -1098,7 +1054,7 @@ def validate_graph(diagram: dict, db) -> list[GraphIssue]:
                 "disconnected",
                 f"Block '{nid}' is not connected to the Point of Connection.",
                 node_id=nid))
-    busbar_ids = set(busbars.values())
+    busbar_ids = set(busbars)
     if not (busbar_ids & tree.reached):
         return issues  # nothing downstream can be judged
 
@@ -1126,16 +1082,54 @@ class PvInverterInstallation:
 
 
 @dataclass
+class BusbarInputs:
+    """One drawn busbar's own slice of its fleet's branch (ticket 05): a
+    fleet's branch may hold more than one busbar in parallel, each with its
+    own circuits, aux load, MV export run and switchgear pins.
+
+    ``circuit_indices`` are 1-based indices into the OWNING BranchInputs'
+    ``circuits``/``station_ids``/``segment_edge_ids`` — continuous across the
+    whole fleet, busbars in drawn order — not a busbar-local numbering, so
+    ``segment_edge_ids[(c, k)]`` keeps working unchanged for every circuit of
+    the fleet, whichever busbar it hangs from.
+    """
+
+    busbar_id: str
+    aux_ids: list[str]
+    aux_p_kw: float
+    aux_q_kvar: float
+    circuit_indices: list[int]
+    # Direct MV interconnection run for THIS busbar. HV designs keep the
+    # shared export on GraphInputs instead.
+    export_edge_id: str | None = None
+    export_length_km: float = 0.0
+    export_candidates: list[Cable] | None = None
+    export_forced: bool = False
+    # Busbar switchgear pins (ADR-0007, ticket 04): an engineer's own rating
+    # for the busbar or the export switchgear, checked instead of sized; None
+    # means sized, exactly as ticket 03 shipped. Feeder pins are keyed by
+    # their TRUNK edge id (the circuit's first cable, busbar -> first
+    # station — ``segment_edge_ids[(c, 1)]``) because that is the stable
+    # identity the diagram and the editor both already key on; a key that
+    # names no trunk edge of this busbar is simply never looked up.
+    switchgear_pin_a: float | None = None
+    export_switchgear_pin_a: float | None = None
+    feeder_switchgear_pins_a: dict[str, float] = field(default_factory=dict)
+
+
+@dataclass
 class BranchInputs:
-    """One fleet's branch of a drawing: its own busbar, circuits and totals —
+    """One fleet's branch of a drawing: its busbars, circuits and totals —
     everything :func:`powertool.architecture.size_branch` and
     :func:`~powertool.architecture.arrange_plant_manual` need for that fleet's
     independent MV cascade.
 
     The parallel lists/dicts are the same positional bijection as before, now
-    scoped to this branch: ``circuits[c][k]`` is the transformer of
-    ``station_ids[c][k]``, and the cable feeding it is
-    ``segment_edge_ids[(c + 1, k + 1)]``.
+    scoped to this branch and CONTINUOUS across every busbar of the fleet
+    (ticket 05, busbars in drawn order): ``circuits[c][k]`` is the transformer
+    of ``station_ids[c][k]``, and the cable feeding it is
+    ``segment_edge_ids[(c + 1, k + 1)]``. Which circuits belong to which
+    busbar is recorded on that :class:`BusbarInputs`' own ``circuit_indices``.
 
     ``p_poc_target_kw`` is this branch's OWN point-of-connection active target
     (the PV or BESS figure off the POC props), read at parse time — it drives
@@ -1150,15 +1144,12 @@ class BranchInputs:
     """
 
     kind: str
-    busbar_id: str
-    aux_ids: list[str]
+    busbars: list[BusbarInputs]
     circuits: list[list[Transformer]]
     station_ids: list[list[str]]
     segment_edge_ids: dict[tuple[int, int], str]
     segment_lengths: dict[tuple[int, int], float]  # km, complete by construction
     segment_candidates: dict[tuple[int, int], list[Cable]]  # forced sections only
-    aux_p_kw: float
-    aux_q_kvar: float
     max_loading: float
     p_poc_target_kw: float
     q_poc_target_kvar: float = 0.0
@@ -1183,22 +1174,33 @@ class BranchInputs:
     # PV-only. Validation requires one installation for every PV station;
     # BESS branches leave this mapping empty.
     pv_inverters_by_station: dict[str, PvInverterInstallation] = field(default_factory=dict)
-    # Direct MV interconnection run for this fleet. HV designs keep the
-    # shared export on GraphInputs instead.
-    export_edge_id: str | None = None
-    export_length_km: float = 0.0
-    export_candidates: list[Cable] | None = None
-    export_forced: bool = False
-    # Busbar switchgear pins (ADR-0007, ticket 04): an engineer's own rating
-    # for the busbar or the export switchgear, checked instead of sized; None
-    # means sized, exactly as ticket 03 shipped. Feeder pins are keyed by
-    # their TRUNK edge id (the circuit's first cable, busbar -> first
-    # station — ``segment_edge_ids[(c, 1)]``) because that is the stable
-    # identity the diagram and the editor both already key on; a key that
-    # names no trunk edge of this busbar is simply never looked up.
-    switchgear_pin_a: float | None = None
-    export_switchgear_pin_a: float | None = None
-    feeder_switchgear_pins_a: dict[str, float] = field(default_factory=dict)
+
+    @property
+    def busbar_id(self) -> str:
+        """The fleet's first busbar — a generic anchor for a warning that
+        names ONE representative node of the fleet rather than a specific
+        busbar (see e.g. the power-balance warning in :func:`map_results`).
+        Never used to key a busbar's own results; those are per-busbar."""
+        return self.busbars[0].busbar_id
+
+    @property
+    def aux_ids(self) -> list[str]:
+        """Every aux load of the fleet, concatenated in busbar-drawn order —
+        for callers that want the fleet's aux nodes as one flat list (e.g.
+        :func:`backend.solve.build_collection_chain`'s Stage-1 lumped aux)."""
+        return [aid for busbar in self.busbars for aid in busbar.aux_ids]
+
+    @property
+    def aux_p_kw(self) -> float:
+        """The fleet's total drawn aux load, summed over its busbars — the
+        Stage-1 collection chain sizes one lumped aux for the whole fleet;
+        Stage 2 (:func:`powertool.architecture.size_branch`) subtracts it per
+        busbar instead, from each :class:`BusbarInputs`."""
+        return sum(busbar.aux_p_kw for busbar in self.busbars)
+
+    @property
+    def aux_q_kvar(self) -> float:
+        return sum(busbar.aux_q_kvar for busbar in self.busbars)
 
     @property
     def fleet(self) -> list[tuple[Transformer, int]]:
@@ -1233,10 +1235,10 @@ class GraphInputs:
 
     Plant-level concerns — point of connection, HV/tier voltages, the shared
     export step, and the sizing rules — stay flat here. Everything specific to
-    one fleet (busbar identity, circuits, station identities, segment data,
-    auxiliary totals, maximum loading, that branch's own active/reactive
-    target) lives on :class:`BranchInputs`, one per drawn busbar whose fleet
-    has a positive active target — see ``branches``.
+    one fleet (busbars, circuits, station identities, segment data, maximum
+    loading, that branch's own active/reactive target) lives on
+    :class:`BranchInputs`, one per fleet with a positive active target — see
+    ``branches``.
     """
 
     # canvas identity
@@ -1263,6 +1265,13 @@ class GraphInputs:
     hv_n_parallel: int
     export_length_km: float
     export_cable: Cable | None  # forced export section, if any
+    # Every busbar drawn on the plant, whichever fleet it belongs to (ticket
+    # 05) — NOT ``len(branches)``, which counts fleets: a single fleet may
+    # hold more than one busbar. This is what decides whether the POC-side
+    # run is ONE shared physical line (:func:`backend.solve._uses_shared_export`)
+    # or each busbar's own MV export (``mv_export_applicable`` in
+    # :func:`graph_to_inputs`) — the two rules are complements of each other.
+    n_busbars: int
     # branches
     branches: list[BranchInputs]
 
@@ -1332,11 +1341,15 @@ def graph_to_inputs(diagram: dict, db) -> GraphInputs:
     busbar_children = [child for child, _edge in tree.children[busbar_parent]
                        if nodes[child]["kind"] == "busbar"]
 
-    branches: list[BranchInputs] = []
+    # Group busbars by their EFFECTIVE fleet kind (ticket 05): the engine
+    # branch stays one FLEET, and a fleet's branch may now hold more than one
+    # busbar in parallel. Grouping (not the old one-busbar-per-kind map)
+    # decides which busbars share one branch; ``seen_kinds`` preserves the
+    # kind's first-drawn order, same order single-fleet branches were built in
+    # before this ticket.
+    seen_kinds: list[str] = []
+    busbar_ids_by_kind: dict[str, list[str]] = {}
     for busbar_id in busbar_children:
-        # The busbar's effective kind decides which point-of-connection target
-        # this branch answers to, so the stations under it have to be known
-        # before the branch is built — an undeclared busbar takes their kind.
         stations_under: list[str] = []
         frontier = [busbar_id]
         while frontier:
@@ -1345,88 +1358,122 @@ def graph_to_inputs(diagram: dict, db) -> GraphInputs:
                     stations_under.append(child)
                     frontier.append(child)
         kind = _effective_busbar_kind(nodes, busbar_id, stations_under)
-        busbar_edge = next(edge for child, edge in tree.children[busbar_parent]
-                           if child == busbar_id)
-        mv_export_length_km = _length_km(busbar_edge) or 0.0
-        mv_export_applicable = (hv_tx_id is None and len(busbar_children) > 1
-                                and mv_export_length_km > 0)
-        mv_export_sizing = _dict(busbar_edge.get("sizing"))
-        mv_export_forced = mv_export_sizing.get("mode") == "forced"
-        mv_export_candidates = (
-            [db.cables[mv_export_sizing.get("cable")]] if mv_export_forced
-            else db.cables_for_voltage(v_mv)
-        ) if mv_export_applicable else None
-        # `p_target_mw` is the PV figure only where there is a second fleet to
-        # tell it apart from. A design with ONE busbar has a single target and
-        # no ambiguity, whatever kind that fleet is — which is what keeps a
-        # single-fleet BESS plant (ticket 02) solving off the target it
-        # actually carries instead of looking for a BESS field it never wrote.
-        if len(busbar_children) == 1:
+        if kind not in busbar_ids_by_kind:
+            seen_kinds.append(kind)
+            busbar_ids_by_kind[kind] = []
+        busbar_ids_by_kind[kind].append(busbar_id)
+
+    branches: list[BranchInputs] = []
+    for kind in seen_kinds:
+        fleet_busbar_ids = busbar_ids_by_kind[kind]
+        # `p_target_mw` is the PV figure only where there is a second fleet
+        # KIND to tell it apart from. A design with only one fleet kind has a
+        # single target and no ambiguity, whatever kind it is or however many
+        # busbars it is drawn across — which is what keeps a single-fleet
+        # BESS plant (ticket 02) solving off the target it actually carries
+        # instead of looking for a BESS field it never wrote.
+        if len(seen_kinds) == 1:
             p_target_kw = p_target_pv_kw
         else:
             p_target_kw = p_target_bess_kw if kind == "bess" else p_target_pv_kw
         if p_target_kw <= 0:
-            continue  # the topology gate: a zero-target busbar is no branch
-
-        # Busbar switchgear pins (ADR-0007, ticket 04). validate_graph has
-        # already rejected a present-but-unusable value, so this trusts what
-        # it finds, same as every other prop read in this function.
-        busbar_props = _props(nodes[busbar_id])
-        switchgear_pin_a = _num(busbar_props.get("busbar_switchgear_pin_a"))
-        export_switchgear_pin_a = _num(busbar_props.get("export_switchgear_pin_a"))
-        feeder_switchgear_pins_a = {
-            edge_id: num for edge_id, num in (
-                (edge_id, _num(value))
-                for edge_id, value in _dict(busbar_props.get("feeder_switchgear_pins_a")).items()
-            ) if num is not None
-        }
+            continue  # the topology gate: a zero-target fleet is no branch
 
         circuits: list[list[Transformer]] = []
         station_ids: list[list[str]] = []
         segment_edge_ids: dict[tuple[int, int], str] = {}
         segment_lengths: dict[tuple[int, int], float] = {}
         segment_candidates: dict[tuple[int, int], list[Cable]] = {}
-        aux_ids: list[str] = []
-        aux_p_kw = aux_q_kvar = 0.0
-        bess_aux_p_kw = bess_aux_q_kvar = 0.0
-        containers: int | None = None
-        containers_by_station: dict[str, int] = {}
+        busbars: list[BusbarInputs] = []
 
-        for child, edge in tree.children[busbar_id]:
-            if nodes[child]["kind"] == "aux":
-                props = _props(nodes[child])
-                aux_ids.append(child)
-                aux_p_kw += _num(props.get("p_kw", 0.0)) or 0.0
-                aux_q_kvar += _num(props.get("q_kvar", 0.0)) or 0.0
-                continue
-            c_idx = len(circuits) + 1
-            transformers: list[Transformer] = []
-            ids: list[str] = []
-            node_id, segment_edge = child, edge
-            while True:
-                k = len(transformers) + 1
-                transformers.append(_station_transformer(nodes[node_id], db, v_mv, v_lv))
-                ids.append(node_id)
-                segment_edge_ids[(c_idx, k)] = segment_edge["id"]
-                segment_lengths[(c_idx, k)] = _length_km(segment_edge)
-                sizing = _dict(segment_edge.get("sizing"))
-                if sizing.get("mode") == "forced":
-                    # A forced section is a one-cable catalogue: select_cable
-                    # still escalates parallel circuits, but never swaps the
-                    # section.
-                    segment_candidates[(c_idx, k)] = [db.cables[sizing["cable"]]]
-                downstream = [(n, e) for n, e in tree.children[node_id]
-                              if nodes[n]["kind"] == "station"]
-                if not downstream:
-                    break
-                node_id, segment_edge = downstream[0]
-            circuits.append(transformers)
-            station_ids.append(ids)
+        for busbar_id in fleet_busbar_ids:
+            busbar_edge = next(edge for child, edge in tree.children[busbar_parent]
+                               if child == busbar_id)
+            mv_export_length_km = _length_km(busbar_edge) or 0.0
+            # Unchanged rule (ADR-0001/0007): an MV interconnection with more
+            # than one busbar on the whole PLANT sizes each busbar's own
+            # export run — which now also covers two busbars of one fleet.
+            mv_export_applicable = (hv_tx_id is None and len(busbar_children) > 1
+                                    and mv_export_length_km > 0)
+            mv_export_sizing = _dict(busbar_edge.get("sizing"))
+            mv_export_forced = mv_export_sizing.get("mode") == "forced"
+            mv_export_candidates = (
+                [db.cables[mv_export_sizing.get("cable")]] if mv_export_forced
+                else db.cables_for_voltage(v_mv)
+            ) if mv_export_applicable else None
+
+            # Busbar switchgear pins (ADR-0007, ticket 04). validate_graph has
+            # already rejected a present-but-unusable value, so this trusts
+            # what it finds, same as every other prop read in this function.
+            busbar_props = _props(nodes[busbar_id])
+            switchgear_pin_a = _num(busbar_props.get("busbar_switchgear_pin_a"))
+            export_switchgear_pin_a = _num(busbar_props.get("export_switchgear_pin_a"))
+            feeder_switchgear_pins_a = {
+                edge_id: num for edge_id, num in (
+                    (edge_id, _num(value))
+                    for edge_id, value in _dict(busbar_props.get("feeder_switchgear_pins_a")).items()
+                ) if num is not None
+            }
+
+            aux_ids: list[str] = []
+            aux_p_kw = aux_q_kvar = 0.0
+            busbar_circuit_indices: list[int] = []
+
+            for child, edge in tree.children[busbar_id]:
+                if nodes[child]["kind"] == "aux":
+                    props = _props(nodes[child])
+                    aux_ids.append(child)
+                    aux_p_kw += _num(props.get("p_kw", 0.0)) or 0.0
+                    aux_q_kvar += _num(props.get("q_kvar", 0.0)) or 0.0
+                    continue
+                c_idx = len(circuits) + 1
+                busbar_circuit_indices.append(c_idx)
+                transformers: list[Transformer] = []
+                ids: list[str] = []
+                node_id, segment_edge = child, edge
+                while True:
+                    k = len(transformers) + 1
+                    transformers.append(_station_transformer(nodes[node_id], db, v_mv, v_lv))
+                    ids.append(node_id)
+                    segment_edge_ids[(c_idx, k)] = segment_edge["id"]
+                    segment_lengths[(c_idx, k)] = _length_km(segment_edge)
+                    sizing = _dict(segment_edge.get("sizing"))
+                    if sizing.get("mode") == "forced":
+                        # A forced section is a one-cable catalogue: select_cable
+                        # still escalates parallel circuits, but never swaps the
+                        # section.
+                        segment_candidates[(c_idx, k)] = [db.cables[sizing["cable"]]]
+                    downstream = [(n, e) for n, e in tree.children[node_id]
+                                  if nodes[n]["kind"] == "station"]
+                    if not downstream:
+                        break
+                    node_id, segment_edge = downstream[0]
+                circuits.append(transformers)
+                station_ids.append(ids)
+
+            busbars.append(BusbarInputs(
+                busbar_id=busbar_id,
+                aux_ids=aux_ids,
+                aux_p_kw=aux_p_kw,
+                aux_q_kvar=aux_q_kvar,
+                circuit_indices=busbar_circuit_indices,
+                export_edge_id=busbar_edge["id"] if mv_export_applicable else None,
+                export_length_km=mv_export_length_km if mv_export_applicable else 0.0,
+                export_candidates=mv_export_candidates,
+                export_forced=mv_export_forced if mv_export_applicable else False,
+                switchgear_pin_a=switchgear_pin_a,
+                export_switchgear_pin_a=export_switchgear_pin_a,
+                feeder_switchgear_pins_a=feeder_switchgear_pins_a,
+            ))
 
         # BESS fleet figures, read per station from its own solution: the
         # worst-case auxiliary draw (summed, lands at the busbar) and the
         # container count — defaulted from the pairing on the station's own
         # chosen station transformer, overridable — feeding delivered energy.
+        # Fleet-level (ticket 05): summed over EVERY busbar of the fleet.
+        bess_aux_p_kw = bess_aux_q_kvar = 0.0
+        containers: int | None = None
+        containers_by_station: dict[str, int] = {}
         e_delivered_kwh: float | None = None
         unpublished_aux_solutions: list[str] = []
         pv_inverters_by_station: dict[str, PvInverterInstallation] = {}
@@ -1479,15 +1526,12 @@ def graph_to_inputs(diagram: dict, db) -> GraphInputs:
 
         branches.append(BranchInputs(
             kind=kind,
-            busbar_id=busbar_id,
-            aux_ids=aux_ids,
+            busbars=busbars,
             circuits=circuits,
             station_ids=station_ids,
             segment_edge_ids=segment_edge_ids,
             segment_lengths=segment_lengths,
             segment_candidates=segment_candidates,
-            aux_p_kw=aux_p_kw,
-            aux_q_kvar=aux_q_kvar,
             max_loading=_max_loading(kind),
             p_poc_target_kw=p_target_kw,
             bess_aux_p_kw=bess_aux_p_kw,
@@ -1503,13 +1547,6 @@ def graph_to_inputs(diagram: dict, db) -> GraphInputs:
                 else p_target_kw * (_rule_opt(diagram, "discharge_hours") or 0.0)
             ),
             pv_inverters_by_station=pv_inverters_by_station,
-            export_edge_id=busbar_edge["id"] if mv_export_applicable else None,
-            export_length_km=mv_export_length_km if mv_export_applicable else 0.0,
-            export_candidates=mv_export_candidates,
-            export_forced=mv_export_forced if mv_export_applicable else False,
-            switchgear_pin_a=switchgear_pin_a,
-            export_switchgear_pin_a=export_switchgear_pin_a,
-            feeder_switchgear_pins_a=feeder_switchgear_pins_a,
         ))
 
     return GraphInputs(
@@ -1529,6 +1566,7 @@ def graph_to_inputs(diagram: dict, db) -> GraphInputs:
         hv_n_parallel=hv_n_parallel,
         export_length_km=export_length_km,
         export_cable=export_cable,
+        n_busbars=len(busbar_children),
         branches=branches,
     )
 
@@ -1598,17 +1636,23 @@ def branches_summary(inputs, arch, stage1s) -> list[dict]:
             "e_delivered_kwh": branch_inputs.e_delivered_kwh,
             "e_required_kwh": branch_inputs.e_required_kwh,
             "energy_ok": branch_inputs.energy_ok,
-            # Busbar switchgear pins (ADR-0007, ticket 04), for the PDF's
-            # "(sized)" / "(pinned)" marking — see _busbar_switchgear_rows.
-            # The feeder list is resolved to circuit order (None where that
-            # circuit's trunk edge carries no pin), the same order
-            # branch_arch.circuits and feeder_i_a already use.
-            "switchgear_pin_a": branch_inputs.switchgear_pin_a,
-            "export_switchgear_pin_a": branch_inputs.export_switchgear_pin_a,
-            "feeder_switchgear_pins_a": [
-                branch_inputs.feeder_switchgear_pins_a.get(
-                    branch_inputs.segment_edge_ids[(c.index, 1)])
-                for c in branch_arch.circuits
+            # One entry per busbar of this fleet (ticket 05), for the PDF's
+            # per-busbar "Busbar switchgear" section (see
+            # _busbar_switchgear_rows). The feeder list is resolved to THAT
+            # busbar's own circuit order, matching
+            # ``branch_arch.sections[i].circuits``.
+            "busbars": [
+                {
+                    "busbar_id": busbar_inputs.busbar_id,
+                    "switchgear_pin_a": busbar_inputs.switchgear_pin_a,
+                    "export_switchgear_pin_a": busbar_inputs.export_switchgear_pin_a,
+                    "feeder_switchgear_pins_a": [
+                        busbar_inputs.feeder_switchgear_pins_a.get(
+                            branch_inputs.segment_edge_ids[(c_idx, 1)])
+                        for c_idx in busbar_inputs.circuit_indices
+                    ],
+                }
+                for busbar_inputs in branch_inputs.busbars
             ],
         })
     return out
@@ -1786,126 +1830,129 @@ def map_results(inputs: GraphInputs, stage1s: list[SizingResult],
                         node_id=node_id,
                     ))
 
-        p_busbar = sum(c.p_busbar_kw for c in branch_arch.circuits)
-        q_busbar = sum(c.q_busbar_kvar for c in branch_arch.circuits)
         # Busbar switchgear (ADR-0007, CONTEXT.md's "Busbar switchgear",
-        # "Feeder", "Export switchgear"). The busbar and export switchgear are
-        # SIZED on the branch's NET busbar total — the same net S the MV
-        # export cable is sized on (BranchArchitecture.p_busbar_kw /
-        # q_busbar_kvar already take this branch's own auxiliary load out,
-        # see that property's docstring) — never on p_busbar/q_busbar above,
-        # which are the raw per-circuit deliveries shown as "p_kw"/"q_kvar".
-        # Each feeder is instead sized on its own circuit's head current
-        # (i_trunk_a), which auxiliary load never touches.
+        # "Feeder", "Export switchgear"), reported PER BUSBAR of the fleet
+        # (ticket 05: a fleet's branch may hold more than one). The busbar and
+        # export switchgear are SIZED on THAT busbar's own NET total — the
+        # same net S its own MV export cable is sized on
+        # (BusbarSection.p_busbar_kw / q_busbar_kvar already take its own
+        # auxiliary load out, see that property's docstring) — never on the
+        # raw per-circuit deliveries shown as "p_kw"/"q_kvar". Each feeder is
+        # instead sized on its own circuit's head current (i_trunk_a), which
+        # auxiliary load never touches.
         #
         # Ticket 04: any of the three may instead be PINNED by the engineer
-        # (BranchInputs.switchgear_pin_a / export_switchgear_pin_a /
+        # (BusbarInputs.switchgear_pin_a / export_switchgear_pin_a /
         # feeder_switchgear_pins_a) — a pinned rating is reported exactly as
         # pinned, never resized, and is checked against its current rather
         # than sized. Busbar and export switchgear still share one current;
         # a pin is the only way they diverge.
-        busbar_current_a = branch_arch.busbar_current_a
-        sized_switchgear_a = size_busbar_switchgear_rating(busbar_current_a)
-        busbar_pin_a = branch_inputs.switchgear_pin_a
-        export_pin_a = branch_inputs.export_switchgear_pin_a
-        busbar_switchgear_rated_a = busbar_switchgear_rating(busbar_current_a, busbar_pin_a)
-        export_switchgear_rated_a = busbar_switchgear_rating(busbar_current_a, export_pin_a)
+        for busbar_inputs, section in zip(branch_inputs.busbars, branch_arch.sections):
+            p_busbar = sum(c.p_busbar_kw for c in section.circuits)
+            q_busbar = sum(c.q_busbar_kvar for c in section.circuits)
+            busbar_current_a = section.busbar_current_a
+            sized_switchgear_a = size_busbar_switchgear_rating(busbar_current_a)
+            busbar_pin_a = busbar_inputs.switchgear_pin_a
+            export_pin_a = busbar_inputs.export_switchgear_pin_a
+            busbar_switchgear_rated_a = busbar_switchgear_rating(busbar_current_a, busbar_pin_a)
+            export_switchgear_rated_a = busbar_switchgear_rating(busbar_current_a, export_pin_a)
 
-        feeder_current_a = [c.i_trunk_a for c in branch_arch.circuits]
-        # The trunk edge of circuit c.index is segment_edge_ids[(c.index, 1)]
-        # (the module docstring's positional bijection) — the stable id a
-        # feeder pin is keyed by.
-        feeder_edge_ids = [
-            branch_inputs.segment_edge_ids[(c.index, 1)] for c in branch_arch.circuits
-        ]
-        feeder_pins_a = [
-            branch_inputs.feeder_switchgear_pins_a.get(edge_id)
-            for edge_id in feeder_edge_ids
-        ]
-        feeder_switchgear_rated_a = [
-            busbar_switchgear_rating(i, pin)
-            for pin, i in zip(feeder_pins_a, feeder_current_a)
-        ]
-        nodes[branch_inputs.busbar_id] = {
-            "kind": "busbar",
-            "p_kw": p_busbar,
-            "q_kvar": q_busbar,
-            "s_kva": math.hypot(p_busbar, q_busbar),
-            "n_circuits": len(branch_arch.circuits),
-            "circuit_sizes": layout.circuit_sizes,
-            "v_kv": layout.v_mv_kv,
-            # Busbar and export switchgear share the same design-point
-            # current — a pin is the only way their rating diverges — so
-            # both are reported under their own keys rather than one shared
-            # pair.
-            "i_a": busbar_current_a,
-            "switchgear_rated_a": busbar_switchgear_rated_a,
-            "switchgear_pinned": busbar_pin_a is not None,
-            "export_i_a": busbar_current_a,
-            "export_switchgear_rated_a": export_switchgear_rated_a,
-            "export_switchgear_pinned": export_pin_a is not None,
-            "feeder_i_a": feeder_current_a,
-            "feeder_switchgear_rated_a": feeder_switchgear_rated_a,
-            "feeder_switchgear_pinned": [pin is not None for pin in feeder_pins_a],
-            "feeder_edge_ids": feeder_edge_ids,
-        }
-        # No standard rating carries this current (ADR-0007) — only reported
-        # for a part that is SIZED: a pinned part is checked against its pin
-        # instead, never against the ladder top, however high its current.
-        unsized_parts = []
-        if busbar_pin_a is None and sized_switchgear_a is None:
-            unsized_parts.append("busbar")
-        if export_pin_a is None and sized_switchgear_a is None:
-            unsized_parts.append("export switchgear")
-        if unsized_parts:
-            # The design still solves, flagged here, mirroring how a station
-            # over its own switchgear rated current is flagged rather than
-            # stopping the solve (ADR-0006).
-            warnings.append(GraphIssue(
-                "busbar_switchgear_no_admissible_rating",
-                f"Busbar '{branch_inputs.busbar_id}' carries {busbar_current_a:,.0f} A "
-                f"— above the {BUSBAR_SWITCHGEAR_LADDER_A[-1]:,.0f} A top of the "
-                f"standard busbar switchgear ladder. No standard rating fits the "
-                f"{' and '.join(unsized_parts)}; shown but not sized.",
-                node_id=branch_inputs.busbar_id))
-
-        # A pinned rating too small for its current still solves — the
-        # design is flagged at the busbar, naming the part and the shortfall
-        # (ADR-0007, ticket 04's central case).
-        def _pin_shortfall(label: str, pin: float | None, current: float) -> None:
-            if pin is not None and current > pin + 1e-9:
+            feeder_current_a = [c.i_trunk_a for c in section.circuits]
+            # The trunk edge of circuit c.index is segment_edge_ids[(c.index, 1)]
+            # (the module docstring's positional bijection) — the stable id a
+            # feeder pin is keyed by.
+            feeder_edge_ids = [
+                branch_inputs.segment_edge_ids[(c.index, 1)] for c in section.circuits
+            ]
+            feeder_pins_a = [
+                busbar_inputs.feeder_switchgear_pins_a.get(edge_id)
+                for edge_id in feeder_edge_ids
+            ]
+            feeder_switchgear_rated_a = [
+                busbar_switchgear_rating(i, pin)
+                for pin, i in zip(feeder_pins_a, feeder_current_a)
+            ]
+            nodes[busbar_inputs.busbar_id] = {
+                "kind": "busbar",
+                "p_kw": p_busbar,
+                "q_kvar": q_busbar,
+                "s_kva": math.hypot(p_busbar, q_busbar),
+                "n_circuits": len(section.circuits),
+                "circuit_sizes": [len(c.stations) for c in section.circuits],
+                "v_kv": layout.v_mv_kv,
+                # Busbar and export switchgear share the same design-point
+                # current — a pin is the only way their rating diverges — so
+                # both are reported under their own keys rather than one
+                # shared pair.
+                "i_a": busbar_current_a,
+                "switchgear_rated_a": busbar_switchgear_rated_a,
+                "switchgear_pinned": busbar_pin_a is not None,
+                "export_i_a": busbar_current_a,
+                "export_switchgear_rated_a": export_switchgear_rated_a,
+                "export_switchgear_pinned": export_pin_a is not None,
+                "feeder_i_a": feeder_current_a,
+                "feeder_switchgear_rated_a": feeder_switchgear_rated_a,
+                "feeder_switchgear_pinned": [pin is not None for pin in feeder_pins_a],
+                "feeder_edge_ids": feeder_edge_ids,
+            }
+            # No standard rating carries this current (ADR-0007) — only
+            # reported for a part that is SIZED: a pinned part is checked
+            # against its pin instead, never against the ladder top, however
+            # high its current.
+            unsized_parts = []
+            if busbar_pin_a is None and sized_switchgear_a is None:
+                unsized_parts.append("busbar")
+            if export_pin_a is None and sized_switchgear_a is None:
+                unsized_parts.append("export switchgear")
+            if unsized_parts:
+                # The design still solves, flagged here, mirroring how a
+                # station over its own switchgear rated current is flagged
+                # rather than stopping the solve (ADR-0006).
                 warnings.append(GraphIssue(
-                    "busbar_switchgear_pin_undersized",
-                    f"Busbar '{branch_inputs.busbar_id}': {label} is pinned to "
-                    f"{pin:,.0f} A, {current - pin:,.0f} A short of its "
-                    f"{current:,.0f} A current.",
-                    node_id=branch_inputs.busbar_id))
+                    "busbar_switchgear_no_admissible_rating",
+                    f"Busbar '{busbar_inputs.busbar_id}' carries {busbar_current_a:,.0f} A "
+                    f"— above the {BUSBAR_SWITCHGEAR_LADDER_A[-1]:,.0f} A top of the "
+                    f"standard busbar switchgear ladder. No standard rating fits the "
+                    f"{' and '.join(unsized_parts)}; shown but not sized.",
+                    node_id=busbar_inputs.busbar_id))
 
-        _pin_shortfall("the busbar switchgear", busbar_pin_a, busbar_current_a)
-        _pin_shortfall("the export switchgear", export_pin_a, busbar_current_a)
-        for circuit, pin, current in zip(branch_arch.circuits, feeder_pins_a, feeder_current_a):
-            first_station = branch_inputs.station_ids[circuit.index - 1][0]
-            _pin_shortfall(
-                f"the feeder for circuit {circuit.index} (feeding '{first_station}')",
-                pin, current)
-        for aux_id in branch_inputs.aux_ids:
-            nodes[aux_id] = {"kind": "aux"}
-        if branch_inputs.aux_ids:
-            # The engine takes one lumped aux draw per branch busbar; report
-            # the total on the branch's first aux block so the canvas has
-            # somewhere to show it.
-            nodes[branch_inputs.aux_ids[0]].update(
-                p_kw=branch_arch.aux_p_kw, q_kvar=branch_arch.aux_q_kvar)
-        if branch_inputs.export_edge_id and branch_arch.mv_export is not None:
-            edges[branch_inputs.export_edge_id] = _segment_payload(
-                branch_arch.mv_export,
-                forced=branch_inputs.export_forced)
-            if branch_arch.mv_export.selection is None:
-                warnings.append(GraphIssue(
-                    "mv_cable_not_sized",
-                    "The catalogue has no cables at the MV export voltage — the "
-                    "export span is shown but not sized (zero losses assumed).",
-                    edge_id=branch_inputs.export_edge_id))
+            # A pinned rating too small for its current still solves — the
+            # design is flagged at the busbar, naming the part and the
+            # shortfall (ADR-0007, ticket 04's central case).
+            def _pin_shortfall(label: str, pin: float | None, current: float) -> None:
+                if pin is not None and current > pin + 1e-9:
+                    warnings.append(GraphIssue(
+                        "busbar_switchgear_pin_undersized",
+                        f"Busbar '{busbar_inputs.busbar_id}': {label} is pinned to "
+                        f"{pin:,.0f} A, {current - pin:,.0f} A short of its "
+                        f"{current:,.0f} A current.",
+                        node_id=busbar_inputs.busbar_id))
+
+            _pin_shortfall("the busbar switchgear", busbar_pin_a, busbar_current_a)
+            _pin_shortfall("the export switchgear", export_pin_a, busbar_current_a)
+            for circuit, pin, current in zip(section.circuits, feeder_pins_a, feeder_current_a):
+                first_station = branch_inputs.station_ids[circuit.index - 1][0]
+                _pin_shortfall(
+                    f"the feeder for circuit {circuit.index} (feeding '{first_station}')",
+                    pin, current)
+            for aux_id in busbar_inputs.aux_ids:
+                nodes[aux_id] = {"kind": "aux"}
+            if busbar_inputs.aux_ids:
+                # The engine takes one lumped aux draw per busbar; report the
+                # total on that busbar's first aux block so the canvas has
+                # somewhere to show it.
+                nodes[busbar_inputs.aux_ids[0]].update(
+                    p_kw=section.aux_p_kw, q_kvar=section.aux_q_kvar)
+            if busbar_inputs.export_edge_id and section.mv_export is not None:
+                edges[busbar_inputs.export_edge_id] = _segment_payload(
+                    section.mv_export,
+                    forced=busbar_inputs.export_forced)
+                if section.mv_export.selection is None:
+                    warnings.append(GraphIssue(
+                        "mv_cable_not_sized",
+                        "The catalogue has no cables at the MV export voltage — the "
+                        "export span is shown but not sized (zero losses assumed).",
+                        edge_id=busbar_inputs.export_edge_id))
 
         if not layout.loading_ok:
             if branch_inputs.kind == "pv":
@@ -2128,7 +2175,8 @@ def map_results(inputs: GraphInputs, stage1s: list[SizingResult],
             "v_mv_kv": arch.branches[0].layout.v_mv_kv,
             "v_hv_kv": (export.v_hv_kv if export is not None else
                         (arch.branches[0].layout.v_mv_kv
-                         if any(b.mv_export is not None for b in arch.branches)
+                         if any(s.mv_export is not None
+                                for b in arch.branches for s in b.sections)
                          else None)),
             "branches": fleets,
         }

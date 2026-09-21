@@ -139,6 +139,14 @@ describe('convertDiagramTechnology', () => {
   })
 
   describe('narrowing', () => {
+    it('hybrid -> pv removes every BESS busbar, not just the first', () => {
+      const d = hybridDiagram()
+      d.nodes.push(node('bus_b2', 'busbar', { fleet_kind: 'bess' }), node('s_b2', 'station', { fleet_kind: 'bess' }))
+      d.edges.push(edge('poc', 'bus_b2'), edge('bus_b2', 's_b2'))
+      const ids = convertDiagramTechnology(d, 'hybrid', 'pv').nodes.map((n) => n.id).sort()
+      expect(ids).toEqual(['bus_pv', 'poc', 's_pv1', 's_pv2'])
+    })
+
     it('hybrid -> pv drops the BESS busbar, station, and attached aux, and no other node', () => {
       const original = hybridDiagram()
       const result = convertDiagramTechnology(original, 'hybrid', 'pv')
