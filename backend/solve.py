@@ -15,6 +15,7 @@ from powertool import (
     Chain,
     ChainElement,
     ComponentDatabase,
+    Sheet,
     TransformerGroup,
     arrange_plant_manual,
     auto_hv_transformer,
@@ -465,7 +466,7 @@ def report_pdf(diagram: dict, db: ComponentDatabase, plant_name: str) -> bytes:
                             sld_sheets=design_sld_sheets(inputs, arch, fleets))
 
 
-def design_sld_sheets(inputs, arch, fleets: list[dict]) -> list:
+def design_sld_sheets(inputs, arch, fleets: list[dict]) -> list[Sheet]:
     """The SLD sheets for a solved design — the one builder both the
     standalone download and the report's embedded sheets go through.
 
