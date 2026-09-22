@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { conversionLabel, conversionLabelPlural, fleetLabel } from '../fleet'
-import { reportPdf } from '../api'
+import { reportPdf, sldPdf } from '../api'
 import { nodeLabel } from '../canvas/nodeData'
 import { ModalShell } from '../components/Modal'
 import { fmt, pct, powerFactor } from '../format'
@@ -37,6 +37,8 @@ export function ResultsTables({ onClose }: { onClose: () => void }) {
   const designMeta = useStore((s) => s.designMeta)
   const [reporting, setReporting] = useState(false)
   const [reportError, setReportError] = useState<string | null>(null)
+  const [buildingSld, setBuildingSld] = useState(false)
+  const [sldError, setSldError] = useState<string | null>(null)
 
   /** Download the PDF sizing report. The diagram has to be POSTed, so the
    * browser can't just be handed a URL — the response Blob is saved through an
@@ -46,7 +48,7 @@ export function ResultsTables({ onClose }: { onClose: () => void }) {
     setReportError(null)
     try {
       const name = designMeta?.name ?? 'Plant'
-      const blob = await reportPdf(diagram, name)
+      const blob = await reportPdf(diagram, name, designMeta?.projectId)
       const url = URL.createObjectURL(blob)
       const link = document.createElement('a')
       link.href = url
@@ -61,6 +63,26 @@ export function ResultsTables({ onClose }: { onClose: () => void }) {
     }
   }
 
+  /** Download the standalone SLD PDF, same pattern as the report download. */
+  const downloadSld = async () => {
+    setBuildingSld(true)
+    setSldError(null)
+    try {
+      const name = designMeta?.name ?? 'Plant'
+      const blob = await sldPdf(diagram, name, designMeta?.projectId)
+      const url = URL.createObjectURL(blob)
+      const link = document.createElement('a')
+      link.href = url
+      link.download = `${name}-sld.pdf`
+      link.click()
+      setTimeout(() => URL.revokeObjectURL(url), 1000)
+    } catch (err) {
+      setSldError(err instanceof Error ? err.message : String(err))
+    } finally {
+      setBuildingSld(false)
+    }
+  }
+
   if (!results) return null
 
   return (
@@ -70,8 +92,12 @@ export function ResultsTables({ onClose }: { onClose: () => void }) {
         <button type="button" className="btn-primary" onClick={downloadReport} disabled={reporting}>
           {reporting ? 'Building…' : 'Report (PDF)'}
         </button>
+        <button type="button" className="btn-primary" onClick={downloadSld} disabled={buildingSld}>
+          {buildingSld ? 'Building…' : 'SLD (PDF)'}
+        </button>
       </div>
       {reportError && <p className="error">Report: {reportError}</p>}
+      {sldError && <p className="error">SLD: {sldError}</p>}
       <div className="results-tables">
         <PlantSummary results={results} />
         <FleetSummaries results={results} />

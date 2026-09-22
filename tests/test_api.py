@@ -364,3 +364,116 @@ def test_report_on_an_unsolvable_diagram_is_400():
     resp = client.post("/api/report", json={"schema_version": 1, "nodes": [], "edges": []})
     assert resp.status_code == 400
     assert resp.json()["detail"]
+
+
+# --- SLD (single-line diagram) -------------------------------------------------
+
+def test_sld_returns_a_pdf():
+    resp = client.post("/api/sld", json=_example_diagram(), params={"name": "Test Plant"})
+    assert resp.status_code == 200
+    assert resp.headers["content-type"] == "application/pdf"
+    assert resp.content[:5] == b"%PDF-"
+    assert "Test-Plant-sld.pdf" in resp.headers["content-disposition"]
+
+
+def test_sld_filename_slug_strips_unsafe_characters():
+    resp = client.post(
+        "/api/sld",
+        json=_example_diagram(),
+        params={"name": 'ev"il\r\nX-Injected: 1'},
+    )
+    assert resp.status_code == 200
+    disposition = resp.headers["content-disposition"]
+    assert '"' not in disposition.split("filename=")[1].strip('"')
+    assert "\n" not in disposition
+    assert "X-Injected" not in resp.headers
+
+
+def test_sld_on_an_unsolvable_diagram_is_400():
+    """An empty diagram has no POC — a validation issue, not a server error."""
+    resp = client.post("/api/sld", json={"schema_version": 1, "nodes": [], "edges": []})
+    assert resp.status_code == 400
+    assert resp.json()["detail"]
+
+
+def test_sld_project_id_resolves_to_the_real_project_name_in_the_title_block(monkeypatch):
+    """The endpoint looks the project up server-side and hands its name to the
+    renderer — checked at the seam (the ``build_sld_pdf`` call), not by
+    parsing the returned PDF's (compressed) content stream."""
+    import backend.solve as solve_module
+
+    project = client.post("/api/projects", json={"name": "Acme Energy Co"}).json()
+    captured = {}
+
+    def fake_build_sld_pdf(sheets, *, project_name="", design_name="Plant", generated_at=None):
+        captured["project_name"] = project_name
+        captured["design_name"] = design_name
+        return b"%PDF-1.4 fake"
+
+    monkeypatch.setattr(solve_module, "build_sld_pdf", fake_build_sld_pdf)
+
+    resp = client.post(
+        "/api/sld",
+        json=_example_diagram(),
+        params={"name": "Test Plant", "project_id": project["id"]},
+    )
+    assert resp.status_code == 200
+    assert captured["project_name"] == "Acme Energy Co"
+    assert captured["design_name"] == "Test Plant"
+
+
+def test_sld_unknown_project_id_falls_back_to_no_project_name_not_a_4xx(monkeypatch):
+    import backend.solve as solve_module
+
+    captured = {}
+
+    def fake_build_sld_pdf(sheets, *, project_name="", design_name="Plant", generated_at=None):
+        captured["project_name"] = project_name
+        return b"%PDF-1.4 fake"
+
+    monkeypatch.setattr(solve_module, "build_sld_pdf", fake_build_sld_pdf)
+
+    resp = client.post(
+        "/api/sld",
+        json=_example_diagram(),
+        params={"name": "Test Plant", "project_id": 999999},
+    )
+    assert resp.status_code == 200
+    assert captured["project_name"] == ""
+
+
+def test_sld_on_an_mv_interconnected_hybrid_returns_a_pdf():
+    """Ticket 03: every topology the tool solves draws — here an MV
+    interconnection with a PV and a BESS busbar."""
+    import sys
+
+    sys.path.insert(0, "tests")
+    from test_hybrid import _hybrid_with_drawn_bess  # noqa: PLC0415
+
+    resp = client.post("/api/sld", json=_hybrid_with_drawn_bess(p_target_bess_mw=2.0),
+                       params={"name": "Hybrid"})
+    assert resp.status_code == 200
+    assert resp.headers["content-type"] == "application/pdf"
+
+
+def test_report_project_id_puts_the_real_project_name_on_the_embedded_sld(monkeypatch):
+    """Same server-side lookup as /api/sld, so the report's embedded sheets
+    carry the title block the standalone download does."""
+    import backend.solve as solve_module
+
+    project = client.post("/api/projects", json={"name": "Acme Energy Co"}).json()
+    captured = {}
+
+    def fake_build_pdf_report(*args, project_name="", **kwargs):
+        captured["project_name"] = project_name
+        return b"%PDF-1.4 fake"
+
+    monkeypatch.setattr(solve_module, "build_pdf_report", fake_build_pdf_report)
+    resp = client.post("/api/report", json=_example_diagram(),
+                       params={"name": "Test Plant", "project_id": project["id"]})
+    assert resp.status_code == 200
+    assert captured["project_name"] == "Acme Energy Co"
+    resp = client.post("/api/report", json=_example_diagram(),
+                       params={"name": "Test Plant", "project_id": 999999})
+    assert resp.status_code == 200
+    assert captured["project_name"] == ""

@@ -9,9 +9,9 @@ plant-wide in order busbar → circuit → position.
 
 **Blocked by:** 02
 
-**Status:** ready-for-agent
+**Status:** done
 
-- [ ] Layout-model tests: a fleet with several busbars gives one sheet per busbar with plant-wide tags continuing across sheets; a hybrid gives a PV and a BESS sheet both carrying the shared POC and HV transformer; an MV interconnection has no HV transformer element
-- [ ] BESS station labels: PCS "× N model key" and battery MWh
-- [ ] Browser check on a hybrid design: downloaded SLD opened, both sheets screenshot and reported
-- [ ] `tests/golden_baseline.json` byte-identical; full pytest, Vitest, build and lint pass
+- [x] Layout-model tests: a fleet with several busbars gives one sheet per busbar with plant-wide tags continuing across sheets; a hybrid gives a PV and a BESS sheet both carrying the shared POC and HV transformer; an MV interconnection has no HV transformer element
+- [x] BESS station labels: PCS "× N model key" and battery MWh
+- [x] Browser check on a hybrid design: downloaded SLD opened, both sheets screenshot and reported
+- [x] `tests/golden_baseline.json` byte-identical; full pytest, Vitest, build and lint pass

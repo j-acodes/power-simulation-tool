@@ -1,0 +1,937 @@
+"""Single-line diagram (SLD) export — an IEC-style drawing of the *solved*
+plant, generated from the sizing result rather than the canvas.
+
+Two layers, mirroring :mod:`powertool.pdf_report`'s split between content and
+presentation:
+
+  1. A pure **layout model** (:func:`sld_sheets`): every decision — which
+     symbols exist, their tags, their order, which sheet they land on — comes
+     from here. Nothing below this layer decides anything; it only draws.
+  2. A thin **renderer** (:func:`sheet_to_drawing`) turning one :class:`Sheet`
+     into a ReportLab ``Drawing`` (vector graphics, so it stays sharp when
+     scaled — standalone PDF today, embedded in the sizing report later).
+
+``build_sld_pdf`` assembles one A3-landscape page per sheet.
+
+One sheet per busbar (shrunk to fit A3, or split onto continuation sheets
+once text would drop below 5 pt — see ``_busbar_sheets``), for every
+topology the tool solves: several busbars
+per fleet, PV and BESS fleets (a hybrid's shared POC and HV transformer repeat
+on each sheet), and HV or MV interconnection. Each sheet draws the grid-side
+chain, the busbar, and every circuit as a column of stations in chain order,
+labelled with the sized figures — POC voltage/MW, HV transformer model/MVA,
+busbar voltage, each feeder's switchgear rated current, every cable segment's
+size/material/parallel-run/length, each station's transformer model/kVA and
+its inverter count (PV) or PCS count and battery MWh (BESS) — plus a symbol
+legend, the indicative-protection note, and † marks (with sheet-level notes)
+on any value that rests on an engine fallback.
+
+Model names on the drawing are always CATALOGUE MODEL KEYS (``Transformer.name``
+/ the inverter's ``PvInverter.name``), never the display labels
+(``StationResult.model``, ``PvInverter.display_name``) used elsewhere.
+
+``fleets`` is the same per-branch records :func:`powertool.graph.
+branches_summary` builds for the PDF report — the caller (``backend.solve.
+sld_pdf``) calls that function and merges in two extra keys of its own on a
+LOCAL copy (:func:`powertool.graph.sld_fleets`, kept separate from
+``branches_summary`` because that function's own shape is pinned by the
+golden snapshot): ``pv_inverter_model`` (catalogue key),
+``pv_inverter_count`` and ``bess_stations`` — diagram-layer information
+``PlantArchitecture`` itself does not carry (Stage 1 only knows aggregate
+conversion power).
+``fleets[i]["busbars"][j]["feeder_switchgear_pins_a"]`` (present already in
+``branches_summary``'s own shape) supplies a user-pinned feeder rating, read
+the same way :func:`powertool.pdf_report._busbar_switchgear_rows` does, so
+the drawing never disagrees with the report. Without ``fleets`` (or without
+these keys) a station's inverter/PCS/battery lines are simply omitted and every feeder
+reads as sized (never pinned) — the rest of the drawing still builds, which
+keeps every engine-level (diagram-free) test fixture working.
+
+† marking: driven by the same two engine fallbacks
+:func:`powertool.graph.fallback_notices` reports — a station's transformer
+whose RMU switchgear rating is unpublished (``Transformer.
+switchgear_rating_published`` False, defaulting to
+``DEFAULT_SWITCHGEAR_RATED_CURRENT_A``) marks that STATION's own tag (never
+the feeder: the feeder is busbar switchgear, a different piece of equipment,
+sized off the ladder or the engineer's own pin — see ``busbar_switchgear_
+rating`` — never a value this module assumes); one whose cable entry is
+unpublished (``Transformer.cable_entry_published`` False) marks that
+station's own circuit segment. Both list their reason in the sheet's
+``notes``, worded like the graph module's notices but naming catalogue keys
+(this module stays independent of :mod:`powertool.graph`, so it derives the
+same fallback facts straight off ``PlantArchitecture`` rather
+than importing that function).
+"""
+
+from __future__ import annotations
+
+import textwrap
+from dataclasses import dataclass, field, replace
+from datetime import datetime
+from io import BytesIO
+
+from reportlab.graphics import renderPDF
+from reportlab.graphics.shapes import Circle, Drawing, Line, Rect, String
+from reportlab.lib import colors
+from reportlab.lib.pagesizes import A3, landscape
+from reportlab.lib.units import mm
+from reportlab.pdfgen import canvas
+
+from .architecture import PlantArchitecture
+from .sizing import _MATERIAL_SYMBOL
+from .components import (
+    DEFAULT_CABLE_ENTRY_CABLES_PER_PHASE,
+    DEFAULT_CABLE_ENTRY_MAX_CROSS_SECTION_MM2,
+    DEFAULT_SWITCHGEAR_RATED_CURRENT_A,
+    busbar_switchgear_rating,
+)
+
+_INDICATIVE_NOTE = (
+    "Protection devices are indicative; the tool does not size them."
+)
+_AUX_NOTE = (
+    "Auxiliary transformers are sized for the drawing only (smallest standard "
+    "rating at or above the auxiliary apparent power / 0.80, LV 0.4 kV) and are "
+    "not in the loss calculation."
+)
+
+# Standard auxiliary transformer ratings, kVA (the SLD spec's list).
+_AUX_RATINGS_KVA = (50, 100, 160, 250, 315, 400, 500, 630, 800, 1000, 1250, 1600, 2000, 2500)
+_AUX_LOADING = 0.80
+_AUX_OVER_RANGE = f"> {_AUX_RATINGS_KVA[-1]} kVA†"
+
+
+def aux_transformer_rating(p_kw: float | None, q_kvar: float | None) -> str:
+    """The drawn auxiliary transformer's rating label: the smallest standard
+    rating at or above S_aux / 0.80. Drawing only — never enters the power
+    balance. An unpublished load (None) or one above the range gets a † label."""
+    if p_kw is None or q_kvar is None:
+        return "kVA TBD†"
+    needed = (p_kw ** 2 + q_kvar ** 2) ** 0.5 / _AUX_LOADING
+    # ponytail: 1e-9 absorbs float noise so an exact boundary picks that rating
+    rating = next((r for r in _AUX_RATINGS_KVA if needed <= r + 1e-9), None)
+    return f"{rating} kVA" if rating is not None else _AUX_OVER_RANGE
+
+# Legend caption per symbol kind — only the kinds a given sheet actually uses
+# are listed (:func:`sld_sheets` builds each sheet's own subset), one entry
+# PER SYMBOL: hv_breaker/mv_breaker/feeder_breaker draw the identical IEC
+# breaker square regardless of which role they sit in, so they share one
+# "Circuit breaker" caption rather than three near-duplicate entries (the
+# legend is built by dedup-on-caption — see ``_compose``).
+_LEGEND_LABEL = {
+    "poc": "Point of connection",
+    "metering": "Metering",
+    "disconnector": "Disconnector",
+    "hv_breaker": "Circuit breaker",
+    "mv_breaker": "Circuit breaker",
+    "feeder_breaker": "Circuit breaker",
+    "aux_breaker": "Circuit breaker",
+    "hv_transformer": "HV transformer",
+    "busbar": "Busbar",
+    "station": "Transformer station",
+    "bess_station": "BESS station (transformer, PCS, battery)",
+    "cable_label": "Cable (drawn as the connecting line)",
+    "aux_transformer": "Auxiliary transformer (drawing only)",
+    "load": "Auxiliary load",
+}
+
+# ---------------------------------------------------------------------------
+# Layout model
+# ---------------------------------------------------------------------------
+
+
+@dataclass
+class SldElement:
+    """One symbol on a sheet.
+
+    ``x``/``y`` are layout-space coordinates: points at full size, times the
+    sheet's ``scale`` on the page. ``labels``
+    holds every line of text tagged onto this element: its tag (TS/C/BB) when
+    it has one, plus the sized figures (voltage, MVA/kVA, rated current,
+    cable size/length, inverter count/model — see the module docstring).
+    """
+
+    id: str
+    kind: str
+    x: float
+    y: float
+    tag: str | None = None
+    labels: list[str] = field(default_factory=list)
+
+
+@dataclass
+class SldConnection:
+    """One drawn line between two elements, by id."""
+
+    from_id: str
+    to_id: str
+
+
+@dataclass
+class Sheet:
+    """One SLD sheet: a whole busbar, or — when the busbar only fits by
+    shrinking text below :data:`MIN_TEXT_PT` — one run of its circuits.
+
+    ``number`` is the sheet's 1-based position in the plant's sheet set.
+    ``continued_from``/``continued_on`` name the neighbouring sheets of the
+    same busbar (None on an unsplit busbar). ``scale`` is layout units to
+    points: 1 is full size, below 1 shrinks symbols and text together."""
+
+    busbar_tag: str
+    elements: list[SldElement] = field(default_factory=list)
+    connections: list[SldConnection] = field(default_factory=list)
+    notes: list[str] = field(default_factory=list)
+    legend: list[tuple[str, str]] = field(default_factory=list)
+    number: int = 1
+    continued_from: int | None = None
+    continued_on: int | None = None
+    scale: float = 1.0
+
+    @property
+    def text_pt(self) -> float:
+        """The smallest diagram text on the sheet, in points."""
+        return _LABEL_PT * self.scale
+
+
+@dataclass
+class _Column:
+    """One circuit or auxiliary feeder hanging off a busbar — the unit a
+    continuation split never divides."""
+
+    elements: list[SldElement]
+    connections: list[SldConnection]
+    aux: bool = False
+    switchgear_models: set[str] = field(default_factory=set)  # † RMU rating fallback
+    cable_entry_models: set[str] = field(default_factory=set)  # † cable entry fallback
+    notes: list[str] = field(default_factory=list)
+
+
+# The grid-side chain, POC to busbar, in drawing order: with an HV
+# transformer, and for an MV interconnection (no HV transformer).
+_HV_CHAIN_KINDS = [
+    "poc", "metering", "disconnector", "hv_breaker", "hv_transformer",
+    "export_cable", "mv_breaker",
+]
+_MV_CHAIN_KINDS = ["poc", "metering", "mv_breaker", "export_cable"]
+
+# Kept tight (vs. ticket 01's 70/55) so the fixed A3 sheet spends more of its
+# vertical budget on station rows, where ticket 02's figure labels now live —
+# the grid-side chain is 7 fixed steps regardless of plant size, while a
+# circuit's station count is not. With _STATION_DY, sized so the chain plus a
+# circuit of eight stations (a 630 A feeder of 2.5 MVA stations at 20 kV)
+# still fits A3 at the MIN_TEXT_PT floor.
+_CHAIN_STEP = 34.0
+# Wide enough that a station's transformer+inverter branch (see _BRANCH_DX,
+# reaching ~50 units to the right at scale 1) and its figure labels never
+# reach the next circuit's trunk line.
+_CIRCUIT_DX = 170.0
+_FEEDER_GAP = 38.0
+_STATION_DY = 55.0
+# Room each column's symbols and labels take either side of its own x: cable
+# labels to the left, the station branch and its figures (up to a long
+# "× N inverter-model" line) to the right.
+_PAD_LEFT = 80.0
+_PAD_RIGHT = 115.0
+
+# Diagram text sizes at scale 1, in points; they shrink with the sheet scale.
+# _LABEL_PT is the smallest, so it is the one held at the MIN_TEXT_PT floor.
+_LABEL_PT = 7.0
+_TAG_PT = 9.0
+_LABEL_PITCH = 8.0
+MIN_TEXT_PT = 5.0
+
+
+def _cable_lines(segment, *, assumed: bool) -> list[str]:
+    """Size, material and parallel-run count (already combined in
+    ``cable_label``) plus length — every cable segment's label (stories 20,
+    26; export spans and circuit segments alike)."""
+    suffix = "†" if assumed else ""
+    sel = segment.selection
+    if sel is None or sel.cable.cross_section_mm2 is None:
+        text = segment.cable_label  # unsized ("catalogue pending") keeps its own wording
+    else:
+        material = _MATERIAL_SYMBOL.get((sel.cable.material or "").lower(), sel.cable.material or "?")
+        text = f"{material} 3×{sel.cable.cross_section_mm2:g} mm²"
+        if sel.n_parallel > 1:
+            text = f"{sel.n_parallel} × {text}"
+    return [f"{text}{suffix}", f"{segment.length_km:g} km"]
+
+
+def sld_sheets(arch: PlantArchitecture, fleets: list[dict] | None = None) -> list[Sheet]:
+    """Build one :class:`Sheet` per busbar from a solved plant architecture,
+    in plant order: fleet (branch) by fleet, each fleet's busbars in drawn
+    order. BB, C and TS tags are numbered plant-wide in that same order
+    (busbar → circuit → position), so they continue across sheets.
+
+    Every sheet carries the whole grid-side chain up to the POC, so a hybrid's
+    shared POC and HV transformer repeat on each fleet's sheets.
+
+    ``fleets`` — one dict per branch, the shape :func:`powertool.graph.
+    branches_summary` returns (optionally with :func:`powertool.graph.
+    sld_fleets`' keys merged in — see the module docstring) — supplies
+    the PV inverter model/count, each BESS station's PCS count and MWh
+    (``bess_stations``) and any pinned feeder rating
+    (``fleets[i]["busbars"][j]["feeder_switchgear_pins_a"]``). Omit it, or
+    omit those keys, and those lines are left off and every feeder reads as
+    sized.
+    """
+    sheets: list[Sheet] = []
+    counters = {"BB": 0, "C": 0, "TS": 0, "AUX": 0}
+    for b_i, branch in enumerate(arch.branches):
+        fleet = fleets[b_i] if fleets and b_i < len(fleets) else {}
+        for s_i, section in enumerate(branch.sections):
+            sheets += _busbar_sheets(arch, branch, section, fleet, s_i, counters)
+    for n, sheet in enumerate(sheets, start=1):
+        sheet.number = n
+    # A busbar's sheets are consecutive and only they share its BB tag.
+    for prev, nxt in zip(sheets, sheets[1:]):
+        if prev.busbar_tag == nxt.busbar_tag:
+            prev.continued_on, nxt.continued_from = nxt.number, prev.number
+    return sheets
+
+
+def _busbar_sheets(arch: PlantArchitecture, branch, section, fleet: dict, s_i: int,
+                   counters: dict[str, int]) -> list[Sheet]:
+    """One busbar's sheet(s); ``counters`` carries the plant-wide tag
+    numbering from one busbar to the next.
+
+    Every circuit and auxiliary feeder is built once as a :class:`_Column`,
+    so its tags never depend on which sheet it lands on. The whole busbar
+    goes on one sheet, shrunk to fit A3, unless that would push text below
+    :data:`MIN_TEXT_PT`; then columns fill sheets in order until the next
+    one would breach the floor. The grid-side chain sits on the first sheet
+    only; each later sheet repeats the busbar. A single column that cannot
+    reach the floor on its own still gets its own sheet, below the floor:
+    circuits are never split."""
+    by_index = {c.index: c for c in branch.circuits}
+    circuits = [by_index[i] for i in section.circuit_indices]
+    export = arch.export
+    hv_tx = export.hv_transformer if export is not None else None
+    if hv_tx is not None:
+        chain_kinds = _HV_CHAIN_KINDS
+        poc_kv = export.v_hv_kv
+        export_segment = export.hv_cable
+    else:
+        # MV interconnection: this busbar's own MV export run when it has one
+        # (several busbars), else the plant's single shared export run.
+        chain_kinds = _MV_CHAIN_KINDS
+        poc_kv = section.v_mv_kv
+        export_segment = section.mv_export or (export.hv_cable if export is not None else None)
+
+    inverter_model = fleet.get("pv_inverter_model")
+    inverter_count = fleet.get("pv_inverter_count")
+    bess_stations = fleet.get("bess_stations") or []
+    # This busbar's own feeder pins, in the busbar's own circuit order — the
+    # same records powertool.pdf_report._busbar_switchgear_rows reads, so a
+    # user-pinned feeder rating draws exactly what the report shows (never
+    # re-derived from the ladder alone).
+    busbars = fleet.get("busbars") or []
+    feeder_pins = busbars[s_i].get("feeder_switchgear_pins_a") if s_i < len(busbars) else None
+    aux_by_busbar = fleet.get("aux_loads") or []
+    aux_loads = aux_by_busbar[s_i] if s_i < len(aux_by_busbar) else []
+
+    # † fallback facts per station transformer, keyed by catalogue model.
+    def _defaulted(plans) -> tuple[set[str], set[str]]:
+        return ({p.transformer.name for p in plans if not p.transformer.switchgear_rating_published},
+                {p.transformer.name for p in plans if not p.transformer.cable_entry_published})
+
+    chain: list[SldElement] = []
+    chain_connections: list[SldConnection] = []
+
+    # --- grid-side chain: POC at the top, down to the busbar -------------
+    y = 0.0
+    prev_id: str | None = None
+    for kind in chain_kinds:
+        eid = f"chain_{kind}"
+        labels: list[str] = []
+        if kind == "poc":
+            mw = arch.p_poc_delivered_kw / 1000.0
+            labels = [f"{poc_kv:g} kV", f"{mw:.2f} MW"]
+        elif kind == "hv_transformer":
+            mva = hv_tx.s_rated_kva_at_40c / 1000.0
+            labels = [hv_tx.name, f"{mva:.1f} MVA"]
+        elif kind == "export_cable" and export_segment is not None:
+            labels = _cable_lines(export_segment, assumed=False)
+        chain.append(SldElement(id=eid, kind=kind, x=0.0, y=y, labels=labels))
+        if prev_id is not None:
+            chain_connections.append(SldConnection(prev_id, eid))
+        prev_id = eid
+        y -= _CHAIN_STEP
+
+    counters["BB"] += 1
+    busbar_tag = f"BB{counters['BB']}"
+    busbar_id = "busbar"
+    busbar_y = y
+    busbar = SldElement(
+        id=busbar_id, kind="busbar", x=0.0, y=busbar_y,
+        tag=busbar_tag, labels=[busbar_tag, f"{section.v_mv_kv:g} kV"],
+    )
+    chain_connections.append(SldConnection(prev_id, busbar_id))
+
+    # --- circuits: vertical columns hanging from the busbar ---------------
+    # Column x is the busbar-wide position; each sheet recentres its own.
+    columns: list[_Column] = []
+    for i, circuit in enumerate(circuits):
+        counters["C"] += 1
+        c_tag = f"C{counters['C']}"
+        x = i * _CIRCUIT_DX
+        plans = branch.layout.circuit_plans[circuit.index - 1]
+        defaulted_switchgear, defaulted_cable_entry = _defaulted(plans)
+        column = _Column([], [], switchgear_models=defaulted_switchgear,
+                         cable_entry_models=defaulted_cable_entry)
+        columns.append(column)
+        elements, connections = column.elements, column.connections
+        feeder_id = f"feeder_{circuit.index}"
+        feeder_y = busbar_y - _FEEDER_GAP
+
+        # The feeder is BUSBAR switchgear, sized off the ladder (or the
+        # engineer's own pin, checked rather than resized) — never a value
+        # this module assumes, so it never carries a † (see fix note below
+        # for where the RMU switchgear fallback actually lands).
+        pin = feeder_pins[i] if feeder_pins and i < len(feeder_pins) else None
+        rating_a = busbar_switchgear_rating(circuit.i_trunk_a, pin)
+        if rating_a is None:
+            rating_line = f"not sized — {circuit.i_trunk_a:,.0f} A"
+        else:
+            rating_line = f"{rating_a:,.0f} A"
+        elements.append(SldElement(
+            id=feeder_id, kind="feeder_breaker", x=x, y=feeder_y,
+            tag=c_tag, labels=[c_tag, rating_line],
+        ))
+        connections.append(SldConnection(busbar_id, feeder_id))
+
+        # Segments share their circuit's own order with its stations (index 1
+        # = trunk, nearest the busbar) — see CircuitResult's docstring.
+        segments_by_station_index = {
+            k: seg for k, seg in enumerate(circuit.segments, start=1)
+        }
+        bess_row = (bess_stations[circuit.index - 1]
+                    if circuit.index - 1 < len(bess_stations) else [])
+
+        prev_station_id = feeder_id
+        prev_y = feeder_y
+        # Position 1 is nearest the busbar (StationResult.index), the chain
+        # order this ticket draws top (busbar) to bottom (far station).
+        for station, plan in zip(circuit.stations, plans):
+            counters["TS"] += 1
+            ts_tag = f"TS{counters['TS']}"
+            st_id = f"station_{circuit.index}_{station.index}"
+            st_y = feeder_y - station.index * _STATION_DY
+
+            # The RMU switchgear fallback is the STATION's own assumed rated
+            # current (never the feeder — that's busbar switchgear, sized off
+            # the ladder/pin above) — so the † lands on the station itself,
+            # on its displayed tag line (the canonical ``.tag`` stays bare,
+            # for cross-referencing — "TS3 on C2" — per the SLD spec).
+            station_assumed = plan.transformer.name in defaulted_switchgear
+            tag_line = f"{ts_tag}†" if station_assumed else ts_tag
+            labels = [tag_line, plan.transformer.name, f"{station.s_rated_kva:,.0f} kVA"]
+            if station.kind == "bess":
+                st_kind = "bess_station"
+                bess = bess_row[station.index - 1] if station.index - 1 < len(bess_row) else None
+                if bess is not None:
+                    labels += [f"× {bess['pcs_count']} {bess['pcs_model']}",
+                               f"{bess['battery_mwh']:.2f} MWh"]
+            else:
+                st_kind = "station"
+                if inverter_model:
+                    labels.append(f"× {inverter_count} {inverter_model}")
+            elements.append(SldElement(
+                id=st_id, kind=st_kind, x=x, y=st_y,
+                tag=ts_tag, labels=labels,
+            ))
+            connections.append(SldConnection(prev_station_id, st_id))
+
+            segment = segments_by_station_index.get(station.index)
+            if segment is not None:
+                seg_assumed = plan.transformer.name in defaulted_cable_entry
+                seg_id = f"segment_{circuit.index}_{station.index}"
+                # Offset to the LEFT of the trunk line (the station's own
+                # transformer/inverter branch extends right, see
+                # _station_symbols), on the span this segment actually covers.
+                elements.append(SldElement(
+                    id=seg_id, kind="cable_label", x=x - 10.0, y=(st_y + prev_y) / 2.0,
+                    labels=_cable_lines(segment, assumed=seg_assumed),
+                ))
+
+            prev_station_id = st_id
+            prev_y = st_y
+
+    # --- auxiliary feeders: breaker, AUX transformer, load (drawing only) --
+    for a_i, load in enumerate(aux_loads):
+        counters["AUX"] += 1
+        aux_tag = f"AUX{counters['AUX']}"
+        # At the busbar's end, right of the circuits — never centred with
+        # them (see _place), which would put an AUX column under the incomer.
+        x = (len(circuits) + a_i) * _CIRCUIT_DX
+        column = _Column([], [], aux=True)
+        columns.append(column)
+        feeder_y = busbar_y - _FEEDER_GAP
+        p_kw, q_kvar = load.get("p_kw"), load.get("q_kvar")
+        rating = aux_transformer_rating(p_kw, q_kvar)
+        breaker_id, tx_id, load_id = f"aux_breaker_{a_i}", f"aux_tx_{a_i}", f"aux_load_{a_i}"
+        column.elements += [
+            SldElement(id=breaker_id, kind="aux_breaker", x=x, y=feeder_y),
+            SldElement(id=tx_id, kind="aux_transformer", x=x, y=feeder_y - _STATION_DY,
+                       tag=aux_tag, labels=[aux_tag, rating, f"{section.v_mv_kv:g}/0.4 kV"]),
+            SldElement(id=load_id, kind="load", x=x, y=feeder_y - 2 * _STATION_DY,
+                       labels=([load["label"]] if load.get("label") else [])
+                       + ["kW TBD†" if p_kw is None else f"{p_kw:,.0f} kW"]),
+        ]
+        column.connections += [SldConnection(busbar_id, breaker_id),
+                               SldConnection(breaker_id, tx_id), SldConnection(tx_id, load_id)]
+        if p_kw is None:
+            names = ", ".join(load.get("unpublished") or [])
+            column.notes.append(f"No auxiliary consumption is published for {names} — "
+                         f"{aux_tag} is drawn as kVA TBD†.")
+        elif rating == _AUX_OVER_RANGE:
+            column.notes.append(f"{aux_tag}: the auxiliary load needs more than the largest "
+                         f"standard auxiliary transformer ({_AUX_RATINGS_KVA[-1]} kVA) — "
+                         f"marked {rating}.")
+
+    # --- pack columns onto sheets --------------------------------------------
+    floor = MIN_TEXT_PT / _LABEL_PT
+    runs: list[list[_Column]] = [[]]
+    for column in columns:
+        trial = runs[-1] + [column]
+        head = chain if len(runs) == 1 else []
+        if runs[-1] and _fit_scale(_place(head, busbar, trial)) < floor:
+            runs.append([column])
+        else:
+            runs[-1] = trial
+    return [_compose(busbar, chain if r_i == 0 else [],
+                     chain_connections if r_i == 0 else [], run)
+            for r_i, run in enumerate(runs)]
+
+
+def _place(chain: list[SldElement], busbar: SldElement, run: list[_Column]) -> list[SldElement]:
+    """One sheet's elements: the chain (first sheet only), a copy of the
+    busbar, and the run's columns shifted so their circuits centre under the
+    chain at x = 0 — auxiliary feeders stay off to the right."""
+    circuit_cols = [c for c in run if not c.aux] or run
+    xs = [c.elements[0].x for c in circuit_cols]
+    shift = -(min(xs) + max(xs)) / 2.0 if xs else 0.0
+    return chain + [replace(busbar)] + [replace(e, x=e.x + shift)
+                                        for c in run for e in c.elements]
+
+
+def _fit_scale(elements: list[SldElement]) -> float:
+    """The largest scale, at most full size, at which ``elements`` fit the
+    A3 drawing area — each column's padding and the lowest row's footprint
+    included."""
+    xs = [e.x for e in elements]
+    ys = [e.y for e in elements]
+    width = max(xs) - min(xs) + _PAD_LEFT + _PAD_RIGHT
+    height = max(ys) - min(ys) + _STATION_DY
+    return min(1.0, _AREA_W / width, _AREA_H / height)
+
+
+def _compose(busbar: SldElement, chain: list[SldElement],
+             chain_connections: list[SldConnection], run: list[_Column]) -> Sheet:
+    """A :class:`Sheet` for one run of columns: its elements, connections,
+    the legend of the symbols it draws and the notes for what it shows (the
+    spec's "on the sheet it appears on")."""
+    elements = _place(chain, busbar, run)
+
+    # Dedup on the CAPTION, not the kind: several kinds draw the same symbol
+    # (every breaker role) and must collapse to one legend entry. Cables have
+    # no discrete symbol.
+    legend: list[tuple[str, str]] = []
+    for e in elements:
+        caption = _LEGEND_LABEL.get(e.kind, e.kind)
+        if e.kind not in ("export_cable", "cable_label") and all(c != caption for _, c in legend):
+            legend.append((e.kind, caption))
+
+    notes: list[str] = [_INDICATIVE_NOTE]
+    if any(c.aux for c in run):
+        notes.append(_AUX_NOTE)
+    defaulted_switchgear = set().union(*(c.switchgear_models for c in run))
+    defaulted_cable_entry = set().union(*(c.cable_entry_models for c in run))
+    if defaulted_switchgear:
+        names = ", ".join(sorted(defaulted_switchgear))
+        notes.append(
+            f"No switchgear rated current is published for {names} — the "
+            f"stations marked † use the standard "
+            f"{DEFAULT_SWITCHGEAR_RATED_CURRENT_A:,.0f} A ring main unit "
+            f"rating."
+        )
+    if defaulted_cable_entry:
+        names = ", ".join(sorted(defaulted_cable_entry))
+        notes.append(
+            f"No cable entry is published for {names} — the cable segment(s) "
+            f"marked † use the standard {DEFAULT_CABLE_ENTRY_CABLES_PER_PHASE} x "
+            f"{DEFAULT_CABLE_ENTRY_MAX_CROSS_SECTION_MM2:.0f} mm^2 cable entry "
+            f"for those stations' circuit cables."
+        )
+    notes += [n for c in run for n in c.notes]
+
+    return Sheet(
+        busbar_tag=busbar.tag, elements=elements,
+        connections=chain_connections + [cn for c in run for cn in c.connections],
+        notes=notes, legend=legend, scale=_fit_scale(elements),
+    )
+
+
+# ---------------------------------------------------------------------------
+# Renderer: Sheet -> ReportLab Drawing
+# ---------------------------------------------------------------------------
+
+_PAGE_SIZE = landscape(A3)
+_MARGIN = 10 * mm
+_TITLE_H = 28 * mm  # fits five lines when the project name is present
+_STAMP_H = 9 * mm
+_INK = colors.HexColor("#1a2333")
+_STAMP_RED = colors.HexColor("#c1121f")
+_MUTED = colors.HexColor("#6b7688")
+_FOOTER_H = 34 * mm  # legend row(s) + wrapped notes, reserved below the diagram
+
+# The diagram's drawing area on the page — what the layout model's scale fits.
+_CONTENT_LEFT = _MARGIN + 6 * mm
+_CONTENT_RIGHT = _PAGE_SIZE[0] - _MARGIN - 6 * mm
+_CONTENT_TOP = _PAGE_SIZE[1] - _MARGIN - _TITLE_H - 6 * mm
+_CONTENT_BOTTOM = _MARGIN + 6 * mm + _FOOTER_H
+_AREA_W = _CONTENT_RIGHT - _CONTENT_LEFT
+_AREA_H = _CONTENT_TOP - _CONTENT_BOTTOM
+
+_KIND_CAPTION = {
+    "poc": "POC",
+    "metering": "Metering",
+    "disconnector": "Disconnector",
+    "hv_breaker": "HV breaker",
+    "hv_transformer": "HV transformer",
+    "mv_breaker": "MV incomer breaker",
+}
+
+
+def _symbol(kind: str, px: float, py: float, scale: float) -> list:
+    """The small IEC-60617-style shapes for one grid-side/busbar-feeder
+    element, centred on (px, py). Deliberately simple line-art, per the
+    spec's "drawn simply" — this is a preliminary drawing, not a CAD export.
+    """
+    r = 6.0 * scale
+    shapes: list = []
+    if kind == "poc":
+        shapes.append(Circle(px, py, r, strokeColor=_INK, fillColor=None, strokeWidth=1.2))
+        for dx in (-r * 0.6, 0, r * 0.6):
+            shapes.append(Line(px + dx, py - r, px + dx, py - r * 2.0,
+                               strokeColor=_INK, strokeWidth=1.0))
+    elif kind == "metering":
+        shapes.append(Circle(px, py, r, strokeColor=_INK, fillColor=None, strokeWidth=1.2))
+        shapes.append(String(px, py - 3 * scale, "M", fontName="Helvetica", fontSize=_LABEL_PT * scale,
+                             fillColor=_INK, textAnchor="middle"))
+    elif kind == "disconnector":
+        shapes.append(Line(px - r, py - r, px + r, py + r,
+                           strokeColor=_INK, strokeWidth=1.4))
+        shapes.append(Circle(px - r, py - r, 1.2, strokeColor=_INK, fillColor=_INK))
+    elif kind in ("hv_breaker", "mv_breaker", "feeder_breaker", "aux_breaker"):
+        s = r * 0.9
+        shapes.append(Rect(px - s / 2, py - s / 2, s, s,
+                           strokeColor=_INK, fillColor=colors.white, strokeWidth=1.3))
+    elif kind == "load":
+        # IEC load: an arrowhead pointing away from the supply.
+        shapes.append(Line(px - r * 0.7, py + r * 0.5, px, py - r * 0.5,
+                           strokeColor=_INK, strokeWidth=1.2))
+        shapes.append(Line(px + r * 0.7, py + r * 0.5, px, py - r * 0.5,
+                           strokeColor=_INK, strokeWidth=1.2))
+    elif kind in ("hv_transformer", "aux_transformer"):
+        shapes.append(Circle(px, py - r * 0.5, r, strokeColor=_INK, fillColor=None,
+                             strokeWidth=1.2))
+        shapes.append(Circle(px, py + r * 0.5, r, strokeColor=_INK, fillColor=None,
+                             strokeWidth=1.2))
+    elif kind == "busbar":
+        pass  # drawn as a thick line by the caller, not a point symbol
+    return shapes
+
+
+# Data-space reach of a station's transformer+inverter branch off the MV
+# trunk — kept well inside half of _CIRCUIT_DX so a circuit's branches never
+# reach its neighbour's trunk line (see the layout constants above).
+_BRANCH_DX = 26.0
+
+
+def _draw_label_block(drawing: Drawing, x: float, y: float, lines: list[str], *,
+                      scale: float, anchor: str = "start", bold_first: bool = False,
+                      size: float = _LABEL_PT, color=None) -> None:
+    """Stack ``lines`` downward from ``(x, y)``, one ``String`` per line;
+    ``size`` is the full-size point size, shrunk with ``scale``."""
+    ty = y
+    for i, text in enumerate(lines):
+        drawing.add(String(x, ty, text, textAnchor=anchor,
+                           fontName="Helvetica-Bold" if (bold_first and i == 0) else "Helvetica",
+                           fontSize=size * scale, fillColor=color or _INK))
+        ty -= _LABEL_PITCH * scale
+
+
+def _station_symbols(px: float, py: float, scale: float, labels: list[str],
+                     battery: bool = False) -> list:
+    """One station's symbols, plus its figure labels (model, kVA, inverter —
+    everything in ``labels`` after the tag, which the caller draws
+    separately). The load-break switch sits ON the vertical MV trunk, in
+    line with the cable running station to station — a circuit is a daisy
+    chain THROUGH each station's own MV switchgear. The transformer (two
+    overlapping circles) and the single inverter symbol branch OFF that
+    point on a short tee to the side, ending at the inverter: a station taps
+    the chain, it is never wired in series with the next station's transformer
+    or inverter (see the spec's circuit convention). The figure labels stack
+    below the inverter, on the same right-hand side — clear of the trunk
+    line and of the previous/next segment's cable label, which sit to the
+    LEFT of the trunk (see ``sld_sheets``)."""
+    r = 6.0 * scale
+    branch = _BRANCH_DX * scale
+    shapes: list = []
+
+    # Load-break switch, in line with the vertical MV trunk — the trunk
+    # itself is drawn separately as the station-to-station connection line.
+    shapes.append(Line(px - r * 0.7, py - r * 0.7, px + r * 0.7, py + r * 0.7,
+                       strokeColor=_INK, strokeWidth=1.3))
+    shapes.append(Circle(px - r * 0.7, py - r * 0.7, 1.1, strokeColor=_INK,
+                         fillColor=_INK))
+
+    # Tee off the trunk to this station's transformer + inverter branch.
+    bx = px + branch
+    shapes.append(Line(px, py, bx, py, strokeColor=_INK, strokeWidth=1.0))
+
+    tx_center = bx + r * 0.9
+    shapes.append(Circle(tx_center - r * 0.5, py, r, strokeColor=_INK, fillColor=None,
+                         strokeWidth=1.1))
+    shapes.append(Circle(tx_center + r * 0.5, py, r, strokeColor=_INK, fillColor=None,
+                         strokeWidth=1.1))
+
+    inv_x = tx_center + r * 2.6
+    s = r * 1.3
+    shapes.append(Line(tx_center + r * 1.5, py, inv_x - s / 2, py,
+                       strokeColor=_INK, strokeWidth=1.0))
+    shapes.append(Rect(inv_x - s / 2, py - s / 2, s, s, strokeColor=_INK,
+                       fillColor=colors.white, strokeWidth=1.1))
+    shapes.append(Line(inv_x - s / 2, py - s / 2, inv_x + s / 2, py + s / 2,
+                       strokeColor=_INK, strokeWidth=0.8))
+    shapes.append(String(inv_x, py - s * 1.3, "~/=", fontName="Helvetica",
+                         fontSize=_LABEL_PT * scale, fillColor=_MUTED, textAnchor="middle"))
+    if battery:
+        # A BESS station's DC side: the IEC battery cell (long and short
+        # plates) beyond the PCS.
+        bat_x = inv_x + s * 1.6
+        shapes.append(Line(inv_x + s / 2, py, bat_x, py, strokeColor=_INK, strokeWidth=1.0))
+        shapes.append(Line(bat_x, py - r, bat_x, py + r, strokeColor=_INK, strokeWidth=1.3))
+        shapes.append(Line(bat_x + r * 0.5, py - r * 0.5, bat_x + r * 0.5, py + r * 0.5,
+                           strokeColor=_INK, strokeWidth=2.2))
+    ty = py - s * 1.3 - 7.5 * scale
+    for text in labels:
+        shapes.append(String(tx_center - r * 1.4, ty, text, textAnchor="start",
+                             fontName="Helvetica", fontSize=_LABEL_PT * scale, fillColor=_INK))
+        ty -= _LABEL_PITCH * scale
+    return shapes
+
+
+def _title_block(drawing: Drawing, width: float, height: float, *, project_name: str,
+                 design_name: str, sheet: Sheet, generated_at: datetime) -> None:
+    x0 = width - _MARGIN - 78 * mm
+    y0 = height - _MARGIN - _TITLE_H
+    w, h = 78 * mm, _TITLE_H
+    drawing.add(Rect(x0, y0, w, h, strokeColor=_INK, fillColor=colors.white,
+                     strokeWidth=1.0))
+    lines = [
+        (design_name or "Plant", 9.5, True),
+        (project_name, 8.0, False) if project_name else None,
+        (f"Sheet {sheet.number} — {sheet.busbar_tag} single-line diagram", 7.5, False),
+        (generated_at.strftime("%Y-%m-%d"), 7.5, False),
+        ("Generated by Power Simulation Tool", 6.8, False),
+    ]
+    ty = y0 + h - 7 * mm
+    for line in lines:
+        if line is None:
+            continue
+        text, size, bold = line
+        drawing.add(String(x0 + 3 * mm, ty, text,
+                           fontName="Helvetica-Bold" if bold else "Helvetica",
+                           fontSize=size, fillColor=_INK))
+        ty -= (size + 4)
+
+
+def _stamp(drawing: Drawing, width: float, height: float) -> None:
+    x0 = _MARGIN
+    y0 = height - _MARGIN - _STAMP_H
+    w = width - 2 * _MARGIN - 78 * mm - 4 * mm
+    drawing.add(Rect(x0, y0, w, _STAMP_H, strokeColor=_STAMP_RED, fillColor=colors.white,
+                     strokeWidth=1.4))
+    drawing.add(String(x0 + w / 2, y0 + _STAMP_H / 2 - 3, "PRELIMINARY — NOT FOR CONSTRUCTION",
+                       fontName="Helvetica-Bold", fontSize=11, fillColor=_STAMP_RED,
+                       textAnchor="middle"))
+
+
+_LEGEND_COL_W = 170.0
+_LEGEND_ROW_H = 13.0
+
+
+def _footer(drawing: Drawing, sheet: Sheet, x0: float, x1: float, y_top: float) -> None:
+    """The legend and notes strip at the bottom of the sheet — every symbol
+    kind the sheet actually used, plus every note (the indicative-protection
+    note first, then any † fallback reasons), wrapped to the page width."""
+    lx, ty = x0, y_top
+    for kind, caption in sheet.legend:
+        if lx + _LEGEND_COL_W > x1:
+            lx = x0
+            ty -= _LEGEND_ROW_H
+        cx, cy = lx + 7, ty - 4
+        if kind in ("station", "bess_station"):
+            for shape in _station_symbols(cx - 4, cy, 0.5, [], battery=kind == "bess_station"):
+                drawing.add(shape)
+            text_x = cx + (42 if kind == "bess_station" else 34)
+        elif kind == "busbar":
+            drawing.add(Line(cx - 5, cy, cx + 5, cy, strokeColor=_INK, strokeWidth=2.2))
+            text_x = cx + 10
+        elif kind == "cable_label":
+            drawing.add(Line(cx - 5, cy, cx + 5, cy, strokeColor=_INK, strokeWidth=1.0))
+            text_x = cx + 10
+        else:
+            for shape in _symbol(kind, cx, cy, 0.5):
+                drawing.add(shape)
+            text_x = cx + 10
+        drawing.add(String(text_x, cy - 2, caption, fontName="Helvetica",
+                           fontSize=6.0, fillColor=_INK))
+        lx += _LEGEND_COL_W
+    ty -= _LEGEND_ROW_H + 3
+
+    for note in sheet.notes:
+        for line in textwrap.wrap(note, width=175) or [note]:
+            drawing.add(String(x0, ty, line, fontName="Helvetica",
+                               fontSize=6.2, fillColor=_MUTED))
+            ty -= 7.5
+
+
+def sheet_to_drawing(
+    sheet: Sheet,
+    *,
+    project_name: str = "",
+    design_name: str = "Plant",
+    generated_at: datetime | None = None,
+) -> Drawing:
+    """Render one :class:`Sheet` as a full A3-landscape-page ``Drawing`` —
+    frame, title block, stamp and every element/connection, fitted to the
+    page. Vector throughout, so it stays sharp scaled down (report
+    embedding, ticket 06) as well as printed full size."""
+    width, height = _PAGE_SIZE
+    when = generated_at or datetime.now()
+    drawing = Drawing(width, height)
+    drawing.add(Rect(_MARGIN, _MARGIN, width - 2 * _MARGIN, height - 2 * _MARGIN,
+                     strokeColor=_INK, fillColor=None, strokeWidth=1.2))
+    _title_block(drawing, width, height, project_name=project_name,
+                design_name=design_name, sheet=sheet, generated_at=when)
+    _stamp(drawing, width, height)
+
+    _footer(drawing, sheet, _CONTENT_LEFT, _CONTENT_RIGHT, _CONTENT_BOTTOM - 8)
+
+    if not sheet.elements:
+        return drawing
+
+    # The layout model chose the scale (see _fit_scale); centre the padded
+    # bounding box horizontally and hang it from the top of the area.
+    scale = sheet.scale
+    xs = [e.x for e in sheet.elements]
+    left_x = min(xs) - _PAD_LEFT
+    x0 = _CONTENT_LEFT + (_AREA_W - (max(xs) + _PAD_RIGHT - left_x) * scale) / 2.0
+    top_y = max(e.y for e in sheet.elements)
+
+    def to_page(x: float, y: float) -> tuple[float, float]:
+        return x0 + (x - left_x) * scale, _CONTENT_TOP - (top_y - y) * scale
+
+    by_id = {e.id: e for e in sheet.elements}
+
+    # Busbar: one thick horizontal line spanning the feeders, drawn before
+    # the other symbols so feeder lines land on top of it.
+    busbar = next((e for e in sheet.elements if e.kind == "busbar"), None)
+    if busbar is not None:
+        feeder_xs = [to_page(e.x, e.y)[0] for e in sheet.elements
+                     if e.kind in ("feeder_breaker", "aux_breaker")]
+        bx, by = to_page(busbar.x, busbar.y)
+        left = min(feeder_xs + [bx]) - 10 * scale
+        right = max(feeder_xs + [bx]) + 10 * scale
+        drawing.add(Line(left, by, right, by, strokeColor=_INK, strokeWidth=2.4))
+        _draw_label_block(drawing, right + 4 * scale, by - 3 * scale,
+                          busbar.labels or [busbar.tag or ""],
+                          scale=scale, bold_first=True, size=_TAG_PT)
+        if sheet.continued_from is not None:
+            _draw_label_block(drawing, left - 4 * scale, by - 3 * scale,
+                              [f"continued from sheet {sheet.continued_from}"],
+                              scale=scale, anchor="end")
+        if sheet.continued_on is not None:
+            _draw_label_block(drawing, right + 4 * scale, by - 3 * scale - 2 * _TAG_PT * scale,
+                              [f"continued on sheet {sheet.continued_on}"], scale=scale)
+
+    for conn in sheet.connections:
+        src, dst = by_id[conn.from_id], by_id[conn.to_id]
+        if src.kind == "busbar":
+            x1, y1 = to_page(dst.x, src.y)
+        else:
+            x1, y1 = to_page(src.x, src.y)
+        x2, y2 = to_page(dst.x, dst.y)
+        drawing.add(Line(x1, y1, x2, y2, strokeColor=_INK, strokeWidth=1.0))
+
+    for e in sheet.elements:
+        if e.kind in ("busbar",):
+            continue
+        px, py = to_page(e.x, e.y)
+
+        if e.kind == "cable_label":
+            # No discrete symbol — just its figure lines, right-aligned so
+            # they end clear of the trunk line they sit beside (see
+            # ``sld_sheets``, which offsets this element to the LEFT of x).
+            _draw_label_block(drawing, px, py + _LABEL_PITCH * scale, e.labels,
+                              scale=scale, anchor="end", color=_MUTED)
+            continue
+
+        if e.kind in ("station", "bess_station"):
+            # The tag sits to the upper-left of the switch, clear of the
+            # transformer/inverter branch (which reaches to the right); the
+            # rest of the labels (model, kVA, inverter) are drawn stacked
+            # below the inverter symbol by _station_symbols itself, since
+            # only it knows where that symbol landed. Draw labels[0], not the
+            # canonical (always-bare) e.tag: sld_sheets appends † there for a
+            # station on a switchgear-rating fallback.
+            for shape in _station_symbols(px, py, scale, e.labels[1:],
+                                          battery=e.kind == "bess_station"):
+                drawing.add(shape)
+            tag_text = e.labels[0] if e.labels else e.tag
+            if tag_text:
+                drawing.add(String(px - 8 * scale, py + 9 * scale, tag_text,
+                                   fontSize=_TAG_PT * scale,
+                                   fontName="Helvetica-Bold", fillColor=_INK,
+                                   textAnchor="end"))
+            continue
+
+        for shape in _symbol(e.kind, px, py, scale):
+            drawing.add(shape)
+        if e.labels:
+            # For a feeder this list is [tag, rating] — the tag as the bold
+            # first line IS its tag, so nothing further to draw. Every other
+            # kind reaching here (the grid-side chain) carries no tag at all.
+            _draw_label_block(drawing, px + 10 * scale, py - 3 * scale, e.labels,
+                              scale=scale, bold_first=True)
+        else:
+            caption = _KIND_CAPTION.get(e.kind)
+            if caption:
+                drawing.add(String(px + 10 * scale, py - 3 * scale, caption,
+                                   fontName="Helvetica", fontSize=_LABEL_PT * scale,
+                                   fillColor=_MUTED))
+
+    return drawing
+
+
+def build_sld_pdf(
+    sheets: list[Sheet],
+    *,
+    project_name: str = "",
+    design_name: str = "Plant",
+    generated_at: datetime | None = None,
+) -> bytes:
+    """The standalone SLD PDF: one A3-landscape page per sheet."""
+    when = generated_at or datetime.now()
+    buf = BytesIO()
+    c = canvas.Canvas(buf, pagesize=_PAGE_SIZE)
+    for sheet in sheets:
+        drawing = sheet_to_drawing(sheet, project_name=project_name,
+                                   design_name=design_name, generated_at=when)
+        renderPDF.draw(drawing, c, 0, 0)
+        c.showPage()
+    c.save()
+    return buf.getvalue()

@@ -14,11 +14,11 @@ endpoint mirroring `POST /api/report`, and the frontend button. See `.scratch/sl
 
 **Blocked by:** None (can start immediately).
 
-**Status:** ready-for-agent
+**Status:** done
 
-- [ ] Layout-model tests: one sheet for a one-busbar PV plant; one element per station the architecture holds; TS numbering follows circuit → position; C tags follow circuit order; grid-side chain elements present in order
-- [ ] Rendering smoke test: the PDF is non-empty, A3 landscape, one page per sheet
-- [ ] `/api/sld` returns `application/pdf` with filename `<slug>-sld.pdf` for a solvable design and a 400 with the first issue's message for an unsolvable one
-- [ ] Download SLD button works in a real browser (Playwright, disposable DB); the downloaded PDF opened and a screenshot of the sheet reported
-- [ ] No calculation change: `tests/golden_baseline.json` byte-identical
-- [ ] `.venv/bin/python -m pytest -q`, frontend Vitest, `npm run build` and `npm run lint` pass
+- [x] Layout-model tests: one sheet for a one-busbar PV plant; one element per station the architecture holds; TS numbering follows circuit → position; C tags follow circuit order; grid-side chain elements present in order
+- [x] Rendering smoke test: the PDF is non-empty, A3 landscape, one page per sheet
+- [x] `/api/sld` returns `application/pdf` with filename `<slug>-sld.pdf` for a solvable design and a 400 with the first issue's message for an unsolvable one
+- [x] Download SLD button works in a real browser (Playwright, disposable DB); the downloaded PDF opened and a screenshot of the sheet reported
+- [x] No calculation change: `tests/golden_baseline.json` byte-identical
+- [x] `.venv/bin/python -m pytest -q`, frontend Vitest, `npm run build` and `npm run lint` pass

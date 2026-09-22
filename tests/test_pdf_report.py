@@ -264,6 +264,89 @@ def test_build_pdf_report_needs_the_fleet_figures_to_report_them():
     assert build_pdf_report(stage1s, arch, plant_name="No fleets")[:4] == b"%PDF"
 
 
+# --- the SLD sheets embedded after the summary (SLD export, ticket 06) -------
+
+def _sld_story(diagram) -> list:
+    """The report story with the design's SLD sheets, built the way the
+    endpoint builds them — the same sheets the standalone download renders."""
+    from backend.solve import design_sld_sheets
+    inputs = graph_to_inputs(diagram, db)
+    stage1s, _layouts, arch = solve_architecture(inputs, db)
+    fleets = branches_summary(inputs, arch, stage1s)
+    return report_story(stage1s, arch, fleets=fleets, plant_name="Test plant",
+                        notices=[n.message for n in fallback_notices(arch)],
+                        sld_sheets=design_sld_sheets(inputs, arch, fleets))
+
+
+def _sld_placement(story) -> tuple[list[int], list[str], int, int]:
+    """Indices of the drawings, the caption text right after each, and the
+    indices of the last summary/notice flowable and the Methodology heading."""
+    from reportlab.graphics.shapes import Drawing
+    drawings = [i for i, f in enumerate(story) if isinstance(f, Drawing)]
+    captions = [str(getattr(story[i + 1], "text", "")) for i in drawings]
+    methodology = next(i for i, f in enumerate(story)
+                       if str(getattr(f, "text", "")) == "Methodology")
+    summary = next(i for i, f in enumerate(story)
+                   if str(getattr(f, "text", "")) == "Plant summary")
+    return drawings, captions, summary, methodology
+
+
+def test_the_report_embeds_each_sld_sheet_after_the_summary_with_a_caption():
+    story = _sld_story(_minimal())
+    drawings, captions, summary, methodology = _sld_placement(story)
+    assert len(drawings) == 1
+    assert summary < drawings[0] < methodology
+    assert "Sheet 1" in captions[0] and "BB1" in captions[0]
+    assert "Download SLD" in captions[0]
+
+
+def test_a_hybrid_report_embeds_one_sheet_per_busbar():
+    story = _sld_story(_hybrid_with_drawn_bess(p_target_bess_mw=2.0))
+    drawings, captions, summary, methodology = _sld_placement(story)
+    assert len(drawings) == 2
+    assert all(summary < d < methodology for d in drawings)
+    assert ["BB1" in captions[0], "BB2" in captions[1]] == [True, True]
+
+
+def test_the_embedded_sheets_come_after_the_notices():
+    story = _sld_story(_minimal())
+    notices = [i for i, f in enumerate(story) if str(getattr(f, "text", "")) == "Notices"]
+    drawings, *_ = _sld_placement(story)
+    assert all(n < drawings[0] for n in notices)
+
+
+def test_an_embedded_sheet_fits_the_a4_text_width_and_stays_vector():
+    from reportlab.graphics.shapes import Drawing
+    from reportlab.lib.pagesizes import A4
+    from powertool.pdf_report import _MARGIN
+    story = _sld_story(_minimal())
+    drawing = next(f for f in story if isinstance(f, Drawing))
+    assert drawing.width == pytest.approx(A4[0] - 2 * _MARGIN)
+    assert drawing.height < drawing.width      # still landscape
+
+
+def test_the_report_pdf_carries_the_sld_page():
+    pdf = report_pdf(_hybrid_with_drawn_bess(p_target_bess_mw=2.0), db, "Hybrid plant")
+    assert pdf[:4] == b"%PDF"
+
+
+def test_the_embedded_sheet_carries_the_project_name_in_its_title_block():
+    from reportlab.graphics.shapes import Drawing, String
+    from backend.solve import design_sld_sheets
+    inputs = graph_to_inputs(_minimal(), db)
+    stage1s, _layouts, arch = solve_architecture(inputs, db)
+    fleets = branches_summary(inputs, arch, stage1s)
+    story = report_story(stage1s, arch, fleets=fleets, plant_name="Test plant",
+                         project_name="Acme Energy Co",
+                         sld_sheets=design_sld_sheets(inputs, arch, fleets))
+    drawing = next(f for f in story if isinstance(f, Drawing))
+
+    def texts(node):
+        for c in getattr(node, "contents", []):
+            if isinstance(c, String):
+                yield c.text
+            yield from texts(c)
+    assert "Acme Energy Co" in set(texts(drawing))
 # --- the summary's power factors: the POC target, not a derived figure -------
 
 def _summary_rows(diagram) -> dict[str, str]:

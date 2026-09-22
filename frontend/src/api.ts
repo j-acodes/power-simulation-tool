@@ -45,11 +45,14 @@ export function solveDiagram(diagram: Diagram): Promise<SolveResponse> {
   }).then(asJson<SolveResponse>)
 }
 
-/** PDF sizing report for the drawn diagram (POST /api/report). Returns the
+/** PDF sizing report for the drawn diagram (POST /api/report). ``projectId``
+ * names the project in the embedded SLD sheets, as for ``sldPdf``. Returns the
  * file as a Blob; a diagram that can't be solved comes back as a 400 whose
  * detail is thrown as an Error. */
-export async function reportPdf(diagram: Diagram, name: string): Promise<Blob> {
-  const res = await fetch(`/api/report?name=${encodeURIComponent(name)}`, {
+export async function reportPdf(diagram: Diagram, name: string, projectId?: number): Promise<Blob> {
+  const params = new URLSearchParams({ name })
+  if (projectId != null) params.set('project_id', String(projectId))
+  const res = await fetch(`/api/report?${params.toString()}`, {
     method: 'POST',
     headers: JSON_HEADERS,
     body: JSON.stringify(diagram),
@@ -57,6 +60,26 @@ export async function reportPdf(diagram: Diagram, name: string): Promise<Blob> {
   if (!res.ok) {
     const detail = await res.json().catch(() => null)
     throw new Error(detail?.detail ?? `Report failed (${res.status})`)
+  }
+  return res.blob()
+}
+
+/** Standalone single-line-diagram PDF for the drawn diagram (POST /api/sld).
+ * ``projectId``, when known, lets the server look up the project's name for
+ * the title block — a missing/unknown id is never an error, just an empty
+ * project name. Returns the file as a Blob; a diagram that can't be solved
+ * comes back as a 400 whose detail is thrown as an Error. */
+export async function sldPdf(diagram: Diagram, name: string, projectId?: number): Promise<Blob> {
+  const params = new URLSearchParams({ name })
+  if (projectId != null) params.set('project_id', String(projectId))
+  const res = await fetch(`/api/sld?${params.toString()}`, {
+    method: 'POST',
+    headers: JSON_HEADERS,
+    body: JSON.stringify(diagram),
+  })
+  if (!res.ok) {
+    const detail = await res.json().catch(() => null)
+    throw new Error(detail?.detail ?? `SLD failed (${res.status})`)
   }
   return res.blob()
 }

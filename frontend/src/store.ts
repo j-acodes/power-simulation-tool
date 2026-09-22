@@ -19,6 +19,10 @@ export interface DesignMeta {
   name: string
   technology: Technology
   version: number
+  // The owning project's id, for the SLD title block's project name (looked
+  // up server-side from this id) — see ResultsTables' downloadSld. Optional
+  // because not every loadDesign caller has it (e.g. a bare seeded diagram).
+  projectId?: number
 }
 
 const DISPLAY_NAME_KEY = 'powertool.displayName'

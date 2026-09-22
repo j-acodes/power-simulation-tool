@@ -10,9 +10,17 @@ and is not in the loss calculation. The calculation does not change.
 
 **Blocked by:** 03
 
-**Status:** ready-for-agent
+**Status:** done
 
-- [ ] Rating-selection tests: exact boundary (S/0.8 equal to a standard rating picks that rating), just above picks the next, Q contributes to S, unpublished gives TBD†, above range gives > 2500 kVA†
-- [ ] Layout-model test: a BESS busbar with an auxiliary load has an AUX element on its own feeder with breaker and load label; a busbar without one has none; the drawing-only note is present only when an AUX element is
-- [ ] `tests/golden_baseline.json` byte-identical (proves the calculation is untouched); full pytest, Vitest, build and lint pass
-- [ ] Browser check on a BESS design with auxiliaries: downloaded SLD opened and screenshot reported
+- [x] Rating-selection tests: exact boundary (S/0.8 equal to a standard rating picks that rating), just above picks the next, Q contributes to S, unpublished gives TBD†, above range gives > 2500 kVA†
+- [x] Layout-model test: a BESS busbar with an auxiliary load has an AUX element on its own feeder with breaker and load label; a busbar without one has none; the drawing-only note is present only when an AUX element is
+- [x] `tests/golden_baseline.json` byte-identical (proves the calculation is untouched); full pytest, Vitest, build and lint pass
+- [x] Browser check on a BESS design with auxiliaries: downloaded SLD opened and screenshot reported
+
+## Comments
+
+Done. Both kinds of auxiliary load (CONTEXT.md) are drawn: each drawn aux node on its busbar,
+and on a BESS busbar one "BESS auxiliaries" feeder summing its stations' solutions' supplier
+figures (TBD† if any is unpublished). Browser check: hybrid design with HV export, downloaded
+`Hybrid aux-sld.pdf`: BB1 shows AUX1 100 kVA / 50 kW; BB2 shows AUX2 100 kVA / 40 kW and
+AUX3 kVA TBD† (sungrow-st6900ux-4h publishes no auxiliary figure), with the drawing-only note.

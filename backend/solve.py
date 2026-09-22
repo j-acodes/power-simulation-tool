@@ -15,12 +15,15 @@ from powertool import (
     Chain,
     ChainElement,
     ComponentDatabase,
+    Sheet,
     TransformerGroup,
     arrange_plant_manual,
     auto_hv_transformer,
     build_pdf_report,
+    build_sld_pdf,
     size_generation,
     size_generation_pq,
+    sld_sheets,
 )
 from powertool.architecture import (
     DEFAULT_FEEDERS_PER_BUSBAR,
@@ -35,6 +38,7 @@ from powertool.graph import (
     fallback_notices,
     graph_to_inputs,
     map_results,
+    sld_fleets,
     validate_graph,
 )
 
@@ -436,7 +440,8 @@ def solve_diagram(diagram: dict, db: ComponentDatabase) -> dict:
     return {"issues": [], "results": map_results(inputs, stage1s, arch)}
 
 
-def report_pdf(diagram: dict, db: ComponentDatabase, plant_name: str) -> bytes:
+def report_pdf(diagram: dict, db: ComponentDatabase, plant_name: str,
+               project_name: str = "") -> bytes:
     """PDF sizing report for a drawn diagram — methodology + full loss tables.
 
     Same pipeline as :func:`solve_diagram`, but the architecture goes to
@@ -459,4 +464,36 @@ def report_pdf(diagram: dict, db: ComponentDatabase, plant_name: str) -> bytes:
                             ambient_c=inputs.ambient_c,
                             feeders_per_busbar=inputs.feeders_per_busbar,
                             notices=[n.message for n in fallback_notices(arch)],
+                            sld_sheets=design_sld_sheets(inputs, arch, fleets),
+                            project_name=project_name,
                             pf_target=inputs.pf_target)
+
+
+def design_sld_sheets(inputs, arch, fleets: list[dict]) -> list[Sheet]:
+    """The SLD sheets for a solved design — the one builder both the
+    standalone download and the report's embedded sheets go through.
+
+    ``fleets`` is :func:`branches_summary`'s output (busbar/feeder pins
+    included, so a pinned feeder rating draws exactly what the report shows);
+    the SLD's own inverter model/count is merged in on COPIES, never mutating
+    what the report itself reads or what the golden snapshot pins.
+    """
+    merged = [{**fleet, **pv} for fleet, pv in zip(fleets, sld_fleets(inputs))]
+    return sld_sheets(arch, fleets=merged)
+
+
+def sld_pdf(diagram: dict, db: ComponentDatabase, plant_name: str,
+           project_name: str = "") -> bytes:
+    """Standalone single-line-diagram PDF for a drawn diagram.
+
+    Same validate-then-solve pipeline as :func:`report_pdf`: a diagram that
+    cannot be solved raises ``ValueError`` with the reason, turned into a 400
+    by the caller.
+    """
+    issues = validate_graph(diagram, db)
+    if issues:
+        raise ValueError(issues[0].message)
+    inputs = graph_to_inputs(diagram, db)
+    stage1s, _layouts, arch = solve_architecture(inputs, db)
+    sheets = design_sld_sheets(inputs, arch, branches_summary(inputs, arch, stage1s))
+    return build_sld_pdf(sheets, project_name=project_name, design_name=plant_name)

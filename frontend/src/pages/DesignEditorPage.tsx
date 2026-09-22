@@ -45,6 +45,7 @@ export function DesignEditorPage() {
           name: design.name,
           technology: design.technology,
           version: design.version,
+          projectId: design.project_id,
         })
       })
       .catch((err: unknown) => setLoadError(String(err)))
@@ -110,6 +111,7 @@ export function DesignEditorPage() {
       name: conflict.name,
       technology: conflict.technology,
       version: conflict.version,
+      projectId: conflict.project_id,
     })
     setConflict(null)
   }

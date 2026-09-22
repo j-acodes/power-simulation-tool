@@ -68,6 +68,7 @@ from .components import (
     DEFAULT_CABLE_ENTRY_MAX_CROSS_SECTION_MM2,
     DEFAULT_SWITCHGEAR_RATED_CURRENT_A,
     BUSBAR_SWITCHGEAR_LADDER_A,
+    BessSolution,
     Cable,
     PvInverter,
     PvInverterCapability,
@@ -1125,6 +1126,9 @@ class BusbarInputs:
     switchgear_pin_a: float | None = None
     export_switchgear_pin_a: float | None = None
     feeder_switchgear_pins_a: dict[str, float] = field(default_factory=dict)
+    # Each aux node's own (p_kw, q_kvar), aligned with ``aux_ids`` — the SLD
+    # draws one auxiliary feeder per load; the engine only uses the sums above.
+    aux_loads: list[tuple[float, float]] = field(default_factory=list)
 
 
 @dataclass
@@ -1181,6 +1185,10 @@ class BranchInputs:
     containers_by_station: dict[str, int] = field(default_factory=dict)
     e_delivered_kwh: float | None = None
     e_required_kwh: float | None = None
+    # BESS-only, for the SLD's PCS/battery labels: each station's solution
+    # and container count (None when unpaired), read whether or not a
+    # discharge duration is set — unlike ``containers_by_station`` above.
+    bess_by_station: dict[str, tuple[BessSolution, int | None]] = field(default_factory=dict)
     # PV-only. Validation requires one installation for every PV station;
     # BESS branches leave this mapping empty.
     pv_inverters_by_station: dict[str, PvInverterInstallation] = field(default_factory=dict)
@@ -1432,15 +1440,15 @@ def graph_to_inputs(diagram: dict, db) -> GraphInputs:
             }
 
             aux_ids: list[str] = []
-            aux_p_kw = aux_q_kvar = 0.0
+            aux_loads: list[tuple[float, float]] = []
             busbar_circuit_indices: list[int] = []
 
             for child, edge in tree.children[busbar_id]:
                 if nodes[child]["kind"] == "aux":
                     props = _props(nodes[child])
                     aux_ids.append(child)
-                    aux_p_kw += _num(props.get("p_kw", 0.0)) or 0.0
-                    aux_q_kvar += _num(props.get("q_kvar", 0.0)) or 0.0
+                    aux_loads.append((_num(props.get("p_kw", 0.0)) or 0.0,
+                                      _num(props.get("q_kvar", 0.0)) or 0.0))
                     continue
                 c_idx = len(circuits) + 1
                 busbar_circuit_indices.append(c_idx)
@@ -1470,8 +1478,9 @@ def graph_to_inputs(diagram: dict, db) -> GraphInputs:
             busbars.append(BusbarInputs(
                 busbar_id=busbar_id,
                 aux_ids=aux_ids,
-                aux_p_kw=aux_p_kw,
-                aux_q_kvar=aux_q_kvar,
+                aux_p_kw=sum(p for p, _q in aux_loads),
+                aux_q_kvar=sum(q for _p, q in aux_loads),
+                aux_loads=aux_loads,
                 circuit_indices=busbar_circuit_indices,
                 export_edge_id=busbar_edge["id"] if mv_export_applicable else None,
                 export_length_km=mv_export_length_km if mv_export_applicable else 0.0,
@@ -1492,6 +1501,7 @@ def graph_to_inputs(diagram: dict, db) -> GraphInputs:
         containers_by_station: dict[str, int] = {}
         e_delivered_kwh: float | None = None
         unpublished_aux_solutions: list[str] = []
+        bess_by_station: dict[str, tuple[BessSolution, int | None]] = {}
         pv_inverters_by_station: dict[str, PvInverterInstallation] = {}
         if kind == "pv":
             for ids in station_ids:
@@ -1514,9 +1524,11 @@ def graph_to_inputs(diagram: dict, db) -> GraphInputs:
                 for ids in station_ids for sid in ids
             ]
             seen_unpublished: set[str] = set()
-            for _sid, solution in per_station:
+            for sid, solution in per_station:
                 if solution is None:
                     continue  # unknown solution: already a validation issue
+                bess_by_station[sid] = (
+                    solution, _bess_container_count(_props(nodes[sid]), db, solution))
                 bess_aux_p_kw += solution.aux_p_kw or 0.0
                 bess_aux_q_kvar += solution.aux_q_kvar or 0.0
                 if solution.aux_p_kw is None or solution.aux_q_kvar is None:
@@ -1555,6 +1567,7 @@ def graph_to_inputs(diagram: dict, db) -> GraphInputs:
             unpublished_aux_solutions=unpublished_aux_solutions,
             containers=containers,
             containers_by_station=containers_by_station,
+            bess_by_station=bess_by_station,
             e_delivered_kwh=e_delivered_kwh,
             # The energy this fleet owes: its own point-of-connection power for
             # the whole discharge duration.
@@ -1671,6 +1684,79 @@ def branches_summary(inputs, arch, stage1s) -> list[dict]:
                 }
                 for busbar_inputs in branch_inputs.busbars
             ],
+        })
+    return out
+
+
+def sld_fleets(inputs: GraphInputs) -> list[dict]:
+    """One entry per branch, the SLD builder's own diagram-layer enrichment:
+    the PV inverter product/count :func:`powertool.sld.sld_sheets` needs but
+    ``PlantArchitecture`` never carries (Stage 1 only knows aggregate
+    inverter power — see that function's docstring).
+
+    Kept SEPARATE from :func:`branches_summary` on purpose: that function's
+    dict shape is baked into the canvas summary the golden snapshot pins
+    (``map_results``' ``summary.branches``), so it cannot grow new keys for a
+    feature the snapshot never renders. This is the same "records passed to
+    the builder" idea the PDF report uses, just for a payload of its own.
+
+    The aggregate diagram draws one PV station block per fleet (the SLD
+    spec's Problem Statement), so one inverter product/count covers every
+    station the architecture expands that branch into — read off whichever
+    installation is on record, not positionally matched to any one station.
+    ``None`` for a BESS branch, or a PV branch that somehow carries none.
+
+    ``bess_stations[c][k]`` is a BESS station's ``{"pcs_model",
+    "pcs_count", "battery_mwh"}`` (the solution's catalogue key) — or ``None`` when its container count is unknown — positional
+    with ``station_ids`` (the drawn circuits are kept verbatim, see
+    :func:`backend.solve.solve_architecture`), because a BESS station's
+    container count depends on its own transformer pairing. Empty for PV.
+
+    ``aux_loads[j]`` is busbar ``j``'s auxiliary loads, one SLD feeder each:
+    every drawn aux node (``{"p_kw", "q_kvar"}``), then — on a BESS busbar —
+    its stations' solutions' own auxiliary draw summed, labelled
+    ``"BESS auxiliaries"``. ``p_kw``/``q_kvar`` are None when any of those
+    solutions publishes no figure, and ``unpublished`` names them (catalogue
+    keys): a partial sum would understate the transformer.
+    """
+    out: list[dict] = []
+    for branch_inputs in inputs.branches:
+        installation = next(iter(branch_inputs.pv_inverters_by_station.values()), None)
+        bess_stations = []
+        for ids in branch_inputs.station_ids:
+            row = []
+            for sid in ids:
+                solution, containers = branch_inputs.bess_by_station.get(sid, (None, None))
+                row.append(None if solution is None or containers is None else {
+                    "pcs_model": solution.name,
+                    "pcs_count": containers * solution.pcs_count,
+                    "battery_mwh": containers * solution.e_nominal_kwh / 1000.0,
+                })
+            bess_stations.append(row)
+        aux_loads = []
+        for busbar in branch_inputs.busbars:
+            loads = [{"p_kw": p, "q_kvar": q} for p, q in busbar.aux_loads]
+            solutions = [branch_inputs.bess_by_station[sid][0]
+                         for c in busbar.circuit_indices
+                         for sid in branch_inputs.station_ids[c - 1]
+                         if sid in branch_inputs.bess_by_station]
+            if solutions:
+                unpublished = sorted({s.name for s in solutions
+                                      if s.aux_p_kw is None or s.aux_q_kvar is None})
+                loads.append({
+                    "label": "BESS auxiliaries",
+                    "p_kw": None if unpublished else sum(s.aux_p_kw for s in solutions),
+                    "q_kvar": None if unpublished else sum(s.aux_q_kvar for s in solutions),
+                    "unpublished": unpublished,
+                })
+            aux_loads.append(loads)
+        out.append({
+            # Catalogue key, never the display label — powertool.sld draws
+            # only catalogue keys.
+            "pv_inverter_model": installation.inverter.name if installation else None,
+            "pv_inverter_count": installation.count if installation else None,
+            "bess_stations": bess_stations if branch_inputs.kind == "bess" else [],
+            "aux_loads": aux_loads,
         })
     return out
 
