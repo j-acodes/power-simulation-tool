@@ -132,7 +132,8 @@ def _fleet_kind(fleet: dict | None) -> str:
 
 def _summary(stage1s: list[SizingResult], arch: PlantArchitecture,
              fleets: list[dict] | None, ambient_c: float,
-             feeders_per_busbar: int = DEFAULT_FEEDERS_PER_BUSBAR) -> list:
+             feeders_per_busbar: int = DEFAULT_FEEDERS_PER_BUSBAR,
+             pf_target: float | None = None) -> list:
     export = arch.export
     v_mv = arch.branches[0].layout.v_mv_kv
     if export is None:
@@ -145,7 +146,10 @@ def _summary(stage1s: list[SizingResult], arch: PlantArchitecture,
     target = sum(r.p_poc_target_kw or 0.0 for r in arch.branch_refinements)
     rows = [
         ["POC active-power target", f"{_fmt(target / 1000)} MW" if target else "—"],
-        ["Power-factor target (injected Q)", f"{stage1s[0].pf_target:.3f}"],
+        # The engineer's POC target. Not stage1s[0].pf_target: that is the
+        # effective figure at the MV busbar, lower behind an HV transformer
+        # because the transformer and export cable consume reactive power.
+        ["Power-factor target at POC", f"{pf_target:.3f}" if pf_target else "—"],
         ["Interconnection", interconn],
         ["Feeders per busbar limit", str(feeders_per_busbar)],
         ["MV collection voltage", f"{v_mv:g} kV"],
@@ -161,6 +165,8 @@ def _summary(stage1s: list[SizingResult], arch: PlantArchitecture,
                      " + ".join(f"{n}× {tx.display_name}" for tx, n in branch.layout.fleet)])
         rows.append([f"{prefix}Installed station capacity",
                      f"{_fmt(branch.layout.s_fleet_kva / 1000)} MVA"])
+        device = conversion_label(_fleet_kind(fleets[i] if fleets else None))
+        rows.append([f"{prefix}Power factor at {device}", f"{stage1s[i].pf_inv:.3f}"])
     return [Paragraph("Plant summary", _H2), _table(["Item", "Value"], rows, [0.45, 0.55])]
 
 
@@ -618,6 +624,7 @@ def report_story(
     ambient_c: float = DEFAULT_AMBIENT_C,
     feeders_per_busbar: int = DEFAULT_FEEDERS_PER_BUSBAR,
     notices: list[str] | None = None,
+    pf_target: float | None = None,
 ) -> list:
     """The report as a list of ReportLab flowables, before it becomes a PDF.
 
@@ -642,6 +649,9 @@ def report_story(
     :func:`powertool.graph.fallback_notices`), passed as plain text so this
     module stays independent of the diagram layer. Listed right after the
     summary: a reviewer reads them before trusting any figure below.
+
+    ``pf_target`` is the design's POC power-factor target, echoed in the
+    summary; omit it and that row reads "—".
     """
     story: list = [
         Paragraph(f"{plant_name} — Sizing Report", _H1),
@@ -649,7 +659,7 @@ def report_story(
         HRFlowable(width="100%", thickness=2, color=_GREEN, spaceBefore=4,
                    spaceAfter=10),
     ]
-    story += _summary(stage1s, arch, fleets, ambient_c, feeders_per_busbar)
+    story += _summary(stage1s, arch, fleets, ambient_c, feeders_per_busbar, pf_target)
     if notices:
         story.append(Paragraph("Notices", _H2))
         story += [Paragraph(n, _BODY) for n in notices]
@@ -679,6 +689,7 @@ def build_pdf_report(
     ambient_c: float = DEFAULT_AMBIENT_C,
     feeders_per_busbar: int = DEFAULT_FEEDERS_PER_BUSBAR,
     notices: list[str] | None = None,
+    pf_target: float | None = None,
 ) -> bytes:
     """Full PDF sizing report: methodology + detailed loss tables. Returns bytes."""
     when = (generated_at or datetime.now()).strftime("%Y-%m-%d %H:%M")
@@ -689,5 +700,5 @@ def build_pdf_report(
         topMargin=14 * mm, bottomMargin=14 * mm)
     doc.build(report_story(stage1s, arch, fleets=fleets, plant_name=plant_name, when=when,
                            ambient_c=ambient_c, feeders_per_busbar=feeders_per_busbar,
-                           notices=notices))
+                           notices=notices, pf_target=pf_target))
     return buf.getvalue()
