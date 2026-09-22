@@ -32,6 +32,7 @@ from powertool.graph import (
     BranchInputs,
     GraphInputs,
     branches_summary,
+    fallback_notices,
     graph_to_inputs,
     map_results,
     validate_graph,
@@ -456,4 +457,5 @@ def report_pdf(diagram: dict, db: ComponentDatabase, plant_name: str) -> bytes:
     fleets = branches_summary(inputs, arch, stage1s)
     return build_pdf_report(stage1s, arch, fleets=fleets, plant_name=plant_name,
                             ambient_c=inputs.ambient_c,
-                            feeders_per_busbar=inputs.feeders_per_busbar)
+                            feeders_per_busbar=inputs.feeders_per_busbar,
+                            notices=[n.message for n in fallback_notices(arch)])

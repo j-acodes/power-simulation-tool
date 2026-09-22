@@ -15,7 +15,7 @@ sys.path.insert(0, "tests")
 from backend.main import db                                  # noqa: E402
 from backend.solve import report_pdf, solve_architecture     # noqa: E402
 from powertool.components import conversion_label            # noqa: E402
-from powertool.graph import branches_summary, graph_to_inputs  # noqa: E402
+from powertool.graph import branches_summary, fallback_notices, graph_to_inputs  # noqa: E402
 from powertool.pdf_report import build_pdf_report, report_story  # noqa: E402
 
 from test_graph import _minimal                              # noqa: E402
@@ -51,7 +51,8 @@ def _story_text(diagram) -> str:
     fleets = branches_summary(inputs, arch, stage1s)
     story = report_story(stage1s, arch, fleets=fleets, plant_name="Test plant",
                          when="2026-09-04 12:00",
-                         feeders_per_busbar=inputs.feeders_per_busbar)
+                         feeders_per_busbar=inputs.feeders_per_busbar,
+                         notices=[n.message for n in fallback_notices(arch)])
     out = []
 
     def walk(flowables):
@@ -165,6 +166,15 @@ def test_the_report_lists_each_stations_through_and_rated_current():
     # — a figure _transformer_rows aggregates away by model.
     text = _story_text(_minimal())
     assert "93 / 630 A" in text  # s1's through current (~92.9 A) / 630 A fallback
+
+
+def test_the_report_lists_every_fallback_notice():
+    # The default catalogue publishes neither switchgear rated current nor
+    # cable entry, so both fallbacks are used and both are stated.
+    text = _story_text(_minimal())
+    assert "Notices" in text
+    assert "No switchgear rated current is published" in text
+    assert "No cable entry is published" in text
 
 
 def test_the_report_shows_feeders_used_against_the_limit():

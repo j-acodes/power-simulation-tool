@@ -617,6 +617,7 @@ def report_story(
     when: str = "",
     ambient_c: float = DEFAULT_AMBIENT_C,
     feeders_per_busbar: int = DEFAULT_FEEDERS_PER_BUSBAR,
+    notices: list[str] | None = None,
 ) -> list:
     """The report as a list of ReportLab flowables, before it becomes a PDF.
 
@@ -636,6 +637,11 @@ def report_story(
     ``feeders_per_busbar`` is the design's own Stage-1 rule (ADR-0007, ticket
     06), carried through purely for display, the same standing as
     ``ambient_c`` for the figures it does not itself drive.
+
+    ``notices`` are the fallback notices the editor shows (see
+    :func:`powertool.graph.fallback_notices`), passed as plain text so this
+    module stays independent of the diagram layer. Listed right after the
+    summary: a reviewer reads them before trusting any figure below.
     """
     story: list = [
         Paragraph(f"{plant_name} — Sizing Report", _H1),
@@ -644,6 +650,9 @@ def report_story(
                    spaceAfter=10),
     ]
     story += _summary(stage1s, arch, fleets, ambient_c, feeders_per_busbar)
+    if notices:
+        story.append(Paragraph("Notices", _H2))
+        story += [Paragraph(n, _BODY) for n in notices]
     story += _methodology()
     for i, stage1 in enumerate(stage1s):
         story += _stage1(stage1, fleets[i] if fleets else None, len(stage1s))
@@ -669,6 +678,7 @@ def build_pdf_report(
     generated_at: datetime | None = None,
     ambient_c: float = DEFAULT_AMBIENT_C,
     feeders_per_busbar: int = DEFAULT_FEEDERS_PER_BUSBAR,
+    notices: list[str] | None = None,
 ) -> bytes:
     """Full PDF sizing report: methodology + detailed loss tables. Returns bytes."""
     when = (generated_at or datetime.now()).strftime("%Y-%m-%d %H:%M")
@@ -678,5 +688,6 @@ def build_pdf_report(
         leftMargin=_MARGIN, rightMargin=_MARGIN,
         topMargin=14 * mm, bottomMargin=14 * mm)
     doc.build(report_story(stage1s, arch, fleets=fleets, plant_name=plant_name, when=when,
-                           ambient_c=ambient_c, feeders_per_busbar=feeders_per_busbar))
+                           ambient_c=ambient_c, feeders_per_busbar=feeders_per_busbar,
+                           notices=notices))
     return buf.getvalue()

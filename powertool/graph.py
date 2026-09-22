@@ -1675,6 +1675,54 @@ def branches_summary(inputs, arch, stage1s) -> list[dict]:
     return out
 
 
+def fallback_notices(arch: PlantArchitecture) -> list[GraphIssue]:
+    """The design-wide notices for every engine fallback a station used in
+    place of a published figure — shared by :func:`map_results` and the PDF
+    report, so the screen and the document say the same thing."""
+    notices: list[GraphIssue] = []
+    # A station whose supplier publishes no switchgear rated current is sized
+    # against the standard ring-main-unit fallback, never against no limit at
+    # all (ADR-0006). One notice for the whole design, naming every affected
+    # model once — the same shape as the unpublished-ambient notice in
+    # map_results.
+    seen_defaulted: set[str] = set()
+    defaulted_switchgear: list[str] = []
+    for branch in arch.branches:
+        for tx, _n in branch.layout.fleet:
+            if not tx.switchgear_rating_published and tx.display_name not in seen_defaulted:
+                seen_defaulted.add(tx.display_name)
+                defaulted_switchgear.append(tx.display_name)
+    if defaulted_switchgear:
+        names = ", ".join(defaulted_switchgear)
+        notices.append(GraphIssue(
+            "switchgear_rating_not_published",
+            f"No switchgear rated current is published for {names} — using the "
+            f"standard {DEFAULT_SWITCHGEAR_RATED_CURRENT_A:,.0f} A ring main unit "
+            f"rating for those stations. Obtain the supplier's figure before a "
+            f"design review."))
+
+    # Same fallback shape, for cable entry (ADR-0007): a station whose
+    # supplier publishes no cable entry is bound to the engine's 2 x 300 mm^2
+    # fallback for its circuit cables, never to no limit.
+    seen_defaulted_cable_entry: set[str] = set()
+    defaulted_cable_entry: list[str] = []
+    for branch in arch.branches:
+        for tx, _n in branch.layout.fleet:
+            if not tx.cable_entry_published and tx.display_name not in seen_defaulted_cable_entry:
+                seen_defaulted_cable_entry.add(tx.display_name)
+                defaulted_cable_entry.append(tx.display_name)
+    if defaulted_cable_entry:
+        names = ", ".join(defaulted_cable_entry)
+        notices.append(GraphIssue(
+            "cable_entry_not_published",
+            f"No cable entry is published for {names} — using the standard "
+            f"{DEFAULT_CABLE_ENTRY_CABLES_PER_PHASE} x "
+            f"{DEFAULT_CABLE_ENTRY_MAX_CROSS_SECTION_MM2:.0f} mm^2 cable entry for "
+            f"those stations' circuit cables. Obtain the supplier's figure before "
+            f"a design review."))
+    return notices
+
+
 def map_results(inputs: GraphInputs, stage1s: list[SizingResult],
                 arch: PlantArchitecture) -> dict:
     """Key the engine results back to the canvas: ``{edges, nodes, summary,
@@ -2072,45 +2120,7 @@ def map_results(inputs: GraphInputs, stage1s: list[SizingResult],
             "is shown but not sized (zero losses assumed).",
             edge_id=inputs.export_edge_id))
 
-    # A station whose supplier publishes no switchgear rated current is sized
-    # against the standard ring-main-unit fallback, never against no limit at
-    # all (ADR-0006). One notice for the whole design, naming every affected
-    # model once — the same shape as the unpublished-ambient notice below.
-    seen_defaulted: set[str] = set()
-    defaulted_switchgear: list[str] = []
-    for branch in arch.branches:
-        for tx, _n in branch.layout.fleet:
-            if not tx.switchgear_rating_published and tx.display_name not in seen_defaulted:
-                seen_defaulted.add(tx.display_name)
-                defaulted_switchgear.append(tx.display_name)
-    if defaulted_switchgear:
-        names = ", ".join(defaulted_switchgear)
-        warnings.append(GraphIssue(
-            "switchgear_rating_not_published",
-            f"No switchgear rated current is published for {names} — using the "
-            f"standard {DEFAULT_SWITCHGEAR_RATED_CURRENT_A:,.0f} A ring main unit "
-            f"rating for those stations. Obtain the supplier's figure before a "
-            f"design review."))
-
-    # Same fallback shape, for cable entry (ADR-0007): a station whose
-    # supplier publishes no cable entry is bound to the engine's 2 x 300 mm^2
-    # fallback for its circuit cables, never to no limit.
-    seen_defaulted_cable_entry: set[str] = set()
-    defaulted_cable_entry: list[str] = []
-    for branch in arch.branches:
-        for tx, _n in branch.layout.fleet:
-            if not tx.cable_entry_published and tx.display_name not in seen_defaulted_cable_entry:
-                seen_defaulted_cable_entry.add(tx.display_name)
-                defaulted_cable_entry.append(tx.display_name)
-    if defaulted_cable_entry:
-        names = ", ".join(defaulted_cable_entry)
-        warnings.append(GraphIssue(
-            "cable_entry_not_published",
-            f"No cable entry is published for {names} — using the standard "
-            f"{DEFAULT_CABLE_ENTRY_CABLES_PER_PHASE} x "
-            f"{DEFAULT_CABLE_ENTRY_MAX_CROSS_SECTION_MM2:.0f} mm^2 cable entry for "
-            f"those stations' circuit cables. Obtain the supplier's figure before "
-            f"a design review."))
+    warnings.extend(fallback_notices(arch))
 
     if math.isclose(inputs.ambient_c, 30.0, rel_tol=1e-9, abs_tol=1e-9):
         # A design asking for 30 °C silently reads a station's 40 °C figure
