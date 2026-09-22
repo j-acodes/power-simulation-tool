@@ -96,6 +96,7 @@ _AUX_NOTE = (
 # Standard auxiliary transformer ratings, kVA (the SLD spec's list).
 _AUX_RATINGS_KVA = (50, 100, 160, 250, 315, 400, 500, 630, 800, 1000, 1250, 1600, 2000, 2500)
 _AUX_LOADING = 0.80
+_AUX_OVER_RANGE = f"> {_AUX_RATINGS_KVA[-1]} kVA†"
 
 
 def aux_transformer_rating(p_kw: float | None, q_kvar: float | None) -> str:
@@ -107,7 +108,7 @@ def aux_transformer_rating(p_kw: float | None, q_kvar: float | None) -> str:
     needed = (p_kw ** 2 + q_kvar ** 2) ** 0.5 / _AUX_LOADING
     # ponytail: 1e-9 absorbs float noise so an exact boundary picks that rating
     rating = next((r for r in _AUX_RATINGS_KVA if needed <= r + 1e-9), None)
-    return f"{rating} kVA" if rating is not None else f"> {_AUX_RATINGS_KVA[-1]} kVA†"
+    return f"{rating} kVA" if rating is not None else _AUX_OVER_RANGE
 
 # Legend caption per symbol kind — only the kinds a given sheet actually uses
 # are listed (:func:`sld_sheets` builds each sheet's own subset), one entry
@@ -458,12 +459,12 @@ def _busbar_sheet(arch: PlantArchitecture, branch, section, fleet: dict, s_i: in
             names = ", ".join(load.get("unpublished") or [])
             notes.append(f"No auxiliary consumption is published for {names} — "
                          f"{aux_tag} is drawn as kVA TBD†.")
-        elif rating.startswith(">"):
+        elif rating == _AUX_OVER_RANGE:
             notes.append(f"{aux_tag}: the auxiliary load needs more than the largest "
                          f"standard auxiliary transformer ({_AUX_RATINGS_KVA[-1]} kVA) — "
                          f"marked {rating}.")
     if aux_loads:
-        notes.insert(1, _AUX_NOTE)
+        notes.insert(1, _AUX_NOTE)  # right after _INDICATIVE_NOTE, before any † reason
 
     return Sheet(
         busbar_tag=busbar_tag, elements=elements, connections=connections,
