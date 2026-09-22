@@ -61,6 +61,27 @@ export async function reportPdf(diagram: Diagram, name: string): Promise<Blob> {
   return res.blob()
 }
 
+/** Standalone single-line-diagram PDF for the drawn diagram (POST /api/sld).
+ * ``projectId``, when known, lets the server look up the project's name for
+ * the title block — a missing/unknown id is never an error, just an empty
+ * project name. Returns the file as a Blob; a diagram that can't be solved,
+ * or sits outside the current SLD scope (multi-busbar, BESS, hybrid, MV
+ * interconnection), comes back as a 400 whose detail is thrown as an Error. */
+export async function sldPdf(diagram: Diagram, name: string, projectId?: number): Promise<Blob> {
+  const params = new URLSearchParams({ name })
+  if (projectId != null) params.set('project_id', String(projectId))
+  const res = await fetch(`/api/sld?${params.toString()}`, {
+    method: 'POST',
+    headers: JSON_HEADERS,
+    body: JSON.stringify(diagram),
+  })
+  if (!res.ok) {
+    const detail = await res.json().catch(() => null)
+    throw new Error(detail?.detail ?? `SLD failed (${res.status})`)
+  }
+  return res.blob()
+}
+
 /** Seed wizard: POC-level params -> a proposed diagram (see backend.seed.seed_diagram).
  * The response is the bare diagram dict, loaded onto the canvas exactly like a
  * saved design. */

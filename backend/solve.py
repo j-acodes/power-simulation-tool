@@ -19,8 +19,10 @@ from powertool import (
     arrange_plant_manual,
     auto_hv_transformer,
     build_pdf_report,
+    build_sld_pdf,
     size_generation,
     size_generation_pq,
+    sld_sheets,
 )
 from powertool.architecture import (
     DEFAULT_FEEDERS_PER_BUSBAR,
@@ -459,3 +461,23 @@ def report_pdf(diagram: dict, db: ComponentDatabase, plant_name: str) -> bytes:
                             ambient_c=inputs.ambient_c,
                             feeders_per_busbar=inputs.feeders_per_busbar,
                             notices=[n.message for n in fallback_notices(arch)])
+
+
+def sld_pdf(diagram: dict, db: ComponentDatabase, plant_name: str,
+           project_name: str = "") -> bytes:
+    """Standalone single-line-diagram PDF for a drawn diagram.
+
+    Same validate-then-solve pipeline as :func:`report_pdf`: a diagram that
+    cannot be solved raises ``ValueError`` with the reason, turned into a 400
+    by the caller. :func:`powertool.sld.sld_sheets` raises the same way for a
+    design outside this release's SLD scope (more than one busbar, a BESS
+    fleet, a hybrid plant, or an MV interconnection) — there is nothing
+    partial worth drawing either way.
+    """
+    issues = validate_graph(diagram, db)
+    if issues:
+        raise ValueError(issues[0].message)
+    inputs = graph_to_inputs(diagram, db)
+    _stage1s, _layouts, arch = solve_architecture(inputs, db)
+    sheets = sld_sheets(arch)
+    return build_sld_pdf(sheets, project_name=project_name, design_name=plant_name)

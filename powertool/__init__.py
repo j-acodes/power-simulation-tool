@@ -36,6 +36,7 @@ from .components import (
 )
 from .database import CatalogueDataWarning, ComponentDatabase
 from .pdf_report import build_pdf_report
+from .sld import Sheet, SldConnection, SldElement, build_sld_pdf, sld_sheets
 from .sizing import (
     ElementLoss,
     SizingResult,
@@ -81,4 +82,9 @@ __all__ = [
     "StationResult",
     "ExportResult",
     "build_pdf_report",
+    "Sheet",
+    "SldElement",
+    "SldConnection",
+    "sld_sheets",
+    "build_sld_pdf",
 ]

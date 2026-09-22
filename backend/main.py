@@ -52,6 +52,7 @@ from .solve import (
     MAX_UTILIZATION,
     build_chain,
     report_pdf,
+    sld_pdf,
     solve_diagram,
 )
 
@@ -332,6 +333,43 @@ def post_report(diagram: dict = Body(...), name: str = "Plant") -> Response:
         headers={
             "Content-Disposition":
                 f'attachment; filename="{_filename_slug(name)}-sizing-report.pdf"'
+        },
+    )
+
+
+@app.post("/api/sld")
+def post_sld(
+    diagram: dict = Body(...),
+    name: str = "Plant",
+    project_id: int | None = None,
+    session: Session = Depends(get_session),
+) -> Response:
+    """Download the standalone single-line-diagram PDF for a drawn diagram.
+
+    Body is the diagram payload (as for /api/solve); ``name`` titles the sheet
+    and names the file. ``project_id``, when given, names the project for the
+    title block — looked up here rather than trusted from the client, same
+    reasoning as the filename slug; a missing or unknown id falls back to no
+    project name rather than a 4xx, since the SLD is still worth downloading
+    without it. A diagram that cannot be solved, or sits outside this
+    release's SLD scope (more than one busbar, a BESS fleet, a hybrid plant,
+    or an MV interconnection), is a 400 carrying the reason.
+    """
+    project_name = ""
+    if project_id is not None:
+        project = session.get(Project, project_id)
+        if project is not None:
+            project_name = project.name
+    try:
+        pdf = sld_pdf(diagram, db, name, project_name)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return Response(
+        content=pdf,
+        media_type="application/pdf",
+        headers={
+            "Content-Disposition":
+                f'attachment; filename="{_filename_slug(name)}-sld.pdf"'
         },
     )
 
