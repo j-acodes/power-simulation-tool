@@ -470,10 +470,7 @@ def sld_pdf(diagram: dict, db: ComponentDatabase, plant_name: str,
 
     Same validate-then-solve pipeline as :func:`report_pdf`: a diagram that
     cannot be solved raises ``ValueError`` with the reason, turned into a 400
-    by the caller. :func:`powertool.sld.sld_sheets` raises the same way for a
-    design outside this release's SLD scope (more than one busbar, a BESS
-    fleet, a hybrid plant, or an MV interconnection) — there is nothing
-    partial worth drawing either way.
+    by the caller.
     """
     issues = validate_graph(diagram, db)
     if issues:

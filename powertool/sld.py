@@ -13,16 +13,16 @@ presentation:
 
 ``build_sld_pdf`` assembles one A3-landscape page per sheet.
 
-Ticket 01 drew a single-busbar PV plant with an HV interconnection: the
-grid-side chain, the busbar, and every circuit as a column of stations in
-chain order, with tag-only labels. Ticket 02 (this one) fills in the sized
-figures — POC voltage/MW, HV transformer model/MVA, busbar voltage, each
-feeder's switchgear rated current, every cable segment's size/material/
-parallel-run/length, each station's transformer model/kVA and inverter count,
-plus a symbol legend, the indicative-protection note, and † marks (with
-sheet-level notes) on any value that rests on an engine fallback. Multi-busbar,
-BESS and hybrid plants and MV interconnection remain out of this release's
-scope (see the ``ValueError``s below).
+One sheet per busbar, for every topology the tool solves: several busbars
+per fleet, PV and BESS fleets (a hybrid's shared POC and HV transformer repeat
+on each sheet), and HV or MV interconnection. Each sheet draws the grid-side
+chain, the busbar, and every circuit as a column of stations in chain order,
+labelled with the sized figures — POC voltage/MW, HV transformer model/MVA,
+busbar voltage, each feeder's switchgear rated current, every cable segment's
+size/material/parallel-run/length, each station's transformer model/kVA and
+its inverter count (PV) or PCS count and battery MWh (BESS) — plus a symbol
+legend, the indicative-protection note, and † marks (with sheet-level notes)
+on any value that rests on an engine fallback.
 
 Model names on the drawing are always CATALOGUE MODEL KEYS (``Transformer.name``
 / the inverter's ``PvInverter.name``), never the display labels
@@ -33,14 +33,15 @@ branches_summary` builds for the PDF report — the caller (``backend.solve.
 sld_pdf``) calls that function and merges in two extra keys of its own on a
 LOCAL copy (:func:`powertool.graph.sld_fleets`, kept separate from
 ``branches_summary`` because that function's own shape is pinned by the
-golden snapshot): ``pv_inverter_model`` (catalogue key) and
-``pv_inverter_count`` — diagram-layer information ``PlantArchitecture``
-itself does not carry (Stage 1 only knows aggregate inverter power).
-``fleets[i]["busbars"][0]["feeder_switchgear_pins_a"]`` (present already in
+golden snapshot): ``pv_inverter_model`` (catalogue key),
+``pv_inverter_count`` and ``bess_stations`` — diagram-layer information
+``PlantArchitecture`` itself does not carry (Stage 1 only knows aggregate
+conversion power).
+``fleets[i]["busbars"][j]["feeder_switchgear_pins_a"]`` (present already in
 ``branches_summary``'s own shape) supplies a user-pinned feeder rating, read
 the same way :func:`powertool.pdf_report._busbar_switchgear_rows` does, so
 the drawing never disagrees with the report. Without ``fleets`` (or without
-these keys) a PV station's inverter line is simply omitted and every feeder
+these keys) a station's inverter/PCS/battery lines are simply omitted and every feeder
 reads as sized (never pinned) — the rest of the drawing still builds, which
 keeps every engine-level (diagram-free) test fixture working.
 
@@ -103,6 +104,7 @@ _LEGEND_LABEL = {
     "hv_transformer": "HV transformer",
     "busbar": "Busbar",
     "station": "Transformer station",
+    "bess_station": "BESS station (transformer, PCS, battery)",
     "cable_label": "Cable (drawn as the connecting line)",
 }
 
@@ -151,12 +153,13 @@ class Sheet:
     scale: float = 1.0
 
 
-# The grid-side chain, POC to busbar, in drawing order (ticket 01: HV
-# interconnection only — see the ValueError below for what else is deferred).
-_CHAIN_KINDS = [
+# The grid-side chain, POC to busbar, in drawing order: with an HV
+# transformer, and for an MV interconnection (no HV transformer).
+_HV_CHAIN_KINDS = [
     "poc", "metering", "disconnector", "hv_breaker", "hv_transformer",
     "export_cable", "mv_breaker",
 ]
+_MV_CHAIN_KINDS = ["poc", "metering", "mv_breaker", "export_cable"]
 
 # Kept tight (vs. ticket 01's 70/55) so the fixed A3 sheet spends more of its
 # vertical budget on station rows, where ticket 02's figure labels now live —
@@ -187,77 +190,70 @@ def _cable_lines(segment, *, assumed: bool) -> list[str]:
     return [f"{text}{suffix}", f"{segment.length_km:g} km"]
 
 
-def _fleet_defaulted_models(branch, *, cable_entry: bool) -> set[str]:
-    """Catalogue keys of every transformer model in this branch's fleet whose
-    RMU switchgear rating (``cable_entry=False``) or cable entry
-    (``cable_entry=True``) is unpublished — the same fact
-    :func:`powertool.graph.fallback_notices` reports, derived independently
-    here so this module never imports :mod:`powertool.graph`."""
-    return {
-        tx.name for tx, _n in branch.layout.fleet
-        if not (tx.cable_entry_published if cable_entry else tx.switchgear_rating_published)
-    }
-
-
 def sld_sheets(arch: PlantArchitecture, fleets: list[dict] | None = None) -> list[Sheet]:
-    """Build one :class:`Sheet` per busbar from a solved plant architecture.
+    """Build one :class:`Sheet` per busbar from a solved plant architecture,
+    in plant order: fleet (branch) by fleet, each fleet's busbars in drawn
+    order. BB, C and TS tags are numbered plant-wide in that same order
+    (busbar → circuit → position), so they continue across sheets.
+
+    Every sheet carries the whole grid-side chain up to the POC, so a hybrid's
+    shared POC and HV transformer repeat on each fleet's sheets.
 
     ``fleets`` — one dict per branch, the shape :func:`powertool.graph.
-    branches_summary` returns (optionally with ``pv_inverter_model``/
-    ``pv_inverter_count`` merged in — see the module docstring) — supplies
-    the inverter model/count (applied to every station of that branch: the
-    aggregate diagram draws one PV station block per fleet, so one inverter
-    product/count covers every expanded station) and any pinned feeder
-    rating (``fleets[i]["busbars"][0]["feeder_switchgear_pins_a"]``). Omit
-    it, or omit those keys, and a station's inverter line is left off and
-    every feeder reads as sized.
-
-    Out of this ticket's scope — more than one fleet (hybrid), more than one
-    busbar, a non-PV fleet (BESS), or an MV interconnection (no HV
-    transformer) — raises ``ValueError`` with a message naming what is
-    unsupported, so the caller can turn it into a 400 rather than draw
-    something wrong.
+    branches_summary` returns (optionally with :func:`powertool.graph.
+    sld_fleets`' keys merged in — see the module docstring) — supplies
+    the PV inverter model/count, each BESS station's PCS count and MWh
+    (``bess_stations``) and any pinned feeder rating
+    (``fleets[i]["busbars"][j]["feeder_switchgear_pins_a"]``). Omit it, or
+    omit those keys, and those lines are left off and every feeder reads as
+    sized.
     """
-    if len(arch.branches) != 1:
-        raise ValueError(
-            "SLD export supports a single-fleet plant in this release "
-            "(hybrid plants are not yet supported)."
-        )
-    branch = arch.branches[0]
-    if any(st.kind != "pv" for c in branch.circuits for st in c.stations):
-        raise ValueError(
-            "SLD export supports PV plants only in this release "
-            "(BESS is not yet supported)."
-        )
-    if len(branch.sections) != 1:
-        raise ValueError(
-            "SLD export supports a single busbar in this release "
-            "(multi-busbar plants are not yet supported)."
-        )
-    if arch.export is None or arch.export.hv_transformer is None:
-        raise ValueError(
-            "SLD export supports an HV interconnection in this release "
-            "(MV interconnection is not yet supported)."
-        )
+    sheets: list[Sheet] = []
+    counters = {"BB": 0, "C": 0, "TS": 0}
+    for b_i, branch in enumerate(arch.branches):
+        fleet = fleets[b_i] if fleets and b_i < len(fleets) else {}
+        for s_i, section in enumerate(branch.sections):
+            sheets.append(_busbar_sheet(arch, branch, section, fleet, s_i, counters))
+    return sheets
 
-    section = branch.sections[0]
+
+def _busbar_sheet(arch: PlantArchitecture, branch, section, fleet: dict, s_i: int,
+                  counters: dict[str, int]) -> Sheet:
+    """One busbar's sheet; ``counters`` carries the plant-wide tag numbering
+    from one sheet to the next."""
     by_index = {c.index: c for c in branch.circuits}
     circuits = [by_index[i] for i in section.circuit_indices]
     export = arch.export
-    hv_tx = export.hv_transformer
+    hv_tx = export.hv_transformer if export is not None else None
+    if hv_tx is not None:
+        chain_kinds = _HV_CHAIN_KINDS
+        poc_kv = export.v_hv_kv
+        export_segment = export.hv_cable
+    else:
+        # MV interconnection: this busbar's own MV export run when it has one
+        # (several busbars), else the plant's single shared export run.
+        chain_kinds = _MV_CHAIN_KINDS
+        poc_kv = section.v_mv_kv
+        export_segment = section.mv_export or (export.hv_cable if export is not None else None)
 
-    fleet = fleets[0] if fleets else {}
     inverter_model = fleet.get("pv_inverter_model")
     inverter_count = fleet.get("pv_inverter_count")
+    bess_stations = fleet.get("bess_stations") or []
     # This busbar's own feeder pins, in the busbar's own circuit order — the
     # same records powertool.pdf_report._busbar_switchgear_rows reads, so a
     # user-pinned feeder rating draws exactly what the report shows (never
     # re-derived from the ladder alone).
     busbars = fleet.get("busbars") or []
-    feeder_pins = busbars[0].get("feeder_switchgear_pins_a") if busbars else None
+    feeder_pins = busbars[s_i].get("feeder_switchgear_pins_a") if s_i < len(busbars) else None
 
-    defaulted_switchgear = _fleet_defaulted_models(branch, cable_entry=False)
-    defaulted_cable_entry = _fleet_defaulted_models(branch, cable_entry=True)
+    # † notes list only what appears on THIS sheet (the spec's "on the sheet
+    # it appears on"), so the fallback models come from this busbar's own
+    # stations, not the whole fleet.
+    plans_on_sheet = [p for c in circuits for p in branch.layout.circuit_plans[c.index - 1]]
+    defaulted_switchgear = {p.transformer.name for p in plans_on_sheet
+                            if not p.transformer.switchgear_rating_published}
+    defaulted_cable_entry = {p.transformer.name for p in plans_on_sheet
+                             if not p.transformer.cable_entry_published}
 
     notes: list[str] = [_INDICATIVE_NOTE]
     if defaulted_switchgear:
@@ -293,17 +289,17 @@ def sld_sheets(arch: PlantArchitecture, fleets: list[dict] | None = None) -> lis
     # --- grid-side chain: POC at the top, down to the busbar -------------
     y = 0.0
     prev_id: str | None = None
-    for kind in _CHAIN_KINDS:
+    for kind in chain_kinds:
         eid = f"chain_{kind}"
         labels: list[str] = []
         if kind == "poc":
             mw = arch.p_poc_delivered_kw / 1000.0
-            labels = [f"{export.v_hv_kv:g} kV", f"{mw:.2f} MW"]
+            labels = [f"{poc_kv:g} kV", f"{mw:.2f} MW"]
         elif kind == "hv_transformer":
             mva = hv_tx.s_rated_kva_at_40c / 1000.0
             labels = [hv_tx.name, f"{mva:.1f} MVA"]
-        elif kind == "export_cable" and export.hv_cable is not None:
-            labels = _cable_lines(export.hv_cable, assumed=False)
+        elif kind == "export_cable" and export_segment is not None:
+            labels = _cable_lines(export_segment, assumed=False)
         elements.append(SldElement(id=eid, kind=kind, x=0.0, y=y, labels=labels))
         if kind != "export_cable":  # a cable span has no discrete symbol
             _add_legend(kind)
@@ -312,7 +308,8 @@ def sld_sheets(arch: PlantArchitecture, fleets: list[dict] | None = None) -> lis
         prev_id = eid
         y -= _CHAIN_STEP
 
-    busbar_tag = "BB1"
+    counters["BB"] += 1
+    busbar_tag = f"BB{counters['BB']}"
     busbar_id = "busbar"
     busbar_y = y
     elements.append(SldElement(
@@ -325,9 +322,9 @@ def sld_sheets(arch: PlantArchitecture, fleets: list[dict] | None = None) -> lis
     # --- circuits: vertical columns hanging from the busbar ---------------
     n_circuits = len(circuits)
     x_start = -(n_circuits - 1) * _CIRCUIT_DX / 2.0
-    ts_counter = 0
     for i, circuit in enumerate(circuits):
-        c_tag = f"C{i + 1}"
+        counters["C"] += 1
+        c_tag = f"C{counters['C']}"
         x = x_start + i * _CIRCUIT_DX
         feeder_id = f"feeder_{circuit.index}"
         feeder_y = busbar_y - _FEEDER_GAP
@@ -355,14 +352,16 @@ def sld_sheets(arch: PlantArchitecture, fleets: list[dict] | None = None) -> lis
         segments_by_station_index = {
             k: seg for k, seg in enumerate(circuit.segments, start=1)
         }
+        bess_row = (bess_stations[circuit.index - 1]
+                    if circuit.index - 1 < len(bess_stations) else [])
 
         prev_station_id = feeder_id
         prev_y = feeder_y
         # Position 1 is nearest the busbar (StationResult.index), the chain
         # order this ticket draws top (busbar) to bottom (far station).
         for station, plan in zip(circuit.stations, plans):
-            ts_counter += 1
-            ts_tag = f"TS{ts_counter}"
+            counters["TS"] += 1
+            ts_tag = f"TS{counters['TS']}"
             st_id = f"station_{circuit.index}_{station.index}"
             st_y = feeder_y - station.index * _STATION_DY
 
@@ -374,13 +373,21 @@ def sld_sheets(arch: PlantArchitecture, fleets: list[dict] | None = None) -> lis
             station_assumed = plan.transformer.name in defaulted_switchgear
             tag_line = f"{ts_tag}†" if station_assumed else ts_tag
             labels = [tag_line, plan.transformer.name, f"{station.s_rated_kva:,.0f} kVA"]
-            if inverter_model:
-                labels.append(f"× {inverter_count} {inverter_model}")
+            if station.kind == "bess":
+                st_kind = "bess_station"
+                bess = bess_row[station.index - 1] if station.index - 1 < len(bess_row) else None
+                if bess is not None:
+                    labels += [f"× {bess['pcs_count']} {bess['pcs_model']}",
+                               f"{bess['battery_mwh']:.2f} MWh"]
+            else:
+                st_kind = "station"
+                if inverter_model:
+                    labels.append(f"× {inverter_count} {inverter_model}")
             elements.append(SldElement(
-                id=st_id, kind="station", x=x, y=st_y,
+                id=st_id, kind=st_kind, x=x, y=st_y,
                 tag=ts_tag, labels=labels,
             ))
-            _add_legend("station")
+            _add_legend(st_kind)
             connections.append(SldConnection(prev_station_id, st_id))
 
             segment = segments_by_station_index.get(station.index)
@@ -398,10 +405,10 @@ def sld_sheets(arch: PlantArchitecture, fleets: list[dict] | None = None) -> lis
             prev_station_id = st_id
             prev_y = st_y
 
-    return [Sheet(
+    return Sheet(
         busbar_tag=busbar_tag, elements=elements, connections=connections,
         notes=notes, legend=[(k, _LEGEND_LABEL.get(k, k)) for k in legend_kinds],
-    )]
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -482,7 +489,8 @@ def _draw_label_block(drawing: Drawing, x: float, y: float, lines: list[str], *,
         ty -= _LABEL_PITCH
 
 
-def _station_symbols(px: float, py: float, scale: float, labels: list[str]) -> list:
+def _station_symbols(px: float, py: float, scale: float, labels: list[str],
+                     battery: bool = False) -> list:
     """One station's symbols, plus its figure labels (model, kVA, inverter —
     everything in ``labels`` after the tag, which the caller draws
     separately). The load-break switch sits ON the vertical MV trunk, in
@@ -526,6 +534,14 @@ def _station_symbols(px: float, py: float, scale: float, labels: list[str]) -> l
                        strokeColor=_INK, strokeWidth=0.8))
     shapes.append(String(inv_x, py - s * 1.3, "~/=", fontName="Helvetica",
                          fontSize=5, fillColor=_MUTED, textAnchor="middle"))
+    if battery:
+        # A BESS station's DC side: the IEC battery cell (long and short
+        # plates) beyond the PCS.
+        bat_x = inv_x + s * 1.6
+        shapes.append(Line(inv_x + s / 2, py, bat_x, py, strokeColor=_INK, strokeWidth=1.0))
+        shapes.append(Line(bat_x, py - r, bat_x, py + r, strokeColor=_INK, strokeWidth=1.3))
+        shapes.append(Line(bat_x + r * 0.5, py - r * 0.5, bat_x + r * 0.5, py + r * 0.5,
+                           strokeColor=_INK, strokeWidth=2.2))
     ty = py - s * 1.3 - 7.5
     for text in labels:
         shapes.append(String(tx_center - r * 1.4, ty, text, textAnchor="start",
@@ -585,10 +601,10 @@ def _footer(drawing: Drawing, sheet: Sheet, x0: float, x1: float, y_top: float) 
             lx = x0
             ty -= _LEGEND_ROW_H
         cx, cy = lx + 7, ty - 4
-        if kind == "station":
-            for shape in _station_symbols(cx - 4, cy, 0.5, []):
+        if kind in ("station", "bess_station"):
+            for shape in _station_symbols(cx - 4, cy, 0.5, [], battery=kind == "bess_station"):
                 drawing.add(shape)
-            text_x = cx + 34
+            text_x = cx + (42 if kind == "bess_station" else 34)
         elif kind == "busbar":
             drawing.add(Line(cx - 5, cy, cx + 5, cy, strokeColor=_INK, strokeWidth=2.2))
             text_x = cx + 10
@@ -694,7 +710,7 @@ def sheet_to_drawing(
                               anchor="end", size=_LABEL_SIZE, color=_MUTED)
             continue
 
-        if e.kind == "station":
+        if e.kind in ("station", "bess_station"):
             # The tag sits to the upper-left of the switch, clear of the
             # transformer/inverter branch (which reaches to the right); the
             # rest of the labels (model, kVA, inverter) are drawn stacked
@@ -702,7 +718,8 @@ def sheet_to_drawing(
             # only it knows where that symbol landed. Draw labels[0], not the
             # canonical (always-bare) e.tag: sld_sheets appends † there for a
             # station on a switchgear-rating fallback.
-            for shape in _station_symbols(px, py, scale, e.labels[1:]):
+            for shape in _station_symbols(px, py, scale, e.labels[1:],
+                                          battery=e.kind == "bess_station"):
                 drawing.add(shape)
             tag_text = e.labels[0] if e.labels else e.tag
             if tag_text:

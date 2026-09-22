@@ -442,15 +442,15 @@ def test_sld_unknown_project_id_falls_back_to_no_project_name_not_a_4xx(monkeypa
     assert captured["project_name"] == ""
 
 
-def test_sld_on_an_out_of_scope_design_is_400_with_the_reason():
-    """An MV-interconnected plant solves fine but is outside ticket 01's SLD
-    scope (HV interconnection only) — a 400 naming why, not a drawing of the
-    wrong topology."""
+def test_sld_on_an_mv_interconnected_hybrid_returns_a_pdf():
+    """Ticket 03: every topology the tool solves draws — here an MV
+    interconnection with a PV and a BESS busbar."""
     import sys
 
     sys.path.insert(0, "tests")
-    from test_graph import _minimal  # noqa: PLC0415
+    from test_hybrid import _hybrid_with_drawn_bess  # noqa: PLC0415
 
-    resp = client.post("/api/sld", json=_minimal(), params={"name": "Minimal"})
-    assert resp.status_code == 400
-    assert "HV interconnection" in resp.json()["detail"]
+    resp = client.post("/api/sld", json=_hybrid_with_drawn_bess(p_target_bess_mw=2.0),
+                       params={"name": "Hybrid"})
+    assert resp.status_code == 200
+    assert resp.headers["content-type"] == "application/pdf"

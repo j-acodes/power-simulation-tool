@@ -35,6 +35,8 @@ from backend.main import db                                    # noqa: E402
 from backend.solve import solve_architecture                   # noqa: E402
 from test_architecture import _catalogue, _full_plant_inputs, _hv_tx, _stage1, _tx_2500  # noqa: E402
 from test_graph import _edge, _node, _settings                 # noqa: E402
+from test_hybrid import _hybrid_with_drawn_bess               # noqa: E402
+from test_pdf_report import _hybrid_with_hv_export             # noqa: E402
 
 
 # --- fixtures -----------------------------------------------------------------
@@ -410,26 +412,104 @@ def test_cable_entry_fallback_marks_the_segment_and_lists_a_note():
     assert not any("stations marked †" in n for n in sheet.notes)
 
 
-# --- out of scope: ticket 01 raises rather than draws something wrong --------
+# --- every topology the tool solves (ticket 03) --------------------------------
 
-def test_hybrid_plant_is_out_of_scope():
-    with pytest.raises(ValueError, match="single-fleet"):
-        sld_sheets(_hybrid_arch())
-
-
-def test_bess_fleet_is_out_of_scope():
-    with pytest.raises(ValueError, match="PV plants only"):
-        sld_sheets(_bess_plant_arch())
-
-
-def test_multi_busbar_plant_is_out_of_scope():
-    with pytest.raises(ValueError, match="single busbar"):
-        sld_sheets(_multi_busbar_arch())
+def _sheets_from_diagram(diagram: dict) -> list[Sheet]:
+    """Every sheet of ``diagram``, with ``fleets`` assembled the way
+    ``backend.solve.sld_pdf`` does (see ``_sheet_from_diagram``)."""
+    inputs = graph_to_inputs(diagram, db)
+    stage1s, _layouts, arch = solve_architecture(inputs, db)
+    fleets = branches_summary(inputs, arch, stage1s)
+    for fleet, extra in zip(fleets, sld_fleets(inputs)):
+        fleet.update(extra)
+    return sld_sheets(arch, fleets=fleets)
 
 
-def test_mv_interconnection_is_out_of_scope():
-    with pytest.raises(ValueError, match="HV interconnection"):
-        sld_sheets(_mv_interconnection_arch())
+def _stations(sheet: Sheet) -> list:
+    return [e for e in sheet.elements if e.kind in ("station", "bess_station")]
+
+
+def test_several_busbars_give_one_sheet_each_with_plant_wide_tags():
+    sheets = sld_sheets(_multi_busbar_arch())
+    assert [s.busbar_tag for s in sheets] == ["BB1", "BB2"]
+    assert [e.tag for e in sheets[0].elements if e.kind == "feeder_breaker"] == ["C1", "C2"]
+    assert [e.tag for e in sheets[1].elements if e.kind == "feeder_breaker"] == ["C3", "C4"]
+    ts = [e.tag for s in sheets for e in _stations(s)]
+    assert ts == [f"TS{i + 1}" for i in range(18)]  # continues across sheets
+    assert len(_stations(sheets[0])) == 10  # circuits 1-2: 5 + 5
+    for sheet in sheets:  # each sheet reads on its own: the whole chain to the POC
+        assert [e.kind for e in sheet.elements][:1] == ["poc"]
+        busbar = next(e for e in sheet.elements if e.kind == "busbar")
+        assert busbar.labels[0] == sheet.busbar_tag
+
+
+def test_hybrid_gives_a_pv_and_a_bess_sheet_both_with_the_shared_poc_and_hv_transformer():
+    sheets = _sheets_from_diagram(_hybrid_with_hv_export())
+    assert [s.busbar_tag for s in sheets] == ["BB1", "BB2"]
+    assert {e.kind for e in _stations(sheets[0])} == {"station"}
+    assert {e.kind for e in _stations(sheets[1])} == {"bess_station"}
+
+    def shared(sheet, kind):
+        return next(e for e in sheet.elements if e.kind == kind).labels
+
+    for kind in ("poc", "hv_transformer"):
+        assert shared(sheets[0], kind) == shared(sheets[1], kind) != []
+    # Tags stay plant-wide across the two fleets.
+    assert [e.tag for e in sheets[1].elements if e.kind == "feeder_breaker"] == ["C2"]
+    assert _stations(sheets[1])[0].tag == f"TS{len(_stations(sheets[0])) + 1}"
+
+
+def test_mv_interconnection_chain_has_no_hv_transformer():
+    arch = _mv_interconnection_arch()
+    sheet = sld_sheets(arch)[0]
+    kinds = [e.kind for e in sheet.elements]
+    assert kinds[:5] == ["poc", "metering", "mv_breaker", "export_cable", "busbar"]
+    assert not {"hv_transformer", "hv_breaker", "disconnector"} & set(kinds)
+    poc = next(e for e in sheet.elements if e.kind == "poc")
+    assert poc.labels[0] == f"{arch.branches[0].sections[0].v_mv_kv:g} kV"
+
+
+def test_mv_hybrid_draws_each_busbars_own_export_chain():
+    sheets = _sheets_from_diagram(_hybrid_with_drawn_bess(p_target_bess_mw=2.0))
+    assert len(sheets) == 2
+    for sheet in sheets:
+        kinds = [e.kind for e in sheet.elements]
+        assert "hv_transformer" not in kinds
+        assert kinds[:5] == ["poc", "metering", "mv_breaker", "export_cable", "busbar"]
+
+
+def test_bess_station_labels_pcs_count_and_battery_mwh():
+    sheets = _sheets_from_diagram(_hybrid_with_hv_export())
+    station = _stations(sheets[1])[0]
+    solution = db.bess_solutions["sungrow-st6900ux-4h"]
+    containers = db.bess_pairings["GENERIC_BESS_TX_2750_LV069"]["sungrow-st6900ux-4h"]
+    assert station.labels[1] == "GENERIC_BESS_TX_2750_LV069"
+    assert station.labels[-2] == f"× {containers * solution.pcs_count} sungrow-st6900ux-4h"
+    assert station.labels[-1] == f"{containers * solution.e_nominal_kwh / 1000:.2f} MWh"
+
+
+def test_bess_station_without_fleets_has_no_pcs_or_battery_line():
+    sheet = sld_sheets(_bess_plant_arch())[0]
+    stations = _stations(sheet)
+    assert stations and all(e.kind == "bess_station" for e in stations)
+    assert all(len(e.labels) == 3 for e in stations)
+    assert "bess_station" in [k for k, _caption in sheet.legend]
+
+
+def test_feeder_pin_is_read_from_its_own_busbar():
+    diagram = _hybrid_with_hv_export()
+    bus_b = next(n for n in diagram["nodes"] if n["id"] == "bus_b")
+    bus_b["props"]["feeder_switchgear_pins_a"] = {"e_tb1": 800.0}
+    pv_sheet, bess_sheet = _sheets_from_diagram(diagram)
+    pv_feeder = next(e for e in pv_sheet.elements if e.kind == "feeder_breaker")
+    bess_feeder = next(e for e in bess_sheet.elements if e.kind == "feeder_breaker")
+    assert bess_feeder.labels[1] == "800 A"
+    assert pv_feeder.labels[1] != "800 A"
+
+
+def test_hybrid_pdf_has_one_page_per_busbar_sheet():
+    sheets = _sheets_from_diagram(_hybrid_with_hv_export())
+    assert _page_count(build_sld_pdf(sheets)) == 2
 
 
 # --- title block: project name --------------------------------------------------

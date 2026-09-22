@@ -68,6 +68,7 @@ from .components import (
     DEFAULT_CABLE_ENTRY_MAX_CROSS_SECTION_MM2,
     DEFAULT_SWITCHGEAR_RATED_CURRENT_A,
     BUSBAR_SWITCHGEAR_LADDER_A,
+    BessSolution,
     Cable,
     PvInverter,
     PvInverterCapability,
@@ -1181,6 +1182,10 @@ class BranchInputs:
     containers_by_station: dict[str, int] = field(default_factory=dict)
     e_delivered_kwh: float | None = None
     e_required_kwh: float | None = None
+    # BESS-only, for the SLD's PCS/battery labels: each station's solution
+    # and container count (None when unpaired), read whether or not a
+    # discharge duration is set — unlike ``containers_by_station`` above.
+    bess_by_station: dict[str, tuple[BessSolution, int | None]] = field(default_factory=dict)
     # PV-only. Validation requires one installation for every PV station;
     # BESS branches leave this mapping empty.
     pv_inverters_by_station: dict[str, PvInverterInstallation] = field(default_factory=dict)
@@ -1492,6 +1497,7 @@ def graph_to_inputs(diagram: dict, db) -> GraphInputs:
         containers_by_station: dict[str, int] = {}
         e_delivered_kwh: float | None = None
         unpublished_aux_solutions: list[str] = []
+        bess_by_station: dict[str, tuple[BessSolution, int | None]] = {}
         pv_inverters_by_station: dict[str, PvInverterInstallation] = {}
         if kind == "pv":
             for ids in station_ids:
@@ -1514,9 +1520,11 @@ def graph_to_inputs(diagram: dict, db) -> GraphInputs:
                 for ids in station_ids for sid in ids
             ]
             seen_unpublished: set[str] = set()
-            for _sid, solution in per_station:
+            for sid, solution in per_station:
                 if solution is None:
                     continue  # unknown solution: already a validation issue
+                bess_by_station[sid] = (
+                    solution, _bess_container_count(_props(nodes[sid]), db, solution))
                 bess_aux_p_kw += solution.aux_p_kw or 0.0
                 bess_aux_q_kvar += solution.aux_q_kvar or 0.0
                 if solution.aux_p_kw is None or solution.aux_q_kvar is None:
@@ -1555,6 +1563,7 @@ def graph_to_inputs(diagram: dict, db) -> GraphInputs:
             unpublished_aux_solutions=unpublished_aux_solutions,
             containers=containers,
             containers_by_station=containers_by_station,
+            bess_by_station=bess_by_station,
             e_delivered_kwh=e_delivered_kwh,
             # The energy this fleet owes: its own point-of-connection power for
             # the whole discharge duration.
@@ -1692,15 +1701,33 @@ def sld_fleets(inputs: GraphInputs) -> list[dict]:
     station the architecture expands that branch into — read off whichever
     installation is on record, not positionally matched to any one station.
     ``None`` for a BESS branch, or a PV branch that somehow carries none.
+
+    ``bess_stations[c][k]`` is a BESS station's ``{"pcs_model",
+    "pcs_count", "battery_mwh"}`` (the solution's catalogue key) — or ``None`` when its container count is unknown — positional
+    with ``station_ids`` (the drawn circuits are kept verbatim, see
+    :func:`backend.solve.solve_architecture`), because a BESS station's
+    container count depends on its own transformer pairing. Empty for PV.
     """
     out: list[dict] = []
     for branch_inputs in inputs.branches:
         installation = next(iter(branch_inputs.pv_inverters_by_station.values()), None)
+        bess_stations = []
+        for ids in branch_inputs.station_ids:
+            row = []
+            for sid in ids:
+                solution, containers = branch_inputs.bess_by_station.get(sid, (None, None))
+                row.append(None if solution is None or containers is None else {
+                    "pcs_model": solution.name,
+                    "pcs_count": containers * solution.pcs_count,
+                    "battery_mwh": containers * solution.e_nominal_kwh / 1000.0,
+                })
+            bess_stations.append(row)
         out.append({
             # Catalogue key, never the display label — powertool.sld draws
             # only catalogue keys.
             "pv_inverter_model": installation.inverter.name if installation else None,
             "pv_inverter_count": installation.count if installation else None,
+            "bess_stations": bess_stations if branch_inputs.kind == "bess" else [],
         })
     return out
 
