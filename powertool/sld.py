@@ -75,6 +75,7 @@ from reportlab.lib.units import mm
 from reportlab.pdfgen import canvas
 
 from .architecture import PlantArchitecture
+from .sizing import _MATERIAL_SYMBOL
 from .components import (
     DEFAULT_CABLE_ENTRY_CABLES_PER_PHASE,
     DEFAULT_CABLE_ENTRY_MAX_CROSS_SECTION_MM2,
@@ -175,7 +176,15 @@ def _cable_lines(segment, *, assumed: bool) -> list[str]:
     ``cable_label``) plus length — every cable segment's label (stories 20,
     26; export spans and circuit segments alike)."""
     suffix = "†" if assumed else ""
-    return [f"{segment.cable_label}{suffix}", f"{segment.length_km:g} km"]
+    sel = segment.selection
+    if sel is None or sel.cable.cross_section_mm2 is None:
+        text = segment.cable_label  # unsized ("catalogue pending") keeps its own wording
+    else:
+        material = _MATERIAL_SYMBOL.get((sel.cable.material or "").lower(), sel.cable.material or "?")
+        text = f"{material} 3×{sel.cable.cross_section_mm2:g} mm²"
+        if sel.n_parallel > 1:
+            text = f"{sel.n_parallel} × {text}"
+    return [f"{text}{suffix}", f"{segment.length_km:g} km"]
 
 
 def _fleet_defaulted_models(branch, *, cable_entry: bool) -> set[str]:

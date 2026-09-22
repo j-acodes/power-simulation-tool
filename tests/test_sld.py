@@ -279,12 +279,15 @@ def test_circuit_segment_labels_carry_cable_and_length_taper_and_parallel_run():
     assert len(segs) == len(circuit.segments) == 5
 
     trunk = segs["segment_1_1"]
-    assert trunk.labels[0] == circuit.segments[0].cable_label == "Al_3x2x95_20kV"
-    assert "2x95" in trunk.labels[0]  # the parallel-run count, in the cable label
+    # Plain reading form, not the catalogue key: runs x material phases x section.
+    assert circuit.segments[0].cable_label == "Al_3x2x95_20kV"
+    assert trunk.labels[0] == "2 × Al 3×95 mm²"
     assert trunk.labels[1] == f"{circuit.segments[0].length_km:g} km"
 
     far = segs["segment_1_5"]
-    assert far.labels[0] == circuit.segments[4].cable_label
+    far_sel = circuit.segments[4].selection
+    assert far_sel.n_parallel == 1
+    assert far.labels[0] == f"Al 3×{far_sel.cable.cross_section_mm2:g} mm²"  # one run: no count
     # Tapered: the far segment's own cable differs from the trunk's.
     assert far.labels[0] != trunk.labels[0]
 
