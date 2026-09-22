@@ -690,6 +690,24 @@ def test_large_plant_splits_onto_continuation_sheets():
     assert cs == [f"C{n}" for n in range(1, len(cs) + 1)]
 
 
+def test_a_circuit_too_long_for_the_floor_gets_its_own_sheet_unsplit():
+    # 1250 A feeders carry 17 stations each: no sheet can hold one at 5 pt,
+    # so each circuit sits alone, whole, rather than being cut in two.
+    stage1 = _stage1(p_inv_kw=80_000, q_inv_kvar=12_000)
+    layout = arrange_plant(
+        stage1, [(_tx_2500(rmu_rated_current_a=1250.0), 34)],
+        trunk_length_km=0.8, spacing_km=0.35, v_mv_kv=20.0,
+    )
+    arch = size_architecture(layout, stage1, _catalogue(), hv_transformer=_hv_tx())
+    circuits = arch.branches[0].circuits
+    assert len(circuits) == 2 and min(len(c.stations) for c in circuits) > 9
+    sheets = sld_sheets(arch)
+    assert len(sheets) == 2
+    for sheet, circuit in zip(sheets, circuits):
+        assert sheet.text_pt < MIN_TEXT_PT
+        assert len(_stations(sheet)) == len(circuit.stations)
+
+
 def test_continuation_markers_are_drawn():
     sheets = sld_sheets(_large_pv_arch())
     assert "continued on sheet 2" in _strings(sheet_to_drawing(sheets[0]))
