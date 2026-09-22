@@ -30,6 +30,7 @@ from powertool.architecture import (                          # noqa: E402
 from powertool.components import DEFAULT_SWITCHGEAR_RATED_CURRENT_A  # noqa: E402
 from powertool.graph import branches_summary, graph_to_inputs, sld_fleets  # noqa: E402
 from powertool.sld import (                                    # noqa: E402
+    MIN_TEXT_PT,
     Sheet,
     aux_transformer_rating,
     build_sld_pdf,
@@ -614,6 +615,78 @@ def test_title_block_omits_project_name_when_not_given():
     texts = _strings(drawing)
     assert "Test plant" in texts
     assert "" not in texts
+
+
+# --- scale to fit, then continuation sheets (ticket 05) ---------------------
+
+def _large_pv_arch():
+    """80 stations in 16 circuits on one busbar — too wide for one A3 sheet
+    without text falling below the floor."""
+    stage1 = _stage1(p_inv_kw=192_000, q_inv_kvar=32_000)
+    layout = arrange_plant(
+        stage1, [(_tx_2500(rmu_rated_current_a=380.0), 80)],
+        trunk_length_km=0.8, spacing_km=0.35, v_mv_kv=20.0,
+    )
+    return size_architecture(layout, stage1, _catalogue(), hv_transformer=_hv_tx())
+
+
+def test_small_plant_is_full_size_on_one_sheet():
+    sheets = sld_sheets(_small_pv_arch(_tx_2500(rmu_rated_current_a=400.0)))
+    assert len(sheets) == 1
+    assert sheets[0].scale == 1.0
+    assert sheets[0].continued_from is None and sheets[0].continued_on is None
+
+
+def test_medium_plant_shrinks_to_fit_one_sheet_above_the_text_floor():
+    sheets = sld_sheets(_pv_plant_arch())
+    assert len(sheets) == 1
+    assert sheets[0].scale < 1.0
+    assert sheets[0].text_pt >= MIN_TEXT_PT
+
+
+def test_large_plant_splits_onto_continuation_sheets():
+    arch = _large_pv_arch()
+    sheets = sld_sheets(arch)
+    assert len(arch.branches[0].sections) == 1
+    assert len(sheets) > 1
+    assert all(s.busbar_tag == "BB1" for s in sheets)
+    assert all(s.text_pt >= MIN_TEXT_PT for s in sheets)
+
+    # The grid-side chain is on the first sheet only; every sheet repeats the busbar.
+    assert any(e.kind == "poc" for e in sheets[0].elements)
+    assert not any(e.kind == "poc" for s in sheets[1:] for e in s.elements)
+    assert all(sum(e.kind == "busbar" for e in s.elements) == 1 for s in sheets)
+
+    # No circuit spans two sheets: each station sits with its own feeder.
+    for s in sheets:
+        feeders = {e.id.split("_")[1] for e in s.elements if e.kind == "feeder_breaker"}
+        assert {e.id.split("_")[1] for e in _stations(s)} <= feeders
+    circuit_counts = [sum(e.kind == "feeder_breaker" for e in s.elements) for s in sheets]
+    assert sum(circuit_counts) == len(arch.branches[0].circuits)
+
+    # Markers point at the neighbouring sheets.
+    assert [s.number for s in sheets] == list(range(1, len(sheets) + 1))
+    assert [s.continued_from for s in sheets] == [None] + [s.number for s in sheets[:-1]]
+    assert [s.continued_on for s in sheets] == [s.number for s in sheets[1:]] + [None]
+
+    # Tags continue unchanged across the sheets.
+    ts = [e.tag for s in sheets for e in _stations(s)]
+    assert ts == [f"TS{n}" for n in range(1, len(ts) + 1)]
+    cs = [e.tag for s in sheets for e in s.elements if e.kind == "feeder_breaker"]
+    assert cs == [f"C{n}" for n in range(1, len(cs) + 1)]
+
+
+def test_continuation_markers_are_drawn():
+    sheets = sld_sheets(_large_pv_arch())
+    assert "continued on sheet 2" in _strings(sheet_to_drawing(sheets[0]))
+    assert "continued from sheet 1" in _strings(sheet_to_drawing(sheets[1]))
+    assert _page_count(build_sld_pdf(sheets)) == len(sheets)
+
+
+def test_separate_busbars_are_not_continuations_of_each_other():
+    sheets = sld_sheets(_multi_busbar_arch())
+    assert [s.number for s in sheets] == [1, 2]
+    assert all(s.continued_from is None and s.continued_on is None for s in sheets)
 
 
 # --- rendering smoke test -----------------------------------------------------
