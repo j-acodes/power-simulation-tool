@@ -73,12 +73,20 @@ def select_cable(
     max_loss_percent: float | None = None,
     max_vdrop_percent: float | None = None,
     max_parallel: int = 12,
+    max_cross_section_mm2: float | None = None,
 ) -> CableSelection:
     """Pick the fewest circuits (by ampacity) then the smallest cross-section that
-    also meets the loss budget (and optional voltage-drop cap)."""
+    also meets the loss budget (and optional voltage-drop cap).
+
+    ``max_cross_section_mm2``, when given, excludes candidates above it — the
+    cable-entry bound a circuit segment is held to (ADR-0007). ``None`` (the
+    default) leaves the catalogue unrestricted, which is how export cables
+    keep today's behaviour.
+    """
     usable = [
         c for c in candidates
         if c.rated_current_a is not None and c.cross_section_mm2 is not None
+        and (max_cross_section_mm2 is None or c.cross_section_mm2 <= max_cross_section_mm2 + 1e-9)
     ]
     if not usable:
         raise ValueError(
@@ -120,10 +128,15 @@ def select_cable(
             )
 
     budget = "—" if max_loss_percent is None else f"{max_loss_percent:.2f}%"
+    cross_section_note = (
+        "" if max_cross_section_mm2 is None
+        else f", up to {max_cross_section_mm2:g} mm^2"
+    )
     raise ValueError(
         f"No cable can carry {i_total:,.0f} A at {v_kv} kV over {length_km*1000:,.0f} m "
         f"within {max_utilization*100:.0f}% ampacity and a {budget} loss budget "
-        f"(up to {max_parallel} parallel circuits). Add larger cables or relax limits."
+        f"(up to {max_parallel} parallel circuits{cross_section_note}). Add larger "
+        "cables or relax limits."
     )
 
 

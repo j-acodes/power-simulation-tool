@@ -112,10 +112,11 @@ export function convertDiagramTechnology(diagram: Diagram, from: Technology, to:
 
   // Narrowing: the departing fleet is whichever of pv/bess `to` isn't.
   const departing: FleetKind = to === 'pv' ? 'bess' : 'pv'
-  const busbar = diagram.nodes.find((n) => n.kind === 'busbar' && busbarSlot(diagram, n.id) === departing)
+  // A fleet may have several busbars (ADR-0007) — every one of them departs.
+  const busbars = diagram.nodes.filter((n) => n.kind === 'busbar' && busbarSlot(diagram, n.id) === departing)
 
   const removed = new Set<string>()
-  if (busbar) {
+  for (const busbar of busbars) {
     removed.add(busbar.id)
     for (const id of stationsUnderBusbar(diagram, busbar.id)) removed.add(id)
     for (const id of auxUnderBusbar(diagram, busbar.id)) removed.add(id)

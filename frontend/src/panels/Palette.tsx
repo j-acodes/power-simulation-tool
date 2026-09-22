@@ -3,7 +3,6 @@ import { CollapsiblePanel } from './CollapsiblePanel'
 import { useCatalogue } from '../hooks/useCatalogue'
 import { useStore } from '../store'
 import type { DiagramNode, NodeKind } from '../types'
-import { takenBusbarSlots } from '../canvas/connect'
 import type { PaletteDropPayload } from '../canvas/Editor'
 import { permitsFleetKind } from '../technology'
 import { groupByBrand } from '../catalogueGrouping'
@@ -63,11 +62,6 @@ export function Palette() {
   const technology = useStore((s) => s.designMeta?.technology)
   const nodes = diagram.nodes
   const hasPoc = nodes.some((n) => n.kind === 'poc')
-  // One busbar per fleet kind, read the way the server reads it: an existing
-  // busbar counts against the fleet its stations put it in, and an undecided
-  // one counts as PV — see busbarSlot. Offering a kind the server would reject
-  // is the bug this ticket exists to close.
-  const taken = takenBusbarSlots(diagram)
   const showsPv = permitsFleetKind(technology, 'pv')
   const showsBess = permitsFleetKind(technology, 'bess')
 
@@ -82,8 +76,8 @@ export function Palette() {
       <div className="palette-section">
         <h3>Topology</h3>
         {!hasPoc && <Item label="Point of Connection" kind="poc" props={{ p_target_mw: 10, pf: 0.95 }} />}
-        {showsPv && !taken.has('pv') && <Item label="MV busbar — PV" kind="busbar" props={{ fleet_kind: 'pv' }} />}
-        {showsBess && !taken.has('bess') && <Item label="MV busbar — BESS" kind="busbar" props={{ fleet_kind: 'bess' }} />}
+        {showsPv && <Item label="MV busbar — PV" kind="busbar" props={{ fleet_kind: 'pv' }} />}
+        {showsBess && <Item label="MV busbar — BESS" kind="busbar" props={{ fleet_kind: 'bess' }} />}
         <Item label="MV/HV transformer" kind="hv_tx" props={{ mode: 'auto', n_parallel: 1 }} />
         <Item label="Aux load" kind="aux" props={{ p_kw: 50, q_kvar: 10 }} />
       </div>

@@ -46,7 +46,6 @@ export function SeedWizard({ onClose }: SeedWizardProps) {
   const [maxLoading, setMaxLoading] = useState(0)
   const [trunkM, setTrunkM] = useState(REFERENCE.trunk_m)
   const [spacingM, setSpacingM] = useState(REFERENCE.spacing_m)
-  const [maxCircuitCurrentA, setMaxCircuitCurrentA] = useState(0)
   const [auxPKw, setAuxPKw] = useState(REFERENCE.aux_p_kw)
   const [auxQKvar, setAuxQKvar] = useState(REFERENCE.aux_q_kvar)
 
@@ -80,7 +79,6 @@ export function SeedWizard({ onClose }: SeedWizardProps) {
     // oxlint-disable-next-line react/set-state-in-effect
     setVMvKv((v) => v || catalogue.defaults.tiers.mv_kv)
     setMaxLoading((v) => v || catalogue.defaults.rules.max_utilization)
-    setMaxCircuitCurrentA((v) => v || catalogue.defaults.rules.max_circuit_current_a)
   }, [catalogue])
 
   const submit = async (e: FormEvent) => {
@@ -101,7 +99,6 @@ export function SeedWizard({ onClose }: SeedWizardProps) {
         max_loading: maxLoading,
         trunk_m: trunkM,
         spacing_m: spacingM,
-        max_circuit_current_a: maxCircuitCurrentA,
         aux_p_kw: auxPKw,
         aux_q_kvar: auxQKvar,
       }
@@ -229,18 +226,6 @@ export function SeedWizard({ onClose }: SeedWizardProps) {
               <span>Max loading</span>
               <input type="number" step={0.01} min={0} max={1} value={maxLoading} onChange={(e) => setMaxLoading(e.target.valueAsNumber)} required />
             </label>
-            <label className="field">
-              <span>Max circuit {LABEL.currentA}</span>
-              <input
-                type="number"
-                step={1}
-                min={0}
-                value={maxCircuitCurrentA}
-                onChange={(e) => setMaxCircuitCurrentA(e.target.valueAsNumber)}
-                required
-              />
-            </label>
-
             <label className="field">
               <span>Trunk {LABEL.lengthM}</span>
               <input type="number" step={10} min={0} value={trunkM} onChange={(e) => setTrunkM(e.target.valueAsNumber)} required />

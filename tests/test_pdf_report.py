@@ -15,7 +15,7 @@ sys.path.insert(0, "tests")
 from backend.main import db                                  # noqa: E402
 from backend.solve import report_pdf, solve_architecture     # noqa: E402
 from powertool.components import conversion_label            # noqa: E402
-from powertool.graph import branches_summary, graph_to_inputs  # noqa: E402
+from powertool.graph import branches_summary, fallback_notices, graph_to_inputs  # noqa: E402
 from powertool.pdf_report import build_pdf_report, report_story  # noqa: E402
 
 from test_graph import _minimal                              # noqa: E402
@@ -50,7 +50,9 @@ def _story_text(diagram) -> str:
     stage1s, _layouts, arch = solve_architecture(inputs, db)
     fleets = branches_summary(inputs, arch, stage1s)
     story = report_story(stage1s, arch, fleets=fleets, plant_name="Test plant",
-                         when="2026-09-04 12:00")
+                         when="2026-09-04 12:00",
+                         feeders_per_busbar=inputs.feeders_per_busbar,
+                         notices=[n.message for n in fallback_notices(arch)])
     out = []
 
     def walk(flowables):
@@ -114,6 +116,78 @@ def test_the_two_fleets_of_a_hybrid_are_presented_distinctly():
     # Each fleet gets its own named section rather than one merged station table.
     assert "PV fleet" in text
     assert "BESS fleet" in text
+
+
+def test_the_report_states_the_feeders_per_busbar_limit():
+    # ADR-0007, ticket 06: the Stage-1 planning rule is carried through for
+    # display, default and overridden alike.
+    text = _story_text(_minimal())
+    assert "Feeders per busbar limit" in text
+    assert "12" in text
+
+    diagram = _minimal()
+    diagram["settings"]["rules"]["feeders_per_busbar"] = 6
+    text = _story_text(diagram)
+    assert "Feeders per busbar limit" in text
+    assert "6" in text
+
+
+def test_the_report_lists_the_sized_busbar_switchgear():
+    # ADR-0007: the busbar, export switchgear and each feeder, sized rating
+    # beside its current.
+    text = _story_text(_minimal())
+    assert "Busbar switchgear" in text
+    assert "Export switchgear" in text
+    assert "Circuit 1 feeder" in text
+    assert "630 A (sized)" in text
+
+
+def test_a_pinned_busbar_switchgear_rating_is_marked_pinned_not_sized():
+    # ADR-0007, ticket 04: a pinned rating is reported exactly as pinned, and
+    # the still-unpinned parts (export switchgear, the feeder) keep reading
+    # as sized.
+    diagram = _minimal()
+    diagram["nodes"][1]["props"]["busbar_switchgear_pin_a"] = 800.0
+    text = _story_text(diagram)
+    assert "800 A (pinned)" in text
+    assert "630 A (sized)" in text  # export switchgear and the feeder
+
+
+def test_the_report_names_the_circuits_binding_limit():
+    # Ticket 07: the default catalogue's station switchgear fallback binds,
+    # named beside the feeder row it decided the size of.
+    text = _story_text(_minimal())
+    assert "Binding limit" in text
+    assert "Station switchgear" in text
+
+
+def test_the_report_lists_each_stations_through_and_rated_current():
+    # Ticket 07: through current beside switchgear rated current, per station
+    # — a figure _transformer_rows aggregates away by model.
+    text = _story_text(_minimal())
+    assert "93 / 630 A" in text  # s1's through current (~92.9 A) / 630 A fallback
+
+
+def test_the_report_lists_every_fallback_notice():
+    # The default catalogue publishes neither switchgear rated current nor
+    # cable entry, so both fallbacks are used and both are stated.
+    text = _story_text(_minimal())
+    assert "Notices" in text
+    assert "No switchgear rated current is published" in text
+    assert "No cable entry is published" in text
+
+
+def test_the_report_shows_feeders_used_against_the_limit():
+    # Ticket 07: feeder count vs. the feeders-per-busbar rule, and the
+    # busbar's own current against the 4,000 A ladder top.
+    text = _story_text(_minimal())
+    assert "1 / 12" in text
+    assert "4,000 A" in text
+
+
+def test_a_busbar_switchgear_section_appears_for_each_fleet_of_a_hybrid():
+    text = _story_text(_hybrid_with_drawn_bess(p_target_bess_mw=2.0))
+    assert text.count("Busbar switchgear") >= 2
 
 
 def test_a_single_fleet_report_keeps_stage_2_as_one_table():

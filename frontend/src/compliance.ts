@@ -46,7 +46,7 @@ function fleetReasons(branch: BranchSummary): string[] {
  *   - power_balance_ok
  *   - every fleet within its own maximum loading (per-fleet, hard gate)
  *   - every BESS fleet delivering its required energy (per-fleet, hard gate)
- *   - every circuit within its current cap (all_current_ok)
+ *   - every station within its switchgear rated current (all_current_ok)
  *   - zero validation issues
  */
 export function evaluateCompliance(results: SolveResults, issues: Issue[]): ComplianceVerdict {
@@ -86,9 +86,7 @@ export function evaluateCompliance(results: SolveResults, issues: Issue[]): Comp
 
   if (!summary.all_current_ok) {
     reasons.push(
-      `A circuit exceeds its current cap — worst trunk current ` +
-        `${summary.worst_trunk_current_a.toFixed(0)} A vs. a ` +
-        `${summary.max_circuit_current_a.toFixed(0)} A limit.`,
+      'A station exceeds its switchgear rated current — see the warnings for which.',
     )
   }
 

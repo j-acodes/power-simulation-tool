@@ -264,10 +264,10 @@ def test_a_legacy_bess_plant_can_gain_a_pv_busbar():
     assert [i.code for i in validate_graph(diagram, db)] == []
 
 
-def test_two_undeclared_busbars_are_still_a_duplicate():
-    """The relaxation must not become "anything goes": two busbars that both
-    read as the same fleet are still a duplicate, whether declared or derived.
-    """
+def test_two_undeclared_busbars_of_the_same_fleet_are_both_accepted():
+    """Ticket 05 lifts the old duplicate_busbar rule entirely: two busbars
+    that both read as the same fleet (declared or derived) are two valid
+    busbars of that one fleet's branch, not a rejected drawing."""
     diagram = _minimal()
     diagram["nodes"] += [
         _node("bus2", "busbar"),
@@ -278,7 +278,7 @@ def test_two_undeclared_busbars_are_still_a_duplicate():
         _edge("e_t2", "bus2", "s2", length_m=700.0),
     ]
     issues = validate_graph(diagram, db)
-    assert "duplicate_busbar" in {i.code for i in issues}
+    assert "duplicate_busbar" not in {i.code for i in issues}
 
 
 # --- BESS sizing and compliance (ticket 07) ---------------------------------

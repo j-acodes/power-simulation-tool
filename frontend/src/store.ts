@@ -39,7 +39,6 @@ export const EMPTY_DIAGRAM: Diagram = {
       max_utilization: 0.8,
       collection_loss_pct: 1.3,
       export_loss_pct_per_km: 0.1,
-      max_circuit_current_a: 400.0,
     },
   },
   nodes: [],

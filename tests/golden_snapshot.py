@@ -75,7 +75,7 @@ def build_snapshot(db: ComponentDatabase) -> dict:
         req = dict(pf_target=0.95, v_mv_kv=20.0, station_model="SUNGROW_MVS4480",
                    pv_inverter="sungrow-sg350hx-20", inverter_count=14,
                    max_loading=0.9, trunk_m=400.0, spacing_m=120.0,
-                   max_circuit_current_a=400.0, aux_p_kw=250.0, aux_q_kvar=60.0, **extra)
+                   aux_p_kw=250.0, aux_q_kvar=60.0, **extra)
         diagram = seed_diagram(req, db)
         out[label] = {"diagram_nodes": len(diagram["nodes"]),
                       "solved": solve_diagram(diagram, db)}

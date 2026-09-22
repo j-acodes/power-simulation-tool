@@ -6,10 +6,11 @@ power never flows in a single feeder. This module performs Stage 2:
 
   1. Count the LV/MV transformers needed to carry the required inverter power
      (user-selected model and maximum loading factor).
-  2. Group them into MV collector circuits capped by a maximum current per
-     circuit. The per-station current is CALCULATED from the actual MV-side
-     power flow (LV share plus the transformer's own losses pushed through),
-     not assumed from the nameplate.
+  2. Group them into MV collector circuits bounded by each station's own
+     switchgear rated current (ADR-0006). The per-station current is
+     CALCULATED from the actual MV-side power flow (LV share plus the
+     transformer's own losses pushed through), not assumed from the
+     nameplate.
   3. (size_architecture, added in later steps) Size every daisy-chain cable
      segment separately for the cumulative power it actually carries, recompute
      the plant losses, and refine the inverter requirement.
@@ -22,11 +23,25 @@ convention of the Stage-1 solver is preserved throughout.
 from __future__ import annotations
 
 import math
-from dataclasses import dataclass, replace
+from dataclasses import dataclass, field, replace
 
 from .cable_sizing import CableSelection, select_cable
-from .components import DEFAULT_AMBIENT_C, Cable, Transformer, current_a
+from .components import (
+    BUSBAR_SWITCHGEAR_LADDER_A,
+    DEFAULT_AMBIENT_C,
+    DEFAULT_CABLE_ENTRY_CABLES_PER_PHASE,
+    DEFAULT_CABLE_ENTRY_MAX_CROSS_SECTION_MM2,
+    Cable,
+    Transformer,
+    current_a,
+)
 from .sizing import SizingResult, format_cable_label
+
+# Stage-1 planning's default feeders-per-busbar limit (ADR-0007) — how many
+# circuits a busbar opened here may carry before another is opened. Mirrors
+# powertool.graph.DEFAULT_RULES["feeders_per_busbar"]; kept as a separate
+# constant because this module does not depend on the diagram layer.
+DEFAULT_FEEDERS_PER_BUSBAR = 12
 
 
 class StationOverloadError(ValueError):
@@ -63,21 +78,30 @@ class PlantLayout:
     """The arrangement decisions for the plant, before any cable is sized.
 
     The fleet (transformer models and counts) comes from Stage 1; the tool no
-    longer invents a count. Stations are grouped into circuits respecting the
-    max current per circuit; within each circuit, position 0 is NEAREST the
-    substation and stations are ordered biggest-rating first — the trunk
-    carries everything regardless, and keeping the big stations close to the
-    busbar minimises the power flowing through the long tail segments (lowest
-    cable losses).
+    longer invents a count. Stations are grouped into circuits respecting each
+    station's own switchgear rated current (ADR-0006); within each circuit,
+    position 0 is NEAREST the substation and stations are ordered
+    biggest-rating first — the trunk carries everything regardless, and
+    keeping the big stations close to the busbar minimises the power flowing
+    through the long tail segments (lowest cable losses).
 
     Lengths apply to every circuit alike: ``trunk_length_km`` from the
     substation to the first station, ``spacing_km`` between consecutive
     stations (individual runs editable later via ``segment_lengths``).
+
+    ``busbar_groups`` (ADR-0007, ticket 06) partitions ``circuit_plans`` by
+    INDEX into the busbars Stage-1 planning would open: circuits fill a
+    busbar in the order ``circuit_plans`` already has them (heaviest first),
+    and another busbar opens when the next circuit would take the current
+    one's total past the top of ``BUSBAR_SWITCHGEAR_LADDER_A`` (4000 A) or
+    past ``feeders_per_busbar`` circuits already on it. :func:`arrange_plant`
+    computes this; :func:`arrange_plant_manual` never does — a drawn plant
+    keeps exactly the busbars it was drawn with, so its whole layout is one
+    group.
     """
 
     fleet: list[tuple[Transformer, int]]
     circuit_plans: list[list[StationPlan]]  # [circuit][position], 0 = nearest substation
-    max_circuit_current_a: float
     trunk_length_km: float
     spacing_km: float
     v_mv_kv: float
@@ -88,6 +112,7 @@ class PlantLayout:
     # rather than read from a global constant.
     ambient_c: float = DEFAULT_AMBIENT_C
     max_loading: float = 1.0
+    busbar_groups: list[list[int]] = field(default_factory=list)
 
     @property
     def n_transformers(self) -> int:
@@ -110,47 +135,140 @@ class PlantLayout:
         """e.g. ``"4 (5+5+4+4)"`` for quick display."""
         return f"{self.n_circuits} ({'+'.join(str(s) for s in self.circuit_sizes)})"
 
+    @property
+    def n_busbars(self) -> int:
+        return len(self.busbar_groups) if self.busbar_groups else 1
 
-def assign_circuits(i_stations: list[float], i_max_a: float) -> list[list[int]]:
-    """Group station indices into MV circuits respecting the current cap.
 
-    Fewest circuits first (searching up from the total-current lower bound),
-    then balanced: stations are placed biggest-current-first onto the
-    least-loaded circuit that still fits (LPT heuristic). With identical
-    stations this reproduces the balanced split (18 stations capped at 5 per
-    circuit -> sizes [5, 5, 4, 4]); with a mixed fleet it balances the circuit
-    currents.
+def group_circuits_into_busbars(
+    circuit_plans: list[list[StationPlan]],
+    v_mv_kv: float,
+    feeders_per_busbar: int = DEFAULT_FEEDERS_PER_BUSBAR,
+) -> list[list[int]]:
+    """Partition ``circuit_plans`` (already grouped and ordered by
+    :func:`arrange_plant`) into the busbars Stage-1 planning would open
+    (ADR-0007, ticket 06).
+
+    Circuits fill a busbar in ``circuit_plans``'s own order — never
+    reordered — and another busbar opens when the next circuit would take
+    the current one's total (P and Q summed, then converted to current —
+    the same net figure :class:`BusbarSection.busbar_current_a` sizes the
+    busbar and export switchgear on) past the top of
+    ``BUSBAR_SWITCHGEAR_LADDER_A`` (4000 A), or when the current busbar
+    already carries ``feeders_per_busbar`` circuits.
+
+    Auxiliary load is not available at Stage-1 planning time (it is a
+    per-busbar figure only known once a diagram is drawn — see CONTEXT.md's
+    "Auxiliary load" entry) so this estimate is the stations' own MV-side
+    output only, exactly what already drives circuit grouping above.
+    """
+    groups: list[list[int]] = [[]]
+    p_kw = q_kvar = 0.0
+    cap_a = BUSBAR_SWITCHGEAR_LADDER_A[-1]
+    for idx, circuit in enumerate(circuit_plans):
+        c_p = sum(p.p_mv_kw for p in circuit)
+        c_q = sum(p.q_mv_kvar for p in circuit)
+        group = groups[-1]
+        if group:
+            trial_a = current_a(math.hypot(p_kw + c_p, q_kvar + c_q), v_mv_kv)
+            if trial_a > cap_a + 1e-9 or len(group) >= feeders_per_busbar:
+                groups.append([])
+                p_kw = q_kvar = 0.0
+        groups[-1].append(idx)
+        p_kw += c_p
+        q_kvar += c_q
+    return groups
+
+
+def _cable_entry_ceiling_a(
+    candidates: list[Cable],
+    max_parallel: int,
+    max_cross_section_mm2: float,
+    max_utilization: float,
+) -> float:
+    """The highest current an admissible cable can carry within a cable entry
+    (ADR-0007): the best-ampacity candidate at or under the cross-section cap,
+    run at up to ``max_parallel`` circuits, each held to ``max_utilization``.
+
+    A pure ampacity ceiling — it ignores the loss budget, the same standing
+    as ``Transformer.switchgear_rated_current_a``. Cables still carry their
+    own utilization cap (ADR-0006's "no utilization factor" reasoning is
+    about switchgear, not cables). Returns 0.0 when nothing in the catalogue
+    fits the cross-section cap, so a caller comparing a station's own current
+    against this ceiling raises rather than silently passing.
+    """
+    usable = [
+        c for c in candidates
+        if c.rated_current_a is not None and c.cross_section_mm2 is not None
+        and c.cross_section_mm2 <= max_cross_section_mm2 + 1e-9
+    ]
+    if not usable:
+        return 0.0
+    return max(c.rated_current_a for c in usable) * max_utilization * max_parallel
+
+
+def assign_circuits(i_stations: list[float], i_ratings: list[float]) -> list[list[int]]:
+    """Group station indices into MV circuits, each bounded by the switchgear
+    rated current of the stations placed in it (ADR-0006), not by a flat cap.
+
+    Fewest circuits first (searching up from a lower bound), then balanced:
+    stations are placed biggest-current-first onto the least-loaded circuit
+    that still fits (LPT heuristic). A circuit's ceiling while packing is the
+    MINIMUM switchgear rating among the stations already in it, including the
+    candidate.
+
+    With identical stations this reproduces the balanced split (18 stations at
+    a 380 A rating -> sizes [5, 5, 4, 4]); with a mixed fleet it balances the
+    circuit currents within each circuit's own ceiling.
     """
     if not i_stations:
         raise ValueError("Need at least one station to arrange circuits")
+    if len(i_ratings) != len(i_stations):
+        raise ValueError("Need exactly one switchgear rating per station")
     if any(i <= 0 for i in i_stations):
         raise ValueError("Station currents must be positive")
-    worst = max(i_stations)
-    if worst > i_max_a + 1e-9:
-        raise ValueError(
-            f"One station alone draws {worst:,.0f} A, above the {i_max_a:,.0f} A "
-            f"circuit limit. Raise the max current per circuit or pick smaller "
-            f"transformers."
-        )
+    if any(r <= 0 for r in i_ratings):
+        raise ValueError("Switchgear ratings must be positive")
+    for idx, (current, rating) in enumerate(zip(i_stations, i_ratings)):
+        if current > rating + 1e-9:
+            raise ValueError(
+                f"Station {idx} alone draws {current:,.0f} A, above its own "
+                f"{rating:,.0f} A switchgear rated current. Pick a station with "
+                f"a higher-rated switchgear."
+            )
 
     order = sorted(range(len(i_stations)), key=lambda i: -i_stations[i])
-    lower = max(1, math.ceil(sum(i_stations) / i_max_a - 1e-9))
+    # A circuit's ceiling can never exceed the highest rating in the whole
+    # fleet (min of a subset <= max of the full set), so this bounds the
+    # circuit count the same way the flat-cap lower bound used to.
+    lower = max(1, math.ceil(sum(i_stations) / max(i_ratings) - 1e-9))
     for n_circuits in range(lower, len(i_stations) + 1):
         bins: list[list[int]] = [[] for _ in range(n_circuits)]
         loads = [0.0] * n_circuits
+        ceilings = [math.inf] * n_circuits
         feasible = True
         for idx in order:
-            fitting = [j for j in range(n_circuits)
-                       if loads[j] + i_stations[idx] <= i_max_a + 1e-9]
+            fitting = []
+            for j in range(n_circuits):
+                # ponytail: min(circuit ratings) is conservative for a
+                # mixed-rating circuit — a downstream station carries less than
+                # the circuit total, so its own rating alone could allow more.
+                # Pack per position if mixed-rating circuits ever need it.
+                ceiling = min(ceilings[j], i_ratings[idx])
+                if loads[j] + i_stations[idx] <= ceiling + 1e-9:
+                    fitting.append(j)
             if not fitting:
                 feasible = False
                 break
             j = min(fitting, key=lambda j: loads[j])
             bins[j].append(idx)
             loads[j] += i_stations[idx]
+            ceilings[j] = min(ceilings[j], i_ratings[idx])
         if feasible:
             return [b for b in bins if b]
-    raise AssertionError("unreachable: one station per circuit always fits the cap")
+    raise AssertionError(
+        "unreachable: one station per circuit always fits its own rating"
+    )
 
 
 def station_mv_output(
@@ -180,13 +298,15 @@ def arrange_plant(
     stage1: SizingResult,
     fleet: list[tuple[Transformer, int]],
     *,
-    max_circuit_current_a: float,
     trunk_length_km: float,
     spacing_km: float,
     v_mv_kv: float,
     max_loading: float = 1.0,
     kind: str = "pv",
     ambient_c: float = DEFAULT_AMBIENT_C,
+    cable_candidates: list[Cable] | None = None,
+    max_utilization: float = 0.80,
+    feeders_per_busbar: int = DEFAULT_FEEDERS_PER_BUSBAR,
 ) -> PlantLayout:
     """Arrange the Stage-1 station fleet into MV circuits.
 
@@ -194,12 +314,31 @@ def arrange_plant(
     Every station runs at the same per-unit loading r = S_inv / S_fleet, so its
     LV share of the inverter P and Q is proportional to its rating; its MV-side
     output (share minus its own transformer losses) sets its current, which
-    drives the circuit grouping. Within each circuit the biggest stations sit
-    nearest the substation (see PlantLayout). ``max_loading`` is a check
+    drives the circuit grouping — each circuit bounded by the switchgear
+    rated current of the stations placed in it (ADR-0006), not a flat cap.
+    Within each circuit the biggest stations sit nearest the substation (see
+    PlantLayout). ``max_loading`` is a check
     threshold only: the layout is still produced when exceeded, with
     ``loading_ok = False`` so the caller can warn. ``kind`` (fleet kind, "pv"
     or "bess") is stamped on every station plan built here — see
     ``StationPlan.kind``.
+
+    ``cable_candidates``, when given and non-empty, also bounds circuit
+    grouping by each station's own cable entry (ADR-0007): a station whose
+    own current alone cannot be carried within its own cable entry raises,
+    and every circuit's ceiling additionally respects the tightest of the
+    switchgear rating, the station's own cable entry, and the FIXED busbar-end
+    cable entry (the trunk's other end, which always falls back — no busbar
+    switchgear is sized/published yet) so Stage-1 planning never groups a
+    circuit no cable could serve. Omitted, or an empty list (no MV cable
+    catalogue available for this voltage yet), skips this entirely — grouping
+    considers switchgear only.
+
+    ``feeders_per_busbar`` additionally partitions the resulting circuits
+    into the busbars Stage-1 planning would open (see
+    :func:`group_circuits_into_busbars` and ``PlantLayout.busbar_groups``):
+    another busbar opens when the next circuit would take the current one's
+    total past 4000 A or past this many circuits.
     """
     if trunk_length_km < 0 or spacing_km < 0:
         raise ValueError("Lengths must be non-negative")
@@ -232,7 +371,40 @@ def arrange_plant(
         )
         plans.extend([plan] * count)  # identical figures for every unit of a model
 
-    bins = assign_circuits([p.i_a for p in plans], max_circuit_current_a)
+    switchgear_ratings = [p.transformer.switchgear_rated_current_a for p in plans]
+    if cable_candidates:  # None or [] (no catalogue yet) both skip this
+        cable_ceilings = [
+            _cable_entry_ceiling_a(
+                cable_candidates, p.transformer.cable_entry_parallel_limit,
+                p.transformer.cable_entry_cross_section_limit_mm2, max_utilization,
+            )
+            for p in plans
+        ]
+        for plan, ceiling in zip(plans, cable_ceilings):
+            if plan.i_a > ceiling + 1e-9:
+                tx = plan.transformer
+                raise ValueError(
+                    f"Station transformer {tx.display_name} draws {plan.i_a:,.0f} A "
+                    f"on its own MV current, above the {ceiling:,.0f} A its own "
+                    f"{tx.cable_entry_parallel_limit} x "
+                    f"{tx.cable_entry_cross_section_limit_mm2:g} mm^2 cable entry "
+                    f"can carry. Pick a station with a larger cable entry."
+                )
+        # The trunk's OTHER end is always the busbar, which has no station to
+        # publish a cable entry — it counts as the engine's fixed fallback
+        # regardless of what this station itself publishes (ADR-0007), so
+        # grouping must respect it even for a station with a generous entry.
+        busbar_ceiling = _cable_entry_ceiling_a(
+            cable_candidates, DEFAULT_CABLE_ENTRY_CABLES_PER_PHASE,
+            DEFAULT_CABLE_ENTRY_MAX_CROSS_SECTION_MM2, max_utilization,
+        )
+        circuit_ratings = [
+            min(sw, c, busbar_ceiling) for sw, c in zip(switchgear_ratings, cable_ceilings)
+        ]
+    else:
+        circuit_ratings = switchgear_ratings
+
+    bins = assign_circuits([p.i_a for p in plans], circuit_ratings)
     circuit_plans = [
         sorted((plans[i] for i in b), key=lambda p: -p.transformer.rating_at(ambient_c))
         for b in bins
@@ -243,7 +415,6 @@ def arrange_plant(
     return PlantLayout(
         fleet=fleet,
         circuit_plans=circuit_plans,
-        max_circuit_current_a=max_circuit_current_a,
         trunk_length_km=trunk_length_km,
         spacing_km=spacing_km,
         v_mv_kv=v_mv_kv,
@@ -251,6 +422,9 @@ def arrange_plant(
         loading_ok=loading <= max_loading + 1e-9,
         ambient_c=ambient_c,
         max_loading=max_loading,
+        busbar_groups=group_circuits_into_busbars(
+            circuit_plans, v_mv_kv, feeders_per_busbar
+        ),
     )
 
 
@@ -258,7 +432,6 @@ def arrange_plant_manual(
     stage1: SizingResult,
     circuits: list[list[Transformer]],
     *,
-    max_circuit_current_a: float,
     v_mv_kv: float,
     max_loading: float = 1.0,
     kind: str = "pv",
@@ -288,10 +461,13 @@ def arrange_plant_manual(
     at ambient for transitional diagram contracts; a positive value makes that
     station use explicit conversion capacity.
 
-    Nothing raises when the drawing exceeds a limit: a circuit above the current
-    cap is flagged downstream by ``CircuitResult.current_ok`` and an undersized
-    fleet by ``loading_ok``. ``max_loading`` is a check threshold only, exactly
-    as in :func:`arrange_plant`.
+    Nothing raises when the drawing exceeds a limit: a station carrying more
+    than its own switchgear rated current in through current is flagged
+    downstream (``StationResult.through_current_a`` vs.
+    ``Transformer.switchgear_rated_current_a`` — see ``powertool.graph``'s
+    ``switchgear_through_current_exceeded`` warning) and an undersized fleet
+    by ``loading_ok``. ``max_loading`` is a check threshold only, exactly as
+    in :func:`arrange_plant`.
 
     ``trunk_length_km`` / ``spacing_km`` are meaningless for a drawn plant (each
     run has its own length) and are set to a 1.0 km PLACEHOLDER. Callers must
@@ -380,7 +556,6 @@ def arrange_plant_manual(
     return PlantLayout(
         fleet=fleet,
         circuit_plans=circuit_plans,
-        max_circuit_current_a=max_circuit_current_a,
         trunk_length_km=1.0,  # placeholder: drawn plants pass segment_lengths
         spacing_km=1.0,
         v_mv_kv=v_mv_kv,
@@ -391,6 +566,11 @@ def arrange_plant_manual(
         ),
         ambient_c=ambient_c,
         max_loading=max_loading,
+        # A drawn plant keeps exactly the busbars it was drawn with — see
+        # PlantLayout.busbar_groups. This layout's own busbar partitioning
+        # comes from the diagram itself (BusbarSection.circuit_indices, built
+        # by the caller), never from this function.
+        busbar_groups=[list(range(len(circuit_plans)))],
     )
 
 
@@ -415,6 +595,11 @@ class StationResult:
     # resolved at the ambient the design asked for. Naming a temperature here would
     # be a lie the moment the ambient setting can be anything but 40 °C.
     s_rated_kva: float
+    # This station's own switchgear rated current, read straight off the
+    # transformer (ADR-0006's 630 A fallback already resolved). Carried here
+    # so the binding-limit rule and the results/PDF display never need the
+    # StationPlan this StationResult was built from.
+    switchgear_rated_current_a: float
     model: str  # display label, e.g. "3300 kVA - Huawei"
     v_lv_kv: float  # the station's own transformer LV rating
     kind: str = "pv"  # fleet kind ("pv" or "bess"); see powertool.graph
@@ -449,6 +634,13 @@ class SegmentResult:
     dp_kw: float
     dq_series_kvar: float
     q_charging_kvar: float
+    # The highest current an admissible cable within THIS segment's own
+    # cable entry could carry (``_cable_entry_ceiling_a``), for the
+    # binding-limit rule (ADR-0007, ticket 07). None for an export span, and
+    # for a circuit segment whose candidate catalogue is empty (pending) —
+    # that segment then contributes no cable-entry headroom, rather than a
+    # false zero.
+    cable_entry_ceiling_a: float | None = None
 
 
 @dataclass
@@ -460,7 +652,6 @@ class CircuitResult:
     stations: list[StationResult]
     segments: list[SegmentResult]  # same order as stations; index 1 = trunk
     i_trunk_a: float  # current entering the trunk (the circuit's maximum)
-    current_ok: bool  # i_trunk_a <= the layout's max circuit current
     p_busbar_kw: float
     q_busbar_kvar: float
 
@@ -471,6 +662,64 @@ class CircuitResult:
     @property
     def dp_transformers_kw(self) -> float:
         return sum(s.dp_tx_kw for s in self.stations)
+
+
+# The three things that can decide a circuit's size (ADR-0006, ADR-0007,
+# ticket 07's owner decision). Feeders-per-busbar is deliberately absent:
+# ticket 06 opens another busbar instead of enlarging a circuit, so the
+# feeder count never binds a circuit.
+BindingLimit = str  # one of "station_switchgear", "cable_entry", "feeder"
+
+_BINDING_LIMIT_TIEBREAK = ("station_switchgear", "cable_entry", "feeder")
+
+
+def circuit_binding_limit(
+    circuit: CircuitResult, feeder_pin_a: float | None = None,
+) -> BindingLimit:
+    """The equipment that decided this circuit's size: whichever of its
+    station switchgear, cable entry, or feeder has the LEAST headroom in
+    amperes (ticket 07's owner decision).
+
+    - station switchgear: min over the circuit's stations of (that station's
+      own switchgear rated current minus its through current).
+    - cable entry: min over the circuit's segments of (that segment's own
+      cable-entry ceiling minus the current it carries — the through current
+      of the station at its matching position; ``segments`` and ``stations``
+      share one order, see :class:`CircuitResult`). A segment whose ceiling
+      is unknown (catalogue pending, ``cable_entry_ceiling_a`` is None)
+      contributes no headroom rather than a false one.
+    - feeder: (``feeder_pin_a`` if the engineer pinned it, else the top of
+      ``BUSBAR_SWITCHGEAR_LADDER_A``) minus the circuit's head current.
+
+    Ties break station switchgear, then cable entry, then feeder — a fixed
+    order rather than an arbitrary numeric tiebreak. One rule for a Stage-1
+    planned circuit and a drawn one alike, because the solve cannot tell them
+    apart (ticket 07's owner decision): on a Stage-1 circuit this is in fact
+    the limit that decided its size, since every station in it is the same
+    model.
+    """
+    station_headroom = min(
+        st.switchgear_rated_current_a - st.through_current_a
+        for st in circuit.stations
+    )
+    cable_headrooms = [
+        seg.cable_entry_ceiling_a - st.through_current_a
+        for seg, st in zip(circuit.segments, circuit.stations)
+        if seg.cable_entry_ceiling_a is not None
+    ]
+    feeder_rating_a = (
+        feeder_pin_a if feeder_pin_a is not None else BUSBAR_SWITCHGEAR_LADDER_A[-1]
+    )
+    feeder_headroom = feeder_rating_a - circuit.i_trunk_a
+
+    candidates: list[tuple[float, str]] = [(station_headroom, "station_switchgear")]
+    if cable_headrooms:
+        candidates.append((min(cable_headrooms), "cable_entry"))
+    candidates.append((feeder_headroom, "feeder"))
+
+    order = {name: i for i, name in enumerate(_BINDING_LIMIT_TIEBREAK)}
+    candidates.sort(key=lambda pair: (pair[0], order[pair[1]]))
+    return candidates[0][1]
 
 
 def size_circuits(
@@ -510,6 +759,15 @@ def size_circuits(
     so the MV-side PF is worse than at the inverter terminals). Worst-case
     reactive convention preserved: cable charging is recorded per segment but
     never netted against the series reactive.
+
+    Every segment is additionally bound by the cable entry (ADR-0007) of its
+    two ends — the lesser cables-per-phase and the lesser maximum
+    cross-section win; the busbar end of the trunk segment counts as the
+    engine's cable-entry fallback. A non-forced segment that no admissible
+    cable fits within that bound is recorded with ``selection=None`` and a
+    descriptive ``cable_label``, zero losses, and the circuit still solves —
+    the caller flags it at that segment's edge. A forced segment keeps
+    raising, as before.
     """
     if segment_lengths:
         for key, value in segment_lengths.items():
@@ -536,6 +794,30 @@ def size_circuits(
                     f"catalogue entry is self-contradictory — fix the datasheet or "
                     f"choose a different station."
                 )
+        # Same standing, for cable entry (ADR-0007): a station whose own
+        # current alone cannot be carried within its own cable entry is a
+        # hard error too, checked against the full catalogue (not yet bound
+        # by a neighbour — that per-segment narrowing happens below). Skipped
+        # when the catalogue itself is empty (no MV cables for this voltage
+        # yet) — that is a different problem, and the segment walk below
+        # already surfaces it through select_cable's own "no usable cables"
+        # error rather than this cable-entry-specific one.
+        if cable_candidates:
+            for plan in plans:
+                tx = plan.transformer
+                ceiling = _cable_entry_ceiling_a(
+                    cable_candidates, tx.cable_entry_parallel_limit,
+                    tx.cable_entry_cross_section_limit_mm2, max_utilization,
+                )
+                if plan.i_a > ceiling + 1e-9:
+                    raise ValueError(
+                        f"Station transformer {tx.display_name} draws {plan.i_a:,.0f} A "
+                        f"on its own MV current in circuit {c_idx}; its own "
+                        f"{tx.cable_entry_parallel_limit} x "
+                        f"{tx.cable_entry_cross_section_limit_mm2:g} mm^2 cable entry "
+                        f"admits no catalogue cable able to carry it. Pick a station "
+                        f"with a larger cable entry or add larger cables."
+                    )
         stations = [
             StationResult(
                 index=k,
@@ -549,6 +831,7 @@ def size_circuits(
                 s_mv_kva=plan.s_mv_kva,
                 loading=plan.loading,
                 s_rated_kva=plan.transformer.rating_at(layout.ambient_c),
+                switchgear_rated_current_a=plan.transformer.switchgear_rated_current_a,
                 model=plan.transformer.display_name,
                 v_lv_kv=plan.v_lv_kv,
                 kind=plan.kind,
@@ -577,25 +860,83 @@ def size_circuits(
                 length_km = segment_lengths.get((c_idx, k), length_km)
 
             candidates = cable_candidates
-            if segment_candidates:
-                candidates = segment_candidates.get((c_idx, k), cable_candidates)
+            is_forced = False
+            if segment_candidates and (c_idx, k) in segment_candidates:
+                candidates = segment_candidates[(c_idx, k)]
+                is_forced = True
 
-            sel = select_cable(
-                candidates, s, layout.v_mv_kv, length_km, cos_phi, sin_phi,
-                max_utilization=max_utilization,
-                max_loss_percent=(max_loss_percent_base
-                                  + max_loss_percent_per_km * length_km),
-                max_vdrop_percent=max_vdrop_percent,
-                max_parallel=max_parallel,
+            # A circuit cable must fit the stricter cable entry of its two
+            # ends (ADR-0007): the parallel-run limit is the lesser
+            # cables-per-phase and the cross-section cap is the lesser
+            # maximum of the two. The other end is the ADJACENT station on
+            # the substation side — station k - 1, i.e. plans[k - 2] 0-based —
+            # or, for the trunk (k == 1), the busbar itself, which has no
+            # station to publish a figure, so it counts as the same engine
+            # fallback (see components.py).
+            other_tx = plans[k - 2].transformer if k > 1 else None
+            seg_max_parallel = min(
+                max_parallel,
+                plans[k - 1].transformer.cable_entry_parallel_limit,
+                other_tx.cable_entry_parallel_limit if other_tx is not None
+                else DEFAULT_CABLE_ENTRY_CABLES_PER_PHASE,
+            )
+            seg_max_cross_section = min(
+                plans[k - 1].transformer.cable_entry_cross_section_limit_mm2,
+                other_tx.cable_entry_cross_section_limit_mm2 if other_tx is not None
+                else DEFAULT_CABLE_ENTRY_MAX_CROSS_SECTION_MM2,
+            )
+            # Cached for the binding-limit rule (ADR-0007, ticket 07), using
+            # the SAME per-segment bound just computed above — never a second
+            # notion of this segment's cable entry. None when the catalogue
+            # offered here is empty (pending): that segment then contributes
+            # no cable-entry headroom rather than a false zero.
+            cable_entry_ceiling_a = (
+                _cable_entry_ceiling_a(candidates, seg_max_parallel,
+                                       seg_max_cross_section, max_utilization)
+                if candidates else None
             )
 
-            # Same 1/n arithmetic as the Stage-1 solver (sizing._cable_contribution):
-            # n parallel circuits share the current, so series losses scale as 1/n
-            # while charging scales as n.
-            dp, dq_series = sel.cable.series_losses(s, layout.v_mv_kv, length_km)
-            dp /= sel.n_parallel
-            dq_series /= sel.n_parallel
-            q_charging = sel.cable.charging_kvar(layout.v_mv_kv, length_km) * sel.n_parallel
+            try:
+                sel = select_cable(
+                    candidates, s, layout.v_mv_kv, length_km, cos_phi, sin_phi,
+                    max_utilization=max_utilization,
+                    max_loss_percent=(max_loss_percent_base
+                                      + max_loss_percent_per_km * length_km),
+                    max_vdrop_percent=max_vdrop_percent,
+                    max_parallel=seg_max_parallel,
+                    max_cross_section_mm2=seg_max_cross_section,
+                )
+            except ValueError:
+                # A forced section (the engineer picked the cable) is NEVER
+                # silently replaced — the existing contract. An empty
+                # candidate list is a different problem (no MV cable
+                # catalogue for this voltage at all) and keeps raising
+                # select_cable's own "no usable cables" error — that is not
+                # what the cable-entry bound is for. Only an auto-selected
+                # segment with a real, non-empty catalogue but no admissible
+                # cable within the bound still solves: it is recorded unsized
+                # and flagged at its edge (ADR-0007) — the engineer needs to
+                # see where to split it.
+                if is_forced or not candidates:
+                    raise
+                sel = None
+
+            if sel is not None:
+                # Same 1/n arithmetic as the Stage-1 solver
+                # (sizing._cable_contribution): n parallel circuits share the
+                # current, so series losses scale as 1/n while charging scales
+                # as n.
+                dp, dq_series = sel.cable.series_losses(s, layout.v_mv_kv, length_km)
+                dp /= sel.n_parallel
+                dq_series /= sel.n_parallel
+                q_charging = sel.cable.charging_kvar(layout.v_mv_kv, length_km) * sel.n_parallel
+                cable_label = format_cable_label(sel.cable, sel.n_parallel)
+            else:
+                dp = dq_series = q_charging = 0.0
+                cable_label = (
+                    f"No cable fits the {seg_max_parallel} x "
+                    f"{seg_max_cross_section:g} mm^2 cable entry for {s:,.0f} kVA"
+                )
 
             segments.append(
                 SegmentResult(
@@ -605,10 +946,11 @@ def size_circuits(
                     q_kvar=q,
                     s_kva=s,
                     selection=sel,
-                    cable_label=format_cable_label(sel.cable, sel.n_parallel),
+                    cable_label=cable_label,
                     dp_kw=dp,
                     dq_series_kvar=dq_series,
                     q_charging_kvar=q_charging,
+                    cable_entry_ceiling_a=cable_entry_ceiling_a,
                 )
             )
             if k == 1:
@@ -625,7 +967,6 @@ def size_circuits(
                 stations=stations,
                 segments=segments,
                 i_trunk_a=i_trunk_a,
-                current_ok=i_trunk_a <= layout.max_circuit_current_a + 1e-9,
                 p_busbar_kw=p,
                 q_busbar_kvar=q,
             )
@@ -669,35 +1010,35 @@ def auto_hv_transformer(s_kva: float, v_hv_kv: float, v_mv_kv: float) -> Transfo
 
 
 @dataclass
-class BranchArchitecture:
-    """One branch's (one fleet's) sized MV circuits and its busbar totals,
-    before the shared plant-level export step.
+class BusbarSection:
+    """One busbar's own slice of its fleet's branch: the circuits drawn from
+    THAT busbar, its own auxiliary load, and (when applicable) its own MV
+    export cable and switchgear pins (ticket 05: a fleet's branch may hold
+    more than one busbar in parallel, each independently sized).
 
-    ``p_busbar_kw`` / ``q_busbar_kvar`` are what this branch contributes to
-    the shared MV/HV bus: every circuit's delivery to the busbar, less this
-    branch's own auxiliary load (auxiliary load is a per-busbar figure — see
-    the Auxiliary load entry in CONTEXT.md — so it is taken out here, at the
-    branch level, never inflating a station's own sizing).
+    Used both as the INPUT spec passed to :func:`size_branch` (``busbar_id``,
+    ``circuit_indices`` — 1-based, into the branch's own circuit numbering —
+    ``aux_p_kw``/``aux_q_kvar``, the export fields) and as the OUTPUT holder
+    it fills in (``circuits``, ``v_mv_kv``, ``mv_export``).
+
+    ``p_busbar_kw`` / ``q_busbar_kvar`` are what THIS busbar contributes:
+    every one of its own circuits' delivery, less its own auxiliary load
+    (auxiliary load is a per-busbar figure — see the Auxiliary load entry in
+    CONTEXT.md — taken out here, never inflating a station's own sizing).
     """
 
-    layout: PlantLayout
-    circuits: list[CircuitResult]
-    aux_p_kw: float
-    aux_q_kvar: float
-    segment_lengths: dict[tuple[int, int], float] | None = None
-    segment_candidates: dict[tuple[int, int], list[Cable]] | None = None
-    cable_candidates: list[Cable] | None = None
-    max_utilization: float = 0.80
-    max_loss_percent_base: float = 1.30
-    max_loss_percent_per_km: float = 0.0
-    max_vdrop_percent: float | None = None
-    max_parallel: int = 12
+    busbar_id: str
+    circuit_indices: list[int] = field(default_factory=list)
+    aux_p_kw: float = 0.0
+    aux_q_kvar: float = 0.0
     export_edge_id: str | None = None
     export_length_km: float = 0.0
     export_candidates: list[Cable] | None = None
-    mv_export: SegmentResult | None = None
     export_forced: bool = False
-    export_loss_percent_per_km: float = 0.1
+    # Filled by size_branch:
+    circuits: list[CircuitResult] = field(default_factory=list)
+    v_mv_kv: float = 0.0
+    mv_export: SegmentResult | None = None
 
     @property
     def p_busbar_kw(self) -> float:
@@ -706,6 +1047,56 @@ class BranchArchitecture:
     @property
     def q_busbar_kvar(self) -> float:
         return sum(c.q_busbar_kvar for c in self.circuits) - self.aux_q_kvar
+
+    @property
+    def busbar_current_a(self) -> float:
+        """This busbar's net current, auxiliary load included — what the
+        busbar and export switchgear are sized on (ADR-0007), the same net S
+        the MV export cable is sized on."""
+        return current_a(math.hypot(self.p_busbar_kw, self.q_busbar_kvar),
+                         self.v_mv_kv)
+
+
+@dataclass
+class BranchArchitecture:
+    """One branch's (one fleet's) sized MV circuits and its busbar totals,
+    before the shared plant-level export step.
+
+    A fleet's circuits are partitioned into ``sections``, one per drawn
+    busbar (ticket 05) — ``p_busbar_kw`` / ``q_busbar_kvar`` / ``aux_p_kw`` /
+    ``aux_q_kvar`` are sums over those sections, in busbar-drawn order, so a
+    single-busbar fleet (one section covering every circuit) computes exactly
+    as it always has.
+    """
+
+    layout: PlantLayout
+    circuits: list[CircuitResult]
+    sections: list[BusbarSection]
+    segment_lengths: dict[tuple[int, int], float] | None = None
+    segment_candidates: dict[tuple[int, int], list[Cable]] | None = None
+    cable_candidates: list[Cable] | None = None
+    max_utilization: float = 0.80
+    max_loss_percent_base: float = 1.30
+    max_loss_percent_per_km: float = 0.0
+    max_vdrop_percent: float | None = None
+    max_parallel: int = 12
+    export_loss_percent_per_km: float = 0.1
+
+    @property
+    def aux_p_kw(self) -> float:
+        return sum(s.aux_p_kw for s in self.sections)
+
+    @property
+    def aux_q_kvar(self) -> float:
+        return sum(s.aux_q_kvar for s in self.sections)
+
+    @property
+    def p_busbar_kw(self) -> float:
+        return sum(s.p_busbar_kw for s in self.sections)
+
+    @property
+    def q_busbar_kvar(self) -> float:
+        return sum(s.q_busbar_kvar for s in self.sections)
 
 
 def size_branch(
@@ -726,11 +1117,19 @@ def size_branch(
     export_candidates: list[Cable] | None = None,
     export_loss_percent_per_km: float = 0.1,
     export_forced: bool = False,
+    sections: list[BusbarSection] | None = None,
 ) -> BranchArchitecture:
     """Size one branch's (one fleet's) MV circuits — the per-branch half of
     Stage 2. See :func:`size_plant` for the plant-level half that sizes the
     shared HV transformer and export cable once, on the combined result of
     every branch.
+
+    ``sections`` (ticket 05) carries one :class:`BusbarSection` spec per drawn
+    busbar of this fleet, partitioning ``circuits`` by ``circuit_indices``; a
+    caller with no ``sections`` gets the pre-ticket-05 behaviour — ONE
+    implicit section covering every circuit, built from the scalar
+    ``aux_p_kw``/``export_*`` arguments — so every existing single-busbar
+    caller (and the golden baseline) is untouched.
     """
     circuits = size_circuits(
         layout,
@@ -743,11 +1142,70 @@ def size_branch(
         segment_lengths=segment_lengths,
         segment_candidates=segment_candidates,
     )
-    branch = BranchArchitecture(
+    specs = sections if sections is not None else [
+        BusbarSection(
+            busbar_id="",
+            circuit_indices=[c.index for c in circuits],
+            aux_p_kw=aux_p_kw,
+            aux_q_kvar=aux_q_kvar,
+            export_edge_id=export_edge_id,
+            export_length_km=export_length_km,
+            export_candidates=export_candidates,
+            export_forced=export_forced,
+        )
+    ]
+    by_index = {c.index: c for c in circuits}
+    built_sections: list[BusbarSection] = []
+    for spec in specs:
+        section = BusbarSection(
+            busbar_id=spec.busbar_id,
+            circuit_indices=list(spec.circuit_indices),
+            aux_p_kw=spec.aux_p_kw,
+            aux_q_kvar=spec.aux_q_kvar,
+            export_edge_id=spec.export_edge_id,
+            export_length_km=spec.export_length_km,
+            export_candidates=spec.export_candidates,
+            export_forced=spec.export_forced,
+            circuits=[by_index[i] for i in spec.circuit_indices],
+            v_mv_kv=layout.v_mv_kv,
+        )
+        if section.export_length_km > 0:
+            s = math.hypot(section.p_busbar_kw, section.q_busbar_kvar)
+            candidates = section.export_candidates or []
+            if candidates:
+                cos_phi = section.p_busbar_kw / s if s > 0 else 1.0
+                sin_phi = section.q_busbar_kvar / s if s > 0 else 0.0
+                sel = select_cable(
+                    candidates, s, layout.v_mv_kv, section.export_length_km,
+                    cos_phi, sin_phi,
+                    max_utilization=max_utilization,
+                    max_loss_percent=export_loss_percent_per_km * section.export_length_km,
+                    max_vdrop_percent=max_vdrop_percent,
+                    max_parallel=max_parallel,
+                )
+                dp, dq = sel.cable.series_losses(s, layout.v_mv_kv, section.export_length_km)
+                dp /= sel.n_parallel
+                dq /= sel.n_parallel
+                section.mv_export = SegmentResult(
+                    index=0, length_km=section.export_length_km,
+                    p_kw=section.p_busbar_kw, q_kvar=section.q_busbar_kvar, s_kva=s,
+                    selection=sel, cable_label=format_cable_label(sel.cable, sel.n_parallel),
+                    dp_kw=dp, dq_series_kvar=dq,
+                    q_charging_kvar=sel.cable.charging_kvar(layout.v_mv_kv, section.export_length_km)
+                                      * sel.n_parallel,
+                )
+            else:
+                section.mv_export = SegmentResult(
+                    index=0, length_km=section.export_length_km,
+                    p_kw=section.p_busbar_kw, q_kvar=section.q_busbar_kvar, s_kva=s,
+                    selection=None, cable_label="MV export cable (not sized — catalogue pending)",
+                    dp_kw=0.0, dq_series_kvar=0.0, q_charging_kvar=0.0,
+                )
+        built_sections.append(section)
+    return BranchArchitecture(
         layout=layout,
         circuits=circuits,
-        aux_p_kw=aux_p_kw,
-        aux_q_kvar=aux_q_kvar,
+        sections=built_sections,
         segment_lengths=segment_lengths,
         segment_candidates=segment_candidates,
         cable_candidates=cable_candidates,
@@ -756,44 +1214,8 @@ def size_branch(
         max_loss_percent_per_km=max_loss_percent_per_km,
         max_vdrop_percent=max_vdrop_percent,
         max_parallel=max_parallel,
-        export_edge_id=export_edge_id,
-        export_length_km=export_length_km,
-        export_candidates=export_candidates,
         export_loss_percent_per_km=export_loss_percent_per_km,
-        export_forced=export_forced,
     )
-    if export_length_km > 0:
-        s = math.hypot(branch.p_busbar_kw, branch.q_busbar_kvar)
-        candidates = export_candidates or []
-        if candidates:
-            cos_phi = branch.p_busbar_kw / s if s > 0 else 1.0
-            sin_phi = branch.q_busbar_kvar / s if s > 0 else 0.0
-            sel = select_cable(
-                candidates, s, layout.v_mv_kv, export_length_km, cos_phi, sin_phi,
-                max_utilization=max_utilization,
-                max_loss_percent=export_loss_percent_per_km * export_length_km,
-                max_vdrop_percent=max_vdrop_percent,
-                max_parallel=max_parallel,
-            )
-            dp, dq = sel.cable.series_losses(s, layout.v_mv_kv, export_length_km)
-            dp /= sel.n_parallel
-            dq /= sel.n_parallel
-            branch.mv_export = SegmentResult(
-                index=0, length_km=export_length_km,
-                p_kw=branch.p_busbar_kw, q_kvar=branch.q_busbar_kvar, s_kva=s,
-                selection=sel, cable_label=format_cable_label(sel.cable, sel.n_parallel),
-                dp_kw=dp, dq_series_kvar=dq,
-                q_charging_kvar=sel.cable.charging_kvar(layout.v_mv_kv, export_length_km)
-                                  * sel.n_parallel,
-            )
-        else:
-            branch.mv_export = SegmentResult(
-                index=0, length_km=export_length_km,
-                p_kw=branch.p_busbar_kw, q_kvar=branch.q_busbar_kvar, s_kva=s,
-                selection=None, cable_label="MV export cable (not sized — catalogue pending)",
-                dp_kw=0.0, dq_series_kvar=0.0, q_charging_kvar=0.0,
-            )
-    return branch
 
 
 def recompute_branch(
@@ -867,13 +1289,8 @@ def recompute_branch(
         max_parallel=branch.max_parallel,
         segment_lengths=branch.segment_lengths,
         segment_candidates=branch.segment_candidates,
-        aux_p_kw=branch.aux_p_kw,
-        aux_q_kvar=branch.aux_q_kvar,
-        export_edge_id=branch.export_edge_id,
-        export_length_km=branch.export_length_km,
-        export_candidates=branch.export_candidates,
         export_loss_percent_per_km=branch.export_loss_percent_per_km,
-        export_forced=branch.export_forced,
+        sections=branch.sections,
     )
 
 
@@ -922,31 +1339,49 @@ def _delivered_with_frozen_cables(
     for branch, k_i in zip(branches, k):
         p_branch = q_branch = 0.0
         q_factor = k_i if q_k is None else q_k[len(p_branches)]
-        for circuit, plans in zip(branch.circuits, branch.layout.circuit_plans):
-            p = q = 0.0
-            # Far station first; stations may be heterogeneous (mixed fleet).
-            for seg, plan in zip(reversed(circuit.segments), reversed(plans)):
-                p_mv, q_mv = station_mv_output(
-                    plan.p_lv_kw * k_i, plan.q_lv_kvar * q_factor, plan.transformer
-                )
-                p += p_mv
-                q += q_mv
-                s = math.hypot(p, q)
-                sel = seg.selection
-                dp, dq = sel.cable.series_losses(s, branch.layout.v_mv_kv, seg.length_km)
-                p -= dp / sel.n_parallel
-                q -= dq / sel.n_parallel
-            p_branch += p
-            q_branch += q
-        p_branch -= branch.aux_p_kw
-        q_branch -= branch.aux_q_kvar
-        if branch.mv_export is not None and branch.mv_export.selection is not None:
-            mv_export = branch.mv_export
-            s = math.hypot(p_branch, q_branch)
-            dp, dq = mv_export.selection.cable.series_losses(
-                s, branch.layout.v_mv_kv, mv_export.length_km)
-            p_branch -= dp / mv_export.selection.n_parallel
-            q_branch -= dq / mv_export.selection.n_parallel
+        # Positional pairing of a circuit with its plans, same order as
+        # branch.circuits/branch.layout.circuit_plans — then grouped by
+        # section (ticket 05), so a single-section branch (one busbar) walks
+        # exactly the same circuits in exactly the same order as before.
+        all_pairs = list(zip(branch.circuits, branch.layout.circuit_plans))
+        for section in branch.sections:
+            idx_set = set(section.circuit_indices)
+            p_sec = q_sec = 0.0
+            for circuit, plans in all_pairs:
+                if circuit.index not in idx_set:
+                    continue
+                p = q = 0.0
+                # Far station first; stations may be heterogeneous (mixed fleet).
+                for seg, plan in zip(reversed(circuit.segments), reversed(plans)):
+                    p_mv, q_mv = station_mv_output(
+                        plan.p_lv_kw * k_i, plan.q_lv_kvar * q_factor, plan.transformer
+                    )
+                    p += p_mv
+                    q += q_mv
+                    s = math.hypot(p, q)
+                    sel = seg.selection
+                    if sel is not None:
+                        # A segment with no admissible cable (ADR-0007) is
+                        # recorded unsized with zero losses — same convention
+                        # as mv_export/hv below — so the refinement pass
+                        # still runs rather than crashing on a
+                        # flagged-but-solved design.
+                        dp, dq = sel.cable.series_losses(s, branch.layout.v_mv_kv, seg.length_km)
+                        p -= dp / sel.n_parallel
+                        q -= dq / sel.n_parallel
+                p_sec += p
+                q_sec += q
+            p_sec -= section.aux_p_kw
+            q_sec -= section.aux_q_kvar
+            if section.mv_export is not None and section.mv_export.selection is not None:
+                mv_export = section.mv_export
+                s = math.hypot(p_sec, q_sec)
+                dp, dq = mv_export.selection.cable.series_losses(
+                    s, branch.layout.v_mv_kv, mv_export.length_km)
+                p_sec -= dp / mv_export.selection.n_parallel
+                q_sec -= dq / mv_export.selection.n_parallel
+            p_branch += p_sec
+            q_branch += q_sec
         p_branches.append(p_branch)
         q_branches.append(q_branch)
         p_total += p_branch
@@ -1065,8 +1500,8 @@ class PlantArchitecture:
         )
         if self.export is not None and self.export.hv_cable is not None:
             total += self.export.hv_cable.dp_kw
-        total += sum(b.mv_export.dp_kw for b in self.branches
-                     if b.mv_export is not None)
+        total += sum(s.mv_export.dp_kw for b in self.branches for s in b.sections
+                     if s.mv_export is not None)
         return total
 
     @property
@@ -1087,7 +1522,19 @@ class PlantArchitecture:
 
     @property
     def all_current_ok(self) -> bool:
-        return all(c.current_ok for b in self.branches for c in b.circuits)
+        """Every station's through current stays within its OWN switchgear
+        rated current (ADR-0006) — no flat circuit cap. Reads exactly the
+        figures ``switchgear_through_current_exceeded`` warns on, positionally
+        pairing each branch's ``CircuitResult.stations`` with its layout's
+        ``circuit_plans`` (built together, same order, in ``size_circuits``).
+        """
+        return all(
+            station.through_current_a
+            <= plan.transformer.switchgear_rated_current_a + 1e-9
+            for branch in self.branches
+            for circuit, plans in zip(branch.circuits, branch.layout.circuit_plans)
+            for station, plan in zip(circuit.stations, plans)
+        )
 
 
 _MAX_REFINE_ITERATIONS = 50  # geometric convergence; a handful of passes suffice
@@ -1163,9 +1610,10 @@ def size_plant(
     q = sum(b.q_busbar_kvar for b in branches)
     if hv_transformer is None and not auto_hv and hv_cable_length_km <= 0:
         for branch in branches:
-            if branch.mv_export is not None:
-                p -= branch.mv_export.dp_kw
-                q -= branch.mv_export.dq_series_kvar
+            for section in branch.sections:
+                if section.mv_export is not None:
+                    p -= section.mv_export.dp_kw
+                    q -= section.mv_export.dq_series_kvar
 
     if auto_hv:
         if v_hv_kv is None:
@@ -1535,7 +1983,8 @@ def size_plant(
     consumed = (
         sum(st.dp_tx_kw for b in branches for c in b.circuits for st in c.stations)
         + sum(seg.dp_kw for b in branches for c in b.circuits for seg in c.segments)
-        + sum(b.mv_export.dp_kw for b in branches if b.mv_export is not None)
+        + sum(s.mv_export.dp_kw for b in branches for s in b.sections
+              if s.mv_export is not None)
         + sum(b.aux_p_kw for b in branches)
         + (export.dp_tx_kw if export is not None else 0.0)
         + (export.hv_cable.dp_kw if export is not None and export.hv_cable else 0.0)

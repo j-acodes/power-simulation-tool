@@ -21,7 +21,7 @@ Every circuit is bounded by real switchgear at both ends:
 - Each station's **switchgear rated current** is checked against its through current
   (unchanged from ADR-0006; 630 A fallback with a notice).
 - Each station declares a **cable entry** — cables per phase and maximum cross-section — with a
-  2 × 630 mm² engine fallback and a notice. Every circuit cable must fit the stricter cable entry
+  2 × 300 mm² engine fallback and a notice. Every circuit cable must fit the stricter cable entry
   of its two ends.
 - Each busbar carries **busbar switchgear** — the busbar, one **feeder** per circuit, and the
   **export switchgear** — sized by the tool to the smallest standard rating that carries its
@@ -46,7 +46,7 @@ fallback that was used.
 5. As a design engineer, I want every circuit cable to fit the switchgear terminals at both of
    its ends, so that no segment calls for more or larger cables than can be connected.
 6. As a design engineer, I want a station whose supplier publishes no cable entry to fall back
-   to two 630 mm² cables and say so, so that I know to confirm the real figure.
+   to two 300 mm² cables and say so, so that I know to confirm the real figure.
 7. As a design engineer, I want a segment that no admissible cable can carry to be flagged at
    that segment rather than stopping the solve, so that I can see where to split the circuit.
 8. As a design engineer, I want circuit grouping decided by my equipment and not by a flat
@@ -76,12 +76,12 @@ fallback that was used.
   630 A engine fallback, checked against through current, no utilization factor.
 - **Cable entry** adds two simulated parameters to the transformer station component: cables
   accepted per phase (integer) and maximum cable cross-section (mm²). The fallback of 2 and
-  630 mm² is an engine constant, raised with a notice naming the station. One cable entry per
+  300 mm² is an engine constant, raised with a notice naming the station. One cable entry per
   station model, applied to incoming and outgoing cables alike.
 - **Cable selection** for a circuit segment takes a per-segment bound: the parallel-run limit is
   the lesser of the two ends' cables per phase, and candidates above the lesser maximum
   cross-section are excluded. Export cables keep today's `max_parallel` behaviour. The feeder's
-  cable entry is 2 × 630 mm² — the busbar switchgear is sized, so there is no published figure.
+  cable entry is 2 × 300 mm² — the busbar switchgear is sized, so there is no published figure.
 - **Busbar switchgear** is sized per busbar: each feeder against its circuit's head current, and
   the busbar and export switchgear against the busbar total including auxiliary load, all at the
   design point. Standard ladder: 630, 800, 1250, 1600, 2000, 2500, 3150, 4000 A. Smallest rating
@@ -139,7 +139,7 @@ the ADR-0001 golden: a hybrid design with zero BESS power reproduces the PV-only
 
 ## Further Notes
 
-With 630 A stations and a 2 × 630 mm² entry (960 A usable at 0.80 utilization), the station
+With 630 A stations and a 2 × 300 mm² entry (664 A usable at 0.80 utilization), the station
 switchgear binds first on today's catalogue: ~21.8 MVA at 20 kV, ~32.7 MVA at 30 kV per circuit.
 The owner reviewed the earlier ~400 A expectation and accepted 630 A as the standard. Cable
 entry becomes the binding limit only when a station publishes a smaller one.

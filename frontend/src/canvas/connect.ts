@@ -110,28 +110,14 @@ export function canConnect(diagram: Diagram, sourceId: string, targetId: string)
   return true
 }
 
-/** Which fleet SLOT a busbar occupies, for the "one busbar per kind" rule.
- *
- * This is the total version of `busbarFleetKind`, and it is what the duplicate
- * check must use: `powertool.graph._busbars` owes every busbar a definite slot,
- * so an undecided one (undeclared and empty, or with stations that disagree)
- * counts as PV there. Offering both palette items for an undecided busbar would
- * let a third busbar be drawn — a state the server rejects, which is exactly
- * what this ticket exists to make undrawable.
- *
- * Kept separate from `busbarFleetKind` because the two answer different
- * questions: "which slot is taken" must always answer, while "which stations
- * may join" is allowed to say "either" (see busbarFleetKind).
+/** Which fleet a busbar reads as when nothing else says otherwise — the total
+ * version of `busbarFleetKind`, used where an undecided busbar (undeclared
+ * and empty, or with stations that disagree) still needs a definite answer
+ * (e.g. deciding which busbar a technology conversion narrows away, see
+ * `technology.ts`). A fleet's branch may hold more than one busbar in
+ * parallel (ticket 05), so this is no longer used to cap how many busbars of
+ * a kind the canvas allows.
  */
 export function busbarSlot(diagram: Diagram, busbarId: string): FleetKind {
   return busbarFleetKind(diagram, busbarId) ?? 'pv'
-}
-
-/** The fleet slots already occupied by a busbar other than `exceptId`. */
-export function takenBusbarSlots(diagram: Diagram, exceptId?: string): Set<FleetKind> {
-  return new Set(
-    diagram.nodes
-      .filter((n) => n.kind === 'busbar' && n.id !== exceptId)
-      .map((n) => busbarSlot(diagram, n.id)),
-  )
 }

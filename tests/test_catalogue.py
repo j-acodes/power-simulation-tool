@@ -340,3 +340,35 @@ def test_the_switchgear_fallback_is_not_written_into_the_yaml():
         huawei = text.split("huawei_common:")[-1].split("\nPV_TRANSFORMERS")[0] \
             if "huawei_common:" in text else ""
         assert "rmu_rated_current_a" not in huawei
+
+
+# --- Cable entry (ADR-0007) --------------------------------------------------
+
+
+def test_no_station_in_the_catalogue_publishes_a_cable_entry_yet(db):
+    # Whether any on-file datasheet publishes cable entry was checked for
+    # this ticket (spec's "Further Notes"): none does, so every station falls
+    # back to the engine's 2 x 300 mm^2 cable entry today.
+    for source in (db.transformers, db.bess_transformers):
+        for key, station in source.items():
+            assert station.cable_entry_published is False, key
+            assert station.cable_entry_parallel_limit == 2, key
+            assert station.cable_entry_cross_section_limit_mm2 == 300.0, key
+
+
+def test_no_station_in_the_catalogue_resolves_to_an_unlimited_cable_entry(db):
+    for source in (db.transformers, db.bess_transformers):
+        for key, station in source.items():
+            assert station.cable_entry_parallel_limit > 0, key
+            assert station.cable_entry_cross_section_limit_mm2 > 0, key
+
+
+def test_the_cable_entry_fallback_is_not_written_into_the_yaml():
+    # Lives in the engine on purpose, mirroring the switchgear fallback test
+    # above: a figure in a station's datasheet block must always mean a
+    # supplier published it (ADR-0007).
+    from pathlib import Path
+    for name in ("transformers.yaml", "bess_transformers.yaml"):
+        text = Path("data", name).read_text()
+        assert "cable_entry_cables_per_phase" not in text
+        assert "cable_entry_max_cross_section_mm2" not in text

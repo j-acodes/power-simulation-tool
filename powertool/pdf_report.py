@@ -28,8 +28,18 @@ from reportlab.platypus import (
     TableStyle,
 )
 
-from .architecture import PlantArchitecture
-from .components import DEFAULT_AMBIENT_C, conversion_label, fleet_label
+from .architecture import (
+    DEFAULT_FEEDERS_PER_BUSBAR,
+    PlantArchitecture,
+    circuit_binding_limit,
+)
+from .components import (
+    BUSBAR_SWITCHGEAR_LADDER_A,
+    DEFAULT_AMBIENT_C,
+    conversion_label,
+    fleet_label,
+    busbar_switchgear_rating,
+)
 from .sizing import SizingResult
 
 # RP Global "Colour Codes" brand sheet.
@@ -121,7 +131,8 @@ def _fleet_kind(fleet: dict | None) -> str:
 
 
 def _summary(stage1s: list[SizingResult], arch: PlantArchitecture,
-             fleets: list[dict] | None, ambient_c: float) -> list:
+             fleets: list[dict] | None, ambient_c: float,
+             feeders_per_busbar: int = DEFAULT_FEEDERS_PER_BUSBAR) -> list:
     export = arch.export
     v_mv = arch.branches[0].layout.v_mv_kv
     if export is None:
@@ -136,6 +147,7 @@ def _summary(stage1s: list[SizingResult], arch: PlantArchitecture,
         ["POC active-power target", f"{_fmt(target / 1000)} MW" if target else "—"],
         ["Power-factor target (injected Q)", f"{stage1s[0].pf_target:.3f}"],
         ["Interconnection", interconn],
+        ["Feeders per busbar limit", str(feeders_per_busbar)],
         ["MV collection voltage", f"{v_mv:g} kV"],
     ]
     # One fleet: the plant IS the fleet, so its figures belong in this table
@@ -222,7 +234,8 @@ def _methodology() -> list:
         "Stage 1. Every station runs at the same per-unit loading, so its LV share is "
         "proportional to its rating; its MV-side output sets its current. Stations are "
         "grouped into MV collector circuits with the fewest circuits whose total "
-        "current respects the per-feeder cap, balanced by a longest-processing-time "
+        "current respects the switchgear rated current of every station placed in "
+        "them, balanced by a longest-processing-time "
         "heuristic; within each circuit the <b>biggest stations sit nearest the "
         "substation</b>, which minimises the power flowing through the long tail "
         "segments and therefore the cable losses.", _BODY))
@@ -319,6 +332,21 @@ def _transformer_rows(branch, export, p_inv: float, include_export: bool,
     return rows
 
 
+def _station_current_rows(branch) -> list[list[str]]:
+    """Per-station through current beside its own switchgear rated current
+    (ADR-0006, ticket 07) — one row per station, unlike ``_transformer_rows``
+    which aggregates by model and so cannot carry a per-position figure."""
+    rows = []
+    for circuit in branch.circuits:
+        for st in circuit.stations:
+            rows.append([
+                f"C{circuit.index}·{st.index}", st.model,
+                f"{_fmt(st.through_current_a, 0)} / "
+                f"{_fmt(st.switchgear_rated_current_a, 0)} A",
+            ])
+    return rows
+
+
 def _cable_rows(branch, export, p_inv: float, include_export: bool,
                 shared: bool):
     rows = []
@@ -376,8 +404,81 @@ def _energy_rows(fleet: dict) -> list[list[str]]:
     return rows
 
 
+def _switchgear_cell(rated_a: float | None, i_a: float, *, pinned: bool = False) -> str:
+    """One busbar-switchgear value: the rating beside its current, marked as
+    sized or pinned (ADR-0007) — or, for a SIZED part whose current clears
+    the 4000 A ladder top, that no standard rating admits it. A pinned
+    rating is never "not sized": it is checked against the pin, however high
+    the current, so ``rated_a`` is always present when ``pinned`` is True."""
+    if pinned:
+        return f"{_fmt(rated_a, 0)} A (pinned) — {_fmt(i_a, 0)} A"
+    if rated_a is not None:
+        return f"{_fmt(rated_a, 0)} A (sized) — {_fmt(i_a, 0)} A"
+    return f"not sized — {_fmt(i_a, 0)} A exceeds the 4,000 A ladder top"
+
+
+_BINDING_LIMIT_LABEL = {
+    "station_switchgear": "Station switchgear",
+    "cable_entry": "Cable entry",
+    "feeder": "Feeder",
+}
+
+
+def _busbar_switchgear_rows(section, busbar: dict | None = None,
+                            feeders_per_busbar: int | None = None) -> list[list[str]]:
+    """Busbar, export switchgear and one feeder per circuit (ADR-0007), for
+    ONE busbar of a fleet's branch (ticket 05). The busbar and export
+    switchgear share this busbar's net total — auxiliary load included, the
+    same net S its own MV export cable is sized on
+    (``BusbarSection.p_busbar_kw`` / ``q_busbar_kvar`` already take it out,
+    see that property's docstring) — while each feeder is sized on its own
+    circuit's head current alone (``CircuitResult.i_trunk_a``).
+
+    ``busbar`` is this section's own entry from :func:`powertool.graph.
+    branches_summary`'s ``fleet["busbars"]`` (ticket 04): its pin keys, when
+    set, are reported exactly as pinned instead of the sized value. Omit it
+    (engine-level callers with no diagram) and every part reads as sized,
+    unchanged from ticket 03.
+
+    Each feeder row also names its circuit's binding limit — the equipment
+    with the least headroom that decided its size (ticket 07's owner
+    decision; see :func:`powertool.architecture.circuit_binding_limit`).
+    Feeders-per-busbar is never one of those three values (ticket 06 opens
+    another busbar instead of enlarging a circuit), so it and the busbar's
+    own current against the 4,000 A ladder top are reported as their own
+    rows instead, when ``feeders_per_busbar`` is given.
+    """
+    busbar_i_a = section.busbar_current_a
+    busbar_pin = busbar.get("switchgear_pin_a") if busbar else None
+    export_pin = busbar.get("export_switchgear_pin_a") if busbar else None
+    rows = []
+    if feeders_per_busbar is not None:
+        rows.append([
+            "Feeders", f"{len(section.circuits)} / {feeders_per_busbar}", "—",
+        ])
+    rows.append([
+        "Busbar current", f"{_fmt(busbar_i_a, 0)} / "
+        f"{_fmt(BUSBAR_SWITCHGEAR_LADDER_A[-1], 0)} A", "—",
+    ])
+    rows.append(["Busbar", _switchgear_cell(
+        busbar_switchgear_rating(busbar_i_a, busbar_pin), busbar_i_a,
+        pinned=busbar_pin is not None), "—"])
+    rows.append(["Export switchgear", _switchgear_cell(
+        busbar_switchgear_rating(busbar_i_a, export_pin), busbar_i_a,
+        pinned=export_pin is not None), "—"])
+    feeder_pins = busbar.get("feeder_switchgear_pins_a") if busbar else None
+    for idx, circuit in enumerate(section.circuits):
+        pin = feeder_pins[idx] if feeder_pins else None
+        rows.append([f"Circuit {circuit.index} feeder", _switchgear_cell(
+            busbar_switchgear_rating(circuit.i_trunk_a, pin), circuit.i_trunk_a,
+            pinned=pin is not None),
+            _BINDING_LIMIT_LABEL[circuit_binding_limit(circuit, pin)]])
+    return rows
+
+
 def _stage2(stage1s: list[SizingResult], arch: PlantArchitecture,
-            fleets: list[dict] | None, ambient_c: float) -> list:
+            fleets: list[dict] | None, ambient_c: float,
+            feeders_per_busbar: int = DEFAULT_FEEDERS_PER_BUSBAR) -> list:
     # Loss percentages are quoted against the whole plant's refined conversion
     # power, so the columns of a hybrid's two fleet tables share one base and
     # can be read against each other.
@@ -419,14 +520,29 @@ def _stage2(stage1s: list[SizingResult], arch: PlantArchitecture,
             ["Fleet loading", f"{layout.fleet_loading * 100:.0f}%" + against_max
              + ("" if layout.loading_ok else "  ⚠ fleet undersized")],
             ["Worst trunk current",
-             f"{_fmt(max(c.i_trunk_a for c in branch.circuits), 0)} A"
-             f" (cap {_fmt(layout.max_circuit_current_a, 0)} A)"],
+             f"{_fmt(max(c.i_trunk_a for c in branch.circuits), 0)} A"],
         ]
         if fleet:
             brows += _energy_rows(fleet)
         if n == 1:
             brows += plant_rows
         f.append(_table(["Quantity", "Value"], brows, [0.45, 0.55]))
+
+        # One "Busbar switchgear" section per busbar of this fleet (ticket
+        # 05) — labelled by busbar id only when there is more than one, so a
+        # single-busbar fleet's report reads exactly as it did before this
+        # ticket.
+        fleet_busbars = fleet.get("busbars") if fleet else None
+        multi_busbar = len(branch.sections) > 1
+        for idx, section in enumerate(branch.sections):
+            busbar = (fleet_busbars[idx] if fleet_busbars and idx < len(fleet_busbars)
+                     else None)
+            title = ("Busbar switchgear" + (f" — {busbar['busbar_id']}"
+                     if multi_busbar and busbar else ""))
+            f.append(Paragraph(title, _H3))
+            f.append(_table(["Equipment", "Rating", "Binding limit"],
+                            _busbar_switchgear_rows(section, busbar, feeders_per_busbar),
+                            [0.35, 0.4, 0.25]))
 
         f.append(Paragraph(f"Refined {device} requirement", _H3))
         delta = (refinement.s_inv_refined_kva / stage1s[i].s_inv_kva - 1) * 100
@@ -452,6 +568,12 @@ def _stage2(stage1s: list[SizingResult], arch: PlantArchitecture,
              "ΔP/unit [% P_inv]", "ΔP total [% P_inv]", "ΔQ total [kvar]"],
             _transformer_rows(branch, arch.export, p_inv, last, n > 1, ambient_c),
             [1.8, 0.7, 1.0, 0.8, 1.0, 1.0, 1.0, 1.0]))
+
+        f.append(Paragraph("Station switchgear", _H3))
+        f.append(_table(
+            ["Station", "Model", "Through / rated"],
+            _station_current_rows(branch),
+            [0.5, 1.5, 1.0]))
 
         f.append(Paragraph("Cable-run losses", _H3))
         f.append(_table(
@@ -494,6 +616,8 @@ def report_story(
     plant_name: str = "Plant",
     when: str = "",
     ambient_c: float = DEFAULT_AMBIENT_C,
+    feeders_per_busbar: int = DEFAULT_FEEDERS_PER_BUSBAR,
+    notices: list[str] | None = None,
 ) -> list:
     """The report as a list of ReportLab flowables, before it becomes a PDF.
 
@@ -509,6 +633,15 @@ def report_story(
     drifting apart, and keeps this module independent of the diagram layer.
     Omit it and the per-fleet sections are simply absent, which is what the
     engine-level callers want.
+
+    ``feeders_per_busbar`` is the design's own Stage-1 rule (ADR-0007, ticket
+    06), carried through purely for display, the same standing as
+    ``ambient_c`` for the figures it does not itself drive.
+
+    ``notices`` are the fallback notices the editor shows (see
+    :func:`powertool.graph.fallback_notices`), passed as plain text so this
+    module stays independent of the diagram layer. Listed right after the
+    summary: a reviewer reads them before trusting any figure below.
     """
     story: list = [
         Paragraph(f"{plant_name} — Sizing Report", _H1),
@@ -516,11 +649,14 @@ def report_story(
         HRFlowable(width="100%", thickness=2, color=_GREEN, spaceBefore=4,
                    spaceAfter=10),
     ]
-    story += _summary(stage1s, arch, fleets, ambient_c)
+    story += _summary(stage1s, arch, fleets, ambient_c, feeders_per_busbar)
+    if notices:
+        story.append(Paragraph("Notices", _H2))
+        story += [Paragraph(n, _BODY) for n in notices]
     story += _methodology()
     for i, stage1 in enumerate(stage1s):
         story += _stage1(stage1, fleets[i] if fleets else None, len(stage1s))
-    story += _stage2(stage1s, arch, fleets, ambient_c)
+    story += _stage2(stage1s, arch, fleets, ambient_c, feeders_per_busbar)
     story += [
         Spacer(1, 8),
         HRFlowable(width="100%", thickness=0.5, color=_LINE, spaceAfter=6),
@@ -541,6 +677,8 @@ def build_pdf_report(
     plant_name: str = "Plant",
     generated_at: datetime | None = None,
     ambient_c: float = DEFAULT_AMBIENT_C,
+    feeders_per_busbar: int = DEFAULT_FEEDERS_PER_BUSBAR,
+    notices: list[str] | None = None,
 ) -> bytes:
     """Full PDF sizing report: methodology + detailed loss tables. Returns bytes."""
     when = (generated_at or datetime.now()).strftime("%Y-%m-%d %H:%M")
@@ -550,5 +688,6 @@ def build_pdf_report(
         leftMargin=_MARGIN, rightMargin=_MARGIN,
         topMargin=14 * mm, bottomMargin=14 * mm)
     doc.build(report_story(stage1s, arch, fleets=fleets, plant_name=plant_name, when=when,
-                           ambient_c=ambient_c))
+                           ambient_c=ambient_c, feeders_per_busbar=feeders_per_busbar,
+                           notices=notices))
     return buf.getvalue()

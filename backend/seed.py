@@ -20,6 +20,7 @@ import math
 from powertool import ComponentDatabase, arrange_plant, size_generation
 from powertool.architecture import PlantLayout
 from powertool.components import DEFAULT_AMBIENT_C
+from powertool.graph import DEFAULT_RULES
 from powertool.sizing import SizingResult
 
 from .solve import build_chain
@@ -90,8 +91,8 @@ def seed_diagram(params: dict, db: ComponentDatabase) -> dict:
     ``interconnection`` ("HV"|"MV"), ``v_hv_kv`` (required for HV),
     ``export_m``, ``v_mv_kv``, ``station_model`` (a catalogue key),
     ``pv_inverter`` (a paired catalogue key), ``inverter_count``,
-    ``max_loading``, ``trunk_m``, ``spacing_m``, ``max_circuit_current_a``,
-    optional ``aux_p_kw``/``aux_q_kvar``.
+    ``max_loading``, ``trunk_m``, ``spacing_m``, optional
+    ``aux_p_kw``/``aux_q_kvar``.
     """
     interconnection = params["interconnection"]
     v_mv_kv = params["v_mv_kv"]
@@ -139,7 +140,6 @@ def seed_diagram(params: dict, db: ComponentDatabase) -> dict:
 
     layout = arrange_plant(
         stage1, [(station, n)],
-        max_circuit_current_a=params["max_circuit_current_a"],
         trunk_length_km=params["trunk_m"] / 1000.0,
         spacing_km=params["spacing_m"] / 1000.0,
         v_mv_kv=v_mv_kv,
@@ -149,6 +149,21 @@ def seed_diagram(params: dict, db: ComponentDatabase) -> dict:
         # arrange_plant's own default, since the produced diagram's default
         # ambient is this same constant.
         ambient_c=DEFAULT_AMBIENT_C,
+        # Stage-1 grouping only proposes circuits every segment can actually
+        # be cabled for (ADR-0007) — the wizard has the MV cable catalogue in
+        # scope, so it opts into the cable-entry-aware ceiling. Every OTHER
+        # rule the wizard has no setting of its own for yet (SeedRequest
+        # carries none) — the produced diagram's rules below are
+        # DEFAULT_RULES verbatim, so this reads the same named constant
+        # rather than a second literal that could drift from it.
+        cable_candidates=db.cables_for_voltage(v_mv_kv),
+        max_utilization=DEFAULT_RULES["max_utilization"],
+        # The wizard's own feeders-per-busbar setting (ADR-0007, ticket 06),
+        # deciding when Stage-1 planning opens a second busbar of a fleet.
+        # ``.get`` (not ``[...]``) because ``params`` is a plain dict contract
+        # (see this function's docstring) older callers may still build
+        # without the key, same as ``aux_p_kw``/``aux_q_kvar`` below.
+        feeders_per_busbar=params.get("feeders_per_busbar", DEFAULT_RULES["feeders_per_busbar"]),
     )
 
     return _layout_to_diagram(layout, params, v_export_kv)
@@ -171,6 +186,30 @@ def _layout_to_diagram(layout: PlantLayout, params: dict, v_export_kv: float) ->
     n_circuits = len(layout.circuit_plans)
     center_x = _CIRCUIT_X0 + max(0, n_circuits - 1) * _CIRCUIT_DX / 2.0
 
+    def circuit_x(c_idx: int) -> float:
+        return _CIRCUIT_X0 + (c_idx - 1) * _CIRCUIT_DX
+
+    # Stage-1 planning may open more than one busbar (ADR-0007, ticket 06):
+    # ``busbar_groups`` partitions the circuits (0-based) by which busbar
+    # carries them, in the order arrange_plant already produced them. The
+    # first busbar keeps the original "busbar" id so a single-busbar plan
+    # renders byte-identical to before this ticket; each further one gets
+    # its own export cable into the same shared HV transformer / POC
+    # (ticket 05 made this drawable) and sits over the mean x of its own
+    # circuits.
+    busbar_groups = layout.busbar_groups or [list(range(n_circuits))]
+
+    def busbar_id(g: int) -> str:
+        return "busbar" if g == 0 else f"busbar{g + 1}"
+
+    busbar_of_circuit: dict[int, str] = {}
+    busbar_x: list[float] = []
+    for g, indices in enumerate(busbar_groups):
+        xs = [circuit_x(i + 1) for i in indices]
+        busbar_x.append(sum(xs) / len(xs))
+        for i in indices:
+            busbar_of_circuit[i + 1] = busbar_id(g)
+
     nodes: list[dict] = [
         {"id": "poc", "kind": "poc", "x": center_x, "y": _POC_Y,
          "props": {"p_target_mw": params["p_poc_mw"], "pf": params["pf_target"]}},
@@ -182,14 +221,23 @@ def _layout_to_diagram(layout: PlantLayout, params: dict, v_export_kv: float) ->
                      "props": {"mode": "auto", "n_parallel": 1}})
         edges.append({"id": "e_export", "source": "poc", "target": "hv_tx",
                      "tier": "hv", "length_m": export_m, "sizing": {"mode": "auto"}})
-        edges.append({"id": "e_sub", "source": "hv_tx", "target": "busbar",
-                     "tier": "mv", "sizing": {"mode": "auto"}})
+        for g in range(len(busbar_groups)):
+            edges.append({
+                "id": "e_sub" if g == 0 else f"e_sub{g + 1}",
+                "source": "hv_tx", "target": busbar_id(g),
+                "tier": "mv", "sizing": {"mode": "auto"},
+            })
     else:
-        edges.append({"id": "e_export", "source": "poc", "target": "busbar",
-                     "tier": "mv", "length_m": export_m, "sizing": {"mode": "auto"}})
+        for g in range(len(busbar_groups)):
+            edges.append({
+                "id": "e_export" if g == 0 else f"e_export{g + 1}",
+                "source": "poc", "target": busbar_id(g),
+                "tier": "mv", "length_m": export_m, "sizing": {"mode": "auto"},
+            })
 
-    nodes.append({"id": "busbar", "kind": "busbar", "x": center_x, "y": _BUS_Y,
-                 "props": {}})
+    for g, x in enumerate(busbar_x):
+        nodes.append({"id": busbar_id(g), "kind": "busbar", "x": x, "y": _BUS_Y,
+                     "props": {}})
 
     if aux_p_kw or aux_q_kvar:
         nodes.append({"id": "aux", "kind": "aux", "x": center_x + _AUX_DX, "y": _AUX_Y,
@@ -198,7 +246,7 @@ def _layout_to_diagram(layout: PlantLayout, params: dict, v_export_kv: float) ->
                      "tier": "mv", "sizing": {"mode": "auto"}})
 
     for c_idx, circuit in enumerate(layout.circuit_plans, start=1):
-        x = _CIRCUIT_X0 + (c_idx - 1) * _CIRCUIT_DX
+        x = circuit_x(c_idx)
         previous_id: str | None = None
         for s_idx in range(1, len(circuit) + 1):
             node_id = f"s{c_idx}_{s_idx}"
@@ -216,7 +264,7 @@ def _layout_to_diagram(layout: PlantLayout, params: dict, v_export_kv: float) ->
             })
             edges.append({
                 "id": edge_id,
-                "source": previous_id or "busbar",
+                "source": previous_id or busbar_of_circuit[c_idx],
                 "target": node_id,
                 "tier": "mv",
                 "length_m": trunk_m if s_idx == 1 else spacing_m,
@@ -230,11 +278,11 @@ def _layout_to_diagram(layout: PlantLayout, params: dict, v_export_kv: float) ->
             "tiers": {"lv_kv": _LV_KV, "mv_kv": v_mv_kv,
                      "hv_kv": v_hv_kv if interconnection == "HV" else None},
             "rules": {
-                "max_utilization": 0.80,
+                "max_utilization": DEFAULT_RULES["max_utilization"],
                 "collection_loss_pct": 1.30,
                 "export_loss_pct_per_km": 0.10,
-                "max_circuit_current_a": params["max_circuit_current_a"],
                 "max_loading": params["max_loading"],
+                "feeders_per_busbar": params.get("feeders_per_busbar", DEFAULT_RULES["feeders_per_busbar"]),
             },
         },
         "nodes": nodes,

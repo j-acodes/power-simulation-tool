@@ -88,7 +88,6 @@ export interface RuleSettings {
   max_utilization: number
   collection_loss_pct: number
   export_loss_pct_per_km: number
-  max_circuit_current_a: number
   /** Plant-wide fleet loading limit. */
   max_loading?: number
   /** Per-fleet overrides; each falls back to `max_loading` when unset. */
@@ -103,6 +102,10 @@ export interface RuleSettings {
    *  (never a free number): unset means 40, matching every design saved
    *  before this setting existed. */
   ambient_temp_c?: 30 | 40
+  /** How many circuits Stage-1 planning packs onto one busbar before opening
+   *  another (ADR-0007, ticket 06). Unset means 12. A drawn diagram's own
+   *  busbars are never rearranged by this — it only governs a future re-seed. */
+  feeders_per_busbar?: number
 }
 
 export interface DiagramSettings {
@@ -172,6 +175,11 @@ export interface StationNodeResult {
   q_mv_kvar: number
   s_mv_kva: number
   i_a: number
+  /** This station's own current plus every station downstream of it in its
+   * circuit (ADR-0006's "through current"), beside its own switchgear rated
+   * current — what the results view and PDF show as "through / rated". */
+  through_current_a: number
+  switchgear_rated_current_a: number
   /** PV-only inverter compliance, present once the station has an explicit
    * catalogue inverter selection. Limits use 100% of ambient-rated power. */
   inverter_model?: string
@@ -187,6 +195,13 @@ export interface StationNodeResult {
   inverter_power_factor_ok?: boolean
 }
 
+/** What decided a circuit's size (ticket 07's owner decision): the
+ * equipment with the least headroom in amperes among the circuit's own
+ * station switchgear, its cable entry, and its feeder. Feeders-per-busbar
+ * is never a candidate — ticket 06 opens another busbar instead of
+ * enlarging a circuit — so it is never one of these three values. */
+export type BindingLimit = 'station_switchgear' | 'cable_entry' | 'feeder'
+
 export interface BusbarNodeResult {
   kind: 'busbar'
   p_kw: number
@@ -195,6 +210,34 @@ export interface BusbarNodeResult {
   n_circuits: number
   circuit_sizes: number[]
   v_kv: number
+  /** Busbar switchgear (ADR-0007): the busbar and export switchgear carry
+   * the same design-point current — the busbar total, auxiliary load
+   * included — but are reported under separate keys because a pin (ticket
+   * 04) lets an engineer check the export switchgear against a rating that
+   * then diverges from the busbar's own. `null` means the current exceeds
+   * the 4000 A top of the standard ladder — no admissible size, and the
+   * design is flagged rather than blocked; `null` never occurs for a
+   * PINNED part, which is checked against its pin however high the
+   * current. */
+  i_a: number
+  switchgear_rated_a: number | null
+  /** Whether `switchgear_rated_a` is the engineer's own pin rather than a
+   * sized value (ADR-0007, ticket 04). */
+  switchgear_pinned: boolean
+  export_i_a: number
+  export_switchgear_rated_a: number | null
+  export_switchgear_pinned: boolean
+  /** One feeder per circuit, same order as `circuit_sizes`: sized against
+   * that circuit's own head current, never the busbar's auxiliary load. */
+  feeder_i_a: number[]
+  feeder_switchgear_rated_a: (number | null)[]
+  feeder_switchgear_pinned: boolean[]
+  /** Each feeder's trunk edge id, same order as `feeder_i_a` — what a
+   * feeder pin (`feeder_switchgear_pins_a` on the busbar's props) is keyed
+   * by, so the editor can tie a result row back to its pin control. */
+  feeder_edge_ids: string[]
+  /** One binding limit per circuit, same order as `feeder_i_a`. */
+  feeder_binding_limit: BindingLimit[]
 }
 
 export interface AuxNodeResult {
@@ -258,7 +301,6 @@ export interface ResultsSummary {
   total_active_loss_kw: number
   loss_percent_of_p_inv: number | null
   worst_trunk_current_a: number
-  max_circuit_current_a: number
   all_current_ok: boolean
   power_balance_ok: boolean
   v_mv_kv: number
@@ -301,6 +343,15 @@ export interface TransformerInfo {
    *  `rmu_rated_current_a` below stays null when nothing was published. */
   switchgear_rated_current_a: number
   switchgear_rating_published: boolean
+  /** Simulated: the resolved cable entry — cables accepted per phase and
+   *  maximum cable cross-section — the engine bounds a circuit cable to at
+   *  this station's terminals, and whether the supplier published it or it
+   *  came from the 2 x 300 mm^2 engine fallback (ADR-0007). The raw
+   *  `cable_entry_cables_per_phase` / `cable_entry_max_cross_section_mm2`
+   *  below stay null when nothing was published. */
+  cable_entry_parallel_limit: number
+  cable_entry_cross_section_limit_mm2: number
+  cable_entry_published: boolean
   /** Typed parameters (never computed with) — see CONTEXT.md's "Simulated
    *  parameter / typed parameter" entry. `null` means the datasheet is
    *  silent on that field, not that the value is zero. Unset for every PV
@@ -335,6 +386,8 @@ export interface TransformerInfo {
   depth_mm: number | null
   weight_kg: number | null
   cable_entry: string | null
+  cable_entry_cables_per_phase: number | null
+  cable_entry_max_cross_section_mm2: number | null
   corrosion_class: string | null
   temp_min_c: number | null
   temp_max_c: number | null
@@ -552,9 +605,11 @@ export interface SeedParams {
   max_loading: number
   trunk_m: number
   spacing_m: number
-  max_circuit_current_a: number
   aux_p_kw?: number
   aux_q_kvar?: number
+  /** How many circuits a Stage-1 busbar carries before another opens
+   *  (ADR-0007, ticket 06). Unset means the backend's default of 12. */
+  feeders_per_busbar?: number
 }
 
 // --- Stage-1 conceptual sizing (POST /api/stage1) ---------------------------

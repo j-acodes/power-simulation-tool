@@ -89,9 +89,11 @@ class SeedRequest(BaseModel):
     max_loading: float = 1.0
     trunk_m: float
     spacing_m: float
-    max_circuit_current_a: float
     aux_p_kw: float = 0.0
     aux_q_kvar: float = 0.0
+    # How many circuits a Stage-1 busbar carries before another is opened
+    # (ADR-0007, ticket 06) — matches powertool.graph.DEFAULT_RULES's default.
+    feeders_per_busbar: int = Field(default=12, ge=1)
 
     @model_validator(mode="after")
     def _hv_needs_a_voltage(self) -> "SeedRequest":
@@ -142,6 +144,14 @@ class TransformerInfo(BaseModel):
     # ``rmu_rated_current_a`` below stays null when nothing was published.
     switchgear_rated_current_a: float
     switchgear_rating_published: bool
+    # Simulated: the cable entry the engine bounds a circuit cable to at this
+    # station's terminals, already resolved (ADR-0007). ``cable_entry_published``
+    # says whether it came from the supplier or the engine fallback; the raw
+    # ``cable_entry_cables_per_phase`` / ``cable_entry_max_cross_section_mm2``
+    # below stay null when nothing was published.
+    cable_entry_parallel_limit: int
+    cable_entry_cross_section_limit_mm2: float
+    cable_entry_published: bool
     # Typed parameters (never computed with) — see CONTEXT.md's "Simulated
     # parameter / typed parameter" entry. Unset for every PV transformer and
     # for the placeholder BESS station transformers.
@@ -175,6 +185,8 @@ class TransformerInfo(BaseModel):
     depth_mm: float | None = None
     weight_kg: float | None = None
     cable_entry: str | None = None
+    cable_entry_cables_per_phase: int | None = None
+    cable_entry_max_cross_section_mm2: float | None = None
     corrosion_class: str | None = None
     temp_min_c: float | None = None
     temp_max_c: float | None = None
@@ -333,7 +345,7 @@ class RulesDefaults(BaseModel):
     max_utilization: float
     collection_loss_pct: float
     export_loss_pct_per_km: float
-    max_circuit_current_a: float
+    feeders_per_busbar: int
 
 
 class CatalogueDefaults(BaseModel):

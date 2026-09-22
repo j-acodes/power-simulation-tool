@@ -48,15 +48,12 @@ from .seed import seed_diagram
 from .solve import (
     COLLECTION_LOSS_PCT,
     EXPORT_LOSS_PCT_PER_KM,
+    FEEDERS_PER_BUSBAR,
     MAX_UTILIZATION,
     build_chain,
     report_pdf,
     solve_diagram,
 )
-
-# Stage-2 planning constant inherited from the deleted Streamlit UI — used only
-# for the catalogue's default-rules payload in M0 (no /solve endpoint yet).
-MAX_CIRCUIT_CURRENT_A = 400.0
 
 db = ComponentDatabase.load()
 
@@ -104,6 +101,9 @@ def _transformer_info(
         i0_percent=tx.i0_percent,
         switchgear_rated_current_a=tx.switchgear_rated_current_a,
         switchgear_rating_published=tx.switchgear_rating_published,
+        cable_entry_parallel_limit=tx.cable_entry_parallel_limit,
+        cable_entry_cross_section_limit_mm2=tx.cable_entry_cross_section_limit_mm2,
+        cable_entry_published=tx.cable_entry_published,
         model=tx.model,
         vector_group=tx.vector_group,
         cooling=tx.cooling,
@@ -134,6 +134,8 @@ def _transformer_info(
         depth_mm=tx.depth_mm,
         weight_kg=tx.weight_kg,
         cable_entry=tx.cable_entry,
+        cable_entry_cables_per_phase=tx.cable_entry_cables_per_phase,
+        cable_entry_max_cross_section_mm2=tx.cable_entry_max_cross_section_mm2,
         corrosion_class=tx.corrosion_class,
         temp_min_c=tx.temp_min_c,
         temp_max_c=tx.temp_max_c,
@@ -257,7 +259,7 @@ def get_catalogue() -> CatalogueResponse:
             max_utilization=MAX_UTILIZATION,
             collection_loss_pct=COLLECTION_LOSS_PCT,
             export_loss_pct_per_km=EXPORT_LOSS_PCT_PER_KM,
-            max_circuit_current_a=MAX_CIRCUIT_CURRENT_A,
+            feeders_per_busbar=FEEDERS_PER_BUSBAR,
         ),
     )
 

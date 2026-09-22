@@ -1,7 +1,7 @@
 import { fireEvent, render, screen } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { Palette } from './Palette'
-import { useStore } from '../store'
+import { EMPTY_DIAGRAM, useStore } from '../store'
 import type { BessSolutionInfo, CatalogueResponse, TransformerInfo } from '../types'
 
 const bessSolution: BessSolutionInfo = {
@@ -22,6 +22,7 @@ const bessTransformer: TransformerInfo = {
   key: 'GENERIC_BESS_TX_2750_LV069', display_name: '2750 kVA - Generic', s_rated_kva_at_40c: 2750,
   hv_kv: null, lv_kv: 0.69, brand: 'Generic', uk_percent: 8, pk_kw: 27.5, p0_kw: 2.75,
   switchgear_rated_current_a: 630, switchgear_rating_published: true,
+  cable_entry_parallel_limit: 2, cable_entry_cross_section_limit_mm2: 300, cable_entry_published: false,
   i0_percent: 0, model: null, vector_group: null, cooling: null, datasheet_url: null,
   s_rated_kva_at_30c: null,
   mv_kv_min: null, mv_kv_max: null, lv_winding_count: 1, insulation_level: null,
@@ -32,6 +33,7 @@ const bessTransformer: TransformerInfo = {
   cabinet_protection: null, surge_protection: null, ac_insulation_detection: null,
   cabinet_temp_control: null, ups: null,
   width_mm: null, height_mm: null, depth_mm: null, weight_kg: null, cable_entry: null,
+  cable_entry_cables_per_phase: null, cable_entry_max_cross_section_mm2: null,
   corrosion_class: null, temp_min_c: null, temp_max_c: null, humidity_min_pct: null,
   humidity_max_pct: null, altitude_max_m: null, communication: null, standards: null,
   datasheet_version: null, preliminary: false,
@@ -42,6 +44,7 @@ const pvTransformer: TransformerInfo = {
   key: 'ACME_1000', display_name: 'ACME 1000', s_rated_kva_at_40c: 1000,
   hv_kv: 20, lv_kv: 0.8, brand: 'Acme', uk_percent: 6, pk_kw: 8, p0_kw: 1,
   switchgear_rated_current_a: 630, switchgear_rating_published: true,
+  cable_entry_parallel_limit: 2, cable_entry_cross_section_limit_mm2: 300, cable_entry_published: false,
   i0_percent: 0.5, model: null, vector_group: null, cooling: null, datasheet_url: null,
   s_rated_kva_at_30c: null,
   mv_kv_min: null, mv_kv_max: null, lv_winding_count: 1, insulation_level: null,
@@ -52,6 +55,7 @@ const pvTransformer: TransformerInfo = {
   cabinet_protection: null, surge_protection: null, ac_insulation_detection: null,
   cabinet_temp_control: null, ups: null,
   width_mm: null, height_mm: null, depth_mm: null, weight_kg: null, cable_entry: null,
+  cable_entry_cables_per_phase: null, cable_entry_max_cross_section_mm2: null,
   corrosion_class: null, temp_min_c: null, temp_max_c: null, humidity_min_pct: null,
   humidity_max_pct: null, altitude_max_m: null, communication: null, standards: null,
   datasheet_version: null, preliminary: false,
@@ -66,7 +70,7 @@ const catalogue: CatalogueResponse = {
   cables: {},
   defaults: {
     tiers: { lv_kv: 0.8, mv_kv: 20, hv_kv: 132 },
-    rules: { max_utilization: 0.8, collection_loss_pct: 1.3, export_loss_pct_per_km: 0.1, max_circuit_current_a: 400 },
+    rules: { max_utilization: 0.8, collection_loss_pct: 1.3, export_loss_pct_per_km: 0.1 },
   },
   bess_solutions: [bessSolution],
   bess_transformers: [bessTransformer],
@@ -79,7 +83,22 @@ vi.mock('../hooks/useCatalogue', () => ({
 
 describe('Palette (ticket 06)', () => {
   beforeEach(() => {
-    useStore.setState({ selection: null, designMeta: null })
+    useStore.setState({ selection: null, designMeta: null, diagram: EMPTY_DIAGRAM })
+  })
+
+  it('still offers a PV busbar once one is already on the canvas (ticket 05)', () => {
+    useStore.setState({
+      diagram: {
+        ...EMPTY_DIAGRAM,
+        nodes: [{ id: 'bus1', kind: 'busbar', x: 0, y: 0, props: { fleet_kind: 'pv' } }],
+      },
+    })
+
+    render(<Palette />)
+
+    // A fleet's branch may hold more than one busbar in parallel: a second
+    // PV busbar is a valid drop, so the palette item is not hidden.
+    expect(screen.getByText('MV busbar — PV')).toBeTruthy()
   })
 
   it('lists BESS solutions as their own selectable, non-draggable palette items', () => {

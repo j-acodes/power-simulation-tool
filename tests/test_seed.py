@@ -6,22 +6,26 @@ Pinned here:
   * it SOLVES to a plant that meets the POC target within tolerance and does
     not overload the fleet;
   * seeding is deterministic (same params -> the same diagram) and every
-    circuit respects the current cap it was seeded with;
+    station stays within its own switchgear rated current (ADR-0006);
   * the MV-interconnection variant (no hv_tx node) also validates and solves.
 """
 
 from fastapi.testclient import TestClient
 
 from backend.main import app, db
-from backend.seed import seed_diagram
+from backend.seed import _layout_to_diagram, seed_diagram
 from backend.solve import solve_diagram
+from powertool.architecture import arrange_plant
+from powertool.components import Transformer
 from powertool.graph import validate_graph
+from powertool.sizing import SizingResult
 
 client = TestClient(app)
 
 # The 45 MW reference plant: a single catalogue model, HV interconnection at
-# 132 kV, 20 kV MV collection, the Stage-2 planning cap of 400 A per circuit,
-# and the example plant's trunk/spacing (see frontend/src/example.ts).
+# 132 kV, 20 kV MV collection, and the example plant's trunk/spacing (see
+# frontend/src/example.ts). Circuit grouping is bounded by the station's own
+# switchgear rated current (ADR-0006), never a flat planning cap.
 REFERENCE_PARAMS = {
     "p_poc_mw": 45.0,
     "pf_target": 0.95,
@@ -35,7 +39,6 @@ REFERENCE_PARAMS = {
     "max_loading": 1.0,
     "trunk_m": 800.0,
     "spacing_m": 350.0,
-    "max_circuit_current_a": 400.0,
 }
 
 
@@ -127,7 +130,6 @@ def test_seed_via_api_matches_direct_call():
         "max_loading": REFERENCE_PARAMS["max_loading"],
         "trunk_m": REFERENCE_PARAMS["trunk_m"],
         "spacing_m": REFERENCE_PARAMS["spacing_m"],
-        "max_circuit_current_a": REFERENCE_PARAMS["max_circuit_current_a"],
     }
     resp = client.post("/api/seed", json=payload)
     assert resp.status_code == 200
@@ -150,7 +152,7 @@ def test_seed_api_rejects_count_above_the_station_pairing_maximum():
     assert "1 to 28" in resp.json()["detail"]
 
 
-def test_seeding_is_deterministic_and_circuits_respect_the_current_cap():
+def test_seeding_is_deterministic_and_every_station_respects_its_switchgear_rating():
     first = seed_diagram(REFERENCE_PARAMS, db)
     second = seed_diagram(REFERENCE_PARAMS, db)
     assert first == second
@@ -159,8 +161,28 @@ def test_seeding_is_deterministic_and_circuits_respect_the_current_cap():
     assert result["issues"] == []
     summary = result["results"]["summary"]
     assert summary["all_current_ok"]
-    assert summary["worst_trunk_current_a"] <= REFERENCE_PARAMS["max_circuit_current_a"] + 1e-6
-    assert result["results"]["warnings"] == []
+    # The reference station publishes a switchgear rated current but no cable
+    # entry yet (no on-file datasheet does) — the ADR-0007 fallback notice is
+    # expected here; nothing else is.
+    assert [w["code"] for w in result["results"]["warnings"]] == ["cable_entry_not_published"]
+
+
+def test_every_seeded_circuit_reports_exactly_one_binding_limit():
+    # Ticket 07: on the default catalogue (a published switchgear rating, no
+    # feeder pins, no published cable entry) the station switchgear is the
+    # tightest of the three for every Stage-1 circuit.
+    diagram = seed_diagram(REFERENCE_PARAMS, db)
+    result = solve_diagram(diagram, db)
+    assert result["issues"] == []
+
+    busbars = [n for n in result["results"]["nodes"].values() if n.get("kind") == "busbar"]
+    assert busbars  # the fixture draws at least one
+    for busbar in busbars:
+        assert busbar["feeder_binding_limit"]  # one per circuit, never empty
+        for limit in busbar["feeder_binding_limit"]:
+            assert limit in ("station_switchgear", "cable_entry", "feeder")
+        assert busbar["feeder_binding_limit"] == ["station_switchgear"] * len(
+            busbar["feeder_binding_limit"])
 
 
 def test_seed_mv_interconnection_variant_validates_and_solves():
@@ -194,3 +216,108 @@ def test_seed_with_aux_load_adds_an_aux_node():
 
     result = solve_diagram(diagram, db)
     assert result["issues"] == []
+
+
+# --- ticket 06: Stage-1 planning opens busbars ------------------------------------
+
+def _small_switchgear_station() -> Transformer:
+    # A tiny switchgear rating (40 A) admits one ~34.4 A station but not two
+    # of them combined — forces exactly one station per circuit below.
+    return Transformer("TX_SMALL", s_rated_kva_at_40c=1200, uk_percent=6.0, pk_kw=12.0,
+                       p0_kw=1.2, i0_percent=0.8, hv_kv=20, lv_kv=0.8,
+                       rmu_rated_current_a=40.0)
+
+
+def _thirteen_single_station_stage1() -> SizingResult:
+    return SizingResult(p_poc_kw=0.0, q_poc_kvar=0.0, pf_target=1.0,
+                        p_inv_kw=13 * 1_200, q_inv_kvar=0.0, s_inv_kva=13 * 1_200,
+                        pf_inv=1.0, losses=[], power_balance_ok=True)
+
+
+def _mv_params() -> dict:
+    """REFERENCE_PARAMS, MV-interconnected (no HV node to keep the fixture
+    small — the busbar-opening logic does not care about the export step)."""
+    params = dict(REFERENCE_PARAMS)
+    params["interconnection"] = "MV"
+    params.pop("v_hv_kv")
+    return params
+
+
+def test_thirteen_circuits_at_the_default_limit_render_two_busbars():
+    # 13 circuits of one station each (a Stage-1 plan, not a drawing): the
+    # default 12-feeders-per-busbar limit splits the 13th circuit onto a
+    # second busbar. What :func:`_layout_to_diagram` renders for each
+    # station comes from ``params`` alone (a real catalogue key), so this
+    # synthetic layout only decides the circuit/busbar SHAPE.
+    layout = arrange_plant(_thirteen_single_station_stage1(), [(_small_switchgear_station(), 13)],
+                           trunk_length_km=0.5, spacing_km=0.2, v_mv_kv=20.0)
+    assert layout.circuit_sizes == [1] * 13
+    assert layout.n_busbars == 2  # 12 + 1
+
+    diagram = _layout_to_diagram(layout, _mv_params(), v_export_kv=20.0)
+    busbar_ids = sorted(n["id"] for n in diagram["nodes"] if n["kind"] == "busbar")
+    assert busbar_ids == ["busbar", "busbar2"]
+    # Each busbar gets its own export cable into the shared POC (ticket 05).
+    export_targets = {e["target"] for e in diagram["edges"] if e["id"] in ("e_export", "e_export2")}
+    assert export_targets == {"busbar", "busbar2"}
+
+    assert validate_graph(diagram, db) == []
+    result = solve_diagram(diagram, db)
+    assert result["issues"] == []
+    nodes = result["results"]["nodes"]
+    assert nodes["busbar"]["n_circuits"] == 12
+    assert nodes["busbar2"]["n_circuits"] == 1
+
+
+def test_thirteen_circuits_lowering_the_limit_opens_more_busbars():
+    # Same 13 single-station circuits, limit lowered to 5: three busbars
+    # (5 + 5 + 3) — proves the split follows the SETTING, not a fixed 12.
+    layout = arrange_plant(_thirteen_single_station_stage1(), [(_small_switchgear_station(), 13)],
+                           trunk_length_km=0.5, spacing_km=0.2, v_mv_kv=20.0,
+                           feeders_per_busbar=5)
+    assert layout.n_busbars == 3
+
+    params = _mv_params()
+    params["feeders_per_busbar"] = 5
+    diagram = _layout_to_diagram(layout, params, v_export_kv=20.0)
+    busbar_ids = sorted(n["id"] for n in diagram["nodes"] if n["kind"] == "busbar")
+    assert busbar_ids == ["busbar", "busbar2", "busbar3"]
+    assert diagram["settings"]["rules"]["feeders_per_busbar"] == 5
+
+    assert validate_graph(diagram, db) == []
+    assert solve_diagram(diagram, db)["issues"] == []
+
+
+def test_seed_via_api_passes_the_feeders_per_busbar_setting_through():
+    payload = dict(REFERENCE_PARAMS)
+    payload["feeders_per_busbar"] = 6
+    resp = client.post("/api/seed", json=payload)
+    assert resp.status_code == 200
+    assert resp.json()["settings"]["rules"]["feeders_per_busbar"] == 6
+
+
+def test_a_drawn_thirteen_circuit_busbar_is_not_rearranged():
+    # A DRAWN diagram (never re-seeded) with all 13 circuits already hanging
+    # off ONE busbar must solve exactly as drawn — the feeders-per-busbar
+    # rule governs a future re-seed only, never a diagram already on the
+    # canvas (ADR-0007, ticket 06).
+    layout = arrange_plant(_thirteen_single_station_stage1(), [(_small_switchgear_station(), 13)],
+                           trunk_length_km=0.5, spacing_km=0.2, v_mv_kv=20.0)
+    assert layout.n_busbars == 2  # these same 13 circuits WOULD split if re-seeded
+
+    drawn = _layout_to_diagram(layout, _mv_params(), v_export_kv=20.0)
+    # Collapse the seeded second busbar back onto the first, as if an
+    # engineer had drawn all 13 circuits on one busbar by hand.
+    for edge in drawn["edges"]:
+        if edge["target"] == "busbar2":
+            edge["target"] = "busbar"
+        if edge["source"] == "busbar2":
+            edge["source"] = "busbar"
+    drawn["edges"] = [e for e in drawn["edges"] if e["id"] != "e_export2"]
+    drawn["nodes"] = [n for n in drawn["nodes"] if n["id"] != "busbar2"]
+
+    assert validate_graph(drawn, db) == []
+    result = solve_diagram(drawn, db)
+    assert result["issues"] == []
+    assert result["results"]["nodes"]["busbar"]["n_circuits"] == 13
+    assert "busbar2" not in result["results"]["nodes"]

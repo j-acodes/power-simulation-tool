@@ -2,10 +2,11 @@
 
 Rules: the station fleet (models + counts) comes from Stage 1 and runs at
 uniform per-unit loading (each station's share is proportional to its rating);
-stations are grouped into MV circuits respecting a max current per circuit,
-with the current computed from the actual MV-side power (LV share minus the
-station transformer's own losses), never from the nameplate; within a circuit
-the biggest stations sit nearest the substation.
+stations are grouped into MV circuits respecting each station's own
+switchgear rated current (ADR-0006), with the current computed from the
+actual MV-side power (LV share minus the station transformer's own losses),
+never from the nameplate; within a circuit the biggest stations sit nearest
+the substation.
 """
 
 import math
@@ -24,6 +25,7 @@ from powertool import (
 )
 from powertool import architecture
 from powertool.architecture import (
+    BusbarSection,
     arrange_plant,
     arrange_plant_manual,
     assign_circuits,
@@ -36,21 +38,34 @@ from powertool.architecture import (
 from powertool.sizing import SizingResult
 
 
-def _tx_2500() -> Transformer:
-    # Representative 2500 kVA 20/0.8 kV station transformer.
+def _tx_2500(rmu_rated_current_a: float | None = None) -> Transformer:
+    # Representative 2500 kVA 20/0.8 kV station transformer. An explicit
+    # switchgear rating lets a test reproduce a specific circuit split
+    # (ADR-0006); omitted, it falls back to DEFAULT_SWITCHGEAR_RATED_CURRENT_A.
+    # A published 2 x 400 mm^2 cable entry keeps this fixture's existing
+    # cable-selection tests exercising cross-sections above the engine's
+    # 2 x 300 mm^2 fallback (ADR-0007) — the cable-entry FALLBACK itself has
+    # its own dedicated tests using a station that publishes none.
     return Transformer("TX_2500", s_rated_kva_at_40c=2500, uk_percent=6.0, pk_kw=24.0,
-                       p0_kw=2.5, i0_percent=0.8, hv_kv=20, lv_kv=0.8)
+                       p0_kw=2.5, i0_percent=0.8, hv_kv=20, lv_kv=0.8,
+                       rmu_rated_current_a=rmu_rated_current_a,
+                       cable_entry_cables_per_phase=2,
+                       cable_entry_max_cross_section_mm2=400)
 
 
 def _tx_9000() -> Transformer:
     # A big PV station, parameters per the project's design assumptions.
     return Transformer("TX_9000", s_rated_kva_at_40c=9000, uk_percent=8.0, pk_kw=90.0,
-                       p0_kw=9.0, i0_percent=0.0, lv_kv=0.8, brand="BrandA")
+                       p0_kw=9.0, i0_percent=0.0, lv_kv=0.8, brand="BrandA",
+                       cable_entry_cables_per_phase=2,
+                       cable_entry_max_cross_section_mm2=400)
 
 
 def _tx_3300() -> Transformer:
     return Transformer("TX_3300", s_rated_kva_at_40c=3300, uk_percent=8.0, pk_kw=33.0,
-                       p0_kw=3.3, i0_percent=0.0, lv_kv=0.8, brand="BrandB")
+                       p0_kw=3.3, i0_percent=0.0, lv_kv=0.8, brand="BrandB",
+                       cable_entry_cables_per_phase=2,
+                       cable_entry_max_cross_section_mm2=400)
 
 
 def _stage1(p_inv_kw: float, q_inv_kvar: float) -> SizingResult:
@@ -138,39 +153,46 @@ def test_series_bug_regression_group_vs_cascaded_blocks():
 
 
 # --- assign_circuits --------------------------------------------------------------
+#
+# assign_circuits takes a per-station rating list, not a scalar cap (ADR-0006):
+# a circuit is admitted only when every position's accumulated current stays
+# within the MINIMUM switchgear rating among the stations already placed in
+# it. Identical ratings reproduce the old scalar-cap arithmetic exactly.
 
 def test_assign_worked_example_18_capped_at_5():
-    # 18 identical stations, cap 380 A at 70 A each -> balanced 5+5+4+4.
-    bins = assign_circuits([70.0] * 18, 380.0)
+    # 18 identical stations, 380 A rating each at 70 A each -> balanced 5+5+4+4.
+    bins = assign_circuits([70.0] * 18, [380.0] * 18)
     assert sorted((len(b) for b in bins), reverse=True) == [5, 5, 4, 4]
     assert sorted(i for b in bins for i in b) == list(range(18))
 
 
 def test_assign_even_split():
-    assert [len(b) for b in assign_circuits([70.0] * 15, 380.0)] == [5, 5, 5]
+    assert [len(b) for b in assign_circuits([70.0] * 15, [380.0] * 15)] == [5, 5, 5]
 
 
 def test_assign_single_circuit_when_cap_allows():
-    assert [len(b) for b in assign_circuits([10.0] * 6, 1000.0)] == [6]
+    assert [len(b) for b in assign_circuits([10.0] * 6, [1000.0] * 6)] == [6]
 
 
 def test_assign_one_station():
-    assert assign_circuits([70.0], 380.0) == [[0]]
+    assert assign_circuits([70.0], [380.0]) == [[0]]
 
 
 def test_assign_station_exceeds_cap_raises():
-    with pytest.raises(ValueError):
-        assign_circuits([100.0] * 4, 50.0)
+    # A station's OWN current alone above its OWN rating raises immediately.
+    with pytest.raises(ValueError, match="switchgear rated current"):
+        assign_circuits([100.0] * 4, [50.0] * 4)
 
 
 def test_assign_exact_cap_boundary():
-    # Cap exactly 5x the station current must allow 5 per circuit.
-    assert [len(b) for b in assign_circuits([76.0] * 10, 380.0)] == [5, 5]
+    # Rating exactly 5x the station current must allow 5 per circuit.
+    assert [len(b) for b in assign_circuits([76.0] * 10, [380.0] * 10)] == [5, 5]
 
 
 def test_assign_mixed_currents_respect_cap():
     currents = [300.0, 300.0, 100.0, 100.0, 100.0, 100.0]
-    bins = assign_circuits(currents, 400.0)
+    ratings = [400.0] * 6
+    bins = assign_circuits(currents, ratings)
     assert len(bins) == 3  # lower bound: 1000/400 -> 3 circuits
     for b in bins:
         assert sum(currents[i] for i in b) <= 400.0 + 1e-9
@@ -179,22 +201,49 @@ def test_assign_mixed_currents_respect_cap():
 
 def test_assign_invariants():
     for n in (1, 2, 7, 18, 23, 40):
-        bins = assign_circuits([70.0] * n, 380.0)
+        bins = assign_circuits([70.0] * n, [380.0] * n)
         sizes = [len(b) for b in bins]
         assert sum(sizes) == n
         assert max(sizes) - min(sizes) <= 1  # identical stations stay balanced
         assert max(sizes) <= math.floor(380.0 / 70.0)
 
 
+def test_assign_ratings_length_must_match_stations():
+    with pytest.raises(ValueError):
+        assign_circuits([70.0, 70.0], [380.0])
+
+
+def test_assign_circuit_ceiling_is_the_minimum_rating_of_its_own_stations():
+    # A low-rated station constrains the WHOLE circuit it lands in, not just
+    # its own position: a 630 A and a 150 A station (both individually within
+    # their own rating) cannot share a circuit once their combined current
+    # exceeds 150 A, even though the 630 A station alone would allow much more.
+    currents = [100.0, 100.0]
+    ratings = [630.0, 150.0]
+    bins = assign_circuits(currents, ratings)
+    assert sorted(len(b) for b in bins) == [1, 1]  # forced into separate circuits
+
+
+def test_assign_mixed_ratings_pack_together_within_the_lower_ceiling():
+    # Two 100 A stations rated 630 A each pack onto one circuit with a third,
+    # lower-rated 150 A station at 40 A, since 100+100+40 = 240 <= 150 is
+    # false — so the 150 A station must end up alone or with enough headroom.
+    # Here it fits alongside ONE 100 A station (140 <= 150) but not both.
+    currents = [100.0, 100.0, 40.0]
+    ratings = [630.0, 630.0, 150.0]
+    bins = assign_circuits(currents, ratings)
+    for b in bins:
+        assert sum(currents[i] for i in b) <= min(ratings[i] for i in b) + 1e-9
+
+
 # --- arrange_plant ----------------------------------------------------------------
 
 def test_arrange_plant_45mw_example():
     # 18 x 2500 kVA from Stage 1; per-station MV current ~69 A, so a 380 A
-    # circuit cap gives at most 5 per circuit -> 4 circuits, 5+5+4+4.
+    # switchgear rating gives at most 5 per circuit -> 4 circuits, 5+5+4+4.
     stage1 = _stage1(p_inv_kw=43_000, q_inv_kvar=9_000)
     layout = arrange_plant(
-        stage1, [(_tx_2500(), 18)],
-        max_circuit_current_a=380.0,
+        stage1, [(_tx_2500(rmu_rated_current_a=380.0), 18)],
         trunk_length_km=0.8, spacing_km=0.35, v_mv_kv=20.0,
     )
     assert layout.n_transformers == 18
@@ -210,18 +259,19 @@ def test_arrange_plant_45mw_example():
     assert plan.q_lv_kvar == pytest.approx(9_000 / 18)
     assert plan.i_a == pytest.approx(current_a(plan.s_mv_kva, 20.0))
     assert plan.p_mv_kw < plan.p_lv_kw  # transformer losses subtracted
-    # Every circuit respects the current cap.
+    # Every circuit respects each station's own switchgear rated current.
     for circuit in layout.circuit_plans:
         assert sum(p.i_a for p in circuit) <= 380.0 + 1e-9
 
 
 def test_arrange_mixed_fleet_shares_and_ordering():
     # 1x9000 + 2x3300: shares proportional to rating, biggest nearest the
-    # substation (position 0) in its circuit.
+    # substation (position 0) in its circuit. Default (unpublished) 630 A
+    # switchgear rating comfortably covers this fleet's combined current, so
+    # it all lands on one circuit without any override needed.
     stage1 = _stage1(p_inv_kw=14_500, q_inv_kvar=2_000)
     layout = arrange_plant(
         stage1, [(_tx_3300(), 2), (_tx_9000(), 1)],  # order given must not matter
-        max_circuit_current_a=10_000.0,
         trunk_length_km=0.8, spacing_km=0.35, v_mv_kv=20.0,
     )
     assert layout.n_transformers == 3
@@ -238,7 +288,6 @@ def test_arrange_loading_flag():
     stage1 = _stage1(p_inv_kw=20_000, q_inv_kvar=0.0)  # 20 MVA on 15.6 MVA fleet
     layout = arrange_plant(
         stage1, [(_tx_9000(), 1), (_tx_3300(), 2)],
-        max_circuit_current_a=10_000.0,
         trunk_length_km=0.8, spacing_km=0.35, v_mv_kv=20.0,
     )
     assert layout.fleet_loading > 1.0
@@ -248,11 +297,92 @@ def test_arrange_loading_flag():
 def test_arrange_plant_invalid_inputs():
     stage1 = _stage1(43_000, 9_000)
     with pytest.raises(ValueError):
-        arrange_plant(stage1, [(_tx_2500(), 18)], max_circuit_current_a=380.0,
+        arrange_plant(stage1, [(_tx_2500(), 18)],
                       trunk_length_km=-1.0, spacing_km=0.35, v_mv_kv=20.0)
     with pytest.raises(ValueError):
-        arrange_plant(stage1, [], max_circuit_current_a=380.0,
+        arrange_plant(stage1, [],
                       trunk_length_km=0.8, spacing_km=0.35, v_mv_kv=20.0)
+
+
+# --- Stage-1 busbar opening (ADR-0007, ticket 06) ---------------------------------
+
+def test_arrange_plant_one_busbar_fits_stays_one_group():
+    # 45 MW reference plant (4 circuits, well under the 12-feeder default and
+    # nowhere near 4000 A): unchanged from before this ticket, one busbar.
+    stage1 = _stage1(p_inv_kw=43_000, q_inv_kvar=9_000)
+    layout = arrange_plant(
+        stage1, [(_tx_2500(rmu_rated_current_a=380.0), 18)],
+        trunk_length_km=0.8, spacing_km=0.35, v_mv_kv=20.0,
+    )
+    assert layout.busbar_groups == [[0, 1, 2, 3]]
+    assert layout.n_busbars == 1
+
+
+def test_arrange_plant_thirteen_circuits_at_the_default_limit_opens_a_second_busbar():
+    # 13 stations, each forced into its own circuit (a 40 A switchgear rating
+    # admits one ~34.4 A station but not two): the default 12-feeder limit
+    # (well below the 4000 A cap here) splits the 13th circuit onto a second
+    # busbar, 12 + 1, without reordering any circuit.
+    stage1 = _stage1(p_inv_kw=13 * 1_200, q_inv_kvar=0.0)
+    layout = arrange_plant(
+        stage1, [(_tx_2500(rmu_rated_current_a=40.0), 13)],
+        trunk_length_km=0.5, spacing_km=0.2, v_mv_kv=20.0,
+    )
+    assert layout.circuit_sizes == [1] * 13
+    assert layout.busbar_groups == [list(range(12)), [12]]
+    assert layout.n_busbars == 2
+
+
+def test_arrange_plant_feeders_per_busbar_setting_is_honoured():
+    # Same 13-single-station-circuit plant, but with the limit lowered to 5:
+    # three busbars (5 + 5 + 3), proving the split follows the SETTING, not a
+    # hard-coded 12.
+    stage1 = _stage1(p_inv_kw=13 * 1_200, q_inv_kvar=0.0)
+    layout = arrange_plant(
+        stage1, [(_tx_2500(rmu_rated_current_a=40.0), 13)],
+        trunk_length_km=0.5, spacing_km=0.2, v_mv_kv=20.0,
+        feeders_per_busbar=5,
+    )
+    assert layout.busbar_groups == [
+        [0, 1, 2, 3, 4], [5, 6, 7, 8, 9], [10, 11, 12],
+    ]
+
+
+def test_arrange_plant_busbar_total_above_4000a_opens_a_second_busbar_regardless_of_feeder_count():
+    # Two stations, each forced into its own circuit by a 2200 A switchgear
+    # ceiling (one station's own ~2191 A fits, two combined would not), each
+    # circuit near 2191 A: together they would put a single busbar at
+    # ~4383 A, above the 4000 A ladder top, even though only 2 of the
+    # default 12 feeder slots would be used.
+    tx = Transformer("BIG", s_rated_kva_at_40c=76_000, uk_percent=8.0, pk_kw=304.0,
+                     p0_kw=45.0, i0_percent=0.3, lv_kv=0.8,
+                     rmu_rated_current_a=2200.0)
+    stage1 = _stage1(p_inv_kw=152_000.0, q_inv_kvar=0.0)
+    layout = arrange_plant(
+        stage1, [(tx, 2)],
+        trunk_length_km=0.5, spacing_km=0.2, v_mv_kv=20.0,
+    )
+    assert layout.circuit_sizes == [1, 1]
+    single_busbar_a = current_a(
+        math.hypot(sum(p.p_mv_kw for c in layout.circuit_plans for p in c),
+                   sum(p.q_mv_kvar for c in layout.circuit_plans for p in c)),
+        20.0,
+    )
+    assert single_busbar_a > 4000.0
+    assert layout.busbar_groups == [[0], [1]]
+    assert layout.n_busbars == 2
+
+
+def test_arrange_plant_manual_never_splits_into_more_than_one_busbar_group():
+    # A drawn diagram's busbars come from the diagram itself (validated at a
+    # higher layer, ticket 05); arrange_plant_manual's own layout is always
+    # one group, whatever it is handed — 13 circuits included.
+    stage1 = _stage1(p_inv_kw=13 * 1_200, q_inv_kvar=0.0)
+    tx = _tx_2500(rmu_rated_current_a=40.0)
+    circuits = [[tx] for _ in range(13)]
+    layout = arrange_plant_manual(stage1, circuits, v_mv_kv=20.0)
+    assert layout.busbar_groups == [list(range(13))]
+    assert layout.n_busbars == 1
 
 
 # --- arrange_plant_manual (drawn arrangement) -------------------------------------
@@ -278,8 +408,7 @@ def test_manual_arrangement_equals_the_auto_one_when_fed_its_own_output():
     # physics.
     stage1, auto = _full_plant_inputs()
     manual = arrange_plant_manual(
-        stage1, _as_drawn(auto),
-        max_circuit_current_a=auto.max_circuit_current_a, v_mv_kv=auto.v_mv_kv,
+        stage1, _as_drawn(auto), v_mv_kv=auto.v_mv_kv,
     )
 
     assert manual.fleet == auto.fleet  # 18 identical stations aggregate back
@@ -318,16 +447,14 @@ def test_manual_arrangement_never_reorders_what_was_drawn():
     # arrange_plant would sort both the other way round.
     stage1 = _stage1(p_inv_kw=14_500, q_inv_kvar=2_000)
     drawn = [[_tx_3300()], [_tx_3300(), _tx_9000()]]
-    layout = arrange_plant_manual(stage1, drawn, max_circuit_current_a=10_000.0,
-                                  v_mv_kv=20.0)
+    layout = arrange_plant_manual(stage1, drawn, v_mv_kv=20.0)
 
     assert layout.circuit_sizes == [1, 2]
     assert [[p.transformer.s_rated_kva_at_40c for p in c] for c in layout.circuit_plans] == \
            [[3300], [3300, 9000]]
     # Same fleet, auto-arranged: one circuit, biggest station nearest the busbar.
     auto = arrange_plant(stage1, [(_tx_3300(), 2), (_tx_9000(), 1)],
-                         max_circuit_current_a=10_000.0, trunk_length_km=0.8,
-                         spacing_km=0.35, v_mv_kv=20.0)
+                         trunk_length_km=0.8, spacing_km=0.35, v_mv_kv=20.0)
     assert auto.circuit_sizes == [3]
     assert layout.fleet_loading == auto.fleet_loading  # same fleet, same loading
 
@@ -345,7 +472,7 @@ def test_manual_arrangement_mixed_models_share_by_own_rating():
     stage1 = _stage1(p_inv_kw=14_500, q_inv_kvar=2_000)
     layout = arrange_plant_manual(
         stage1, [[_tx_9000(), _tx_3300(), _tx_3300()]],
-        max_circuit_current_a=10_000.0, v_mv_kv=20.0,
+        v_mv_kv=20.0,
     )
 
     assert layout.fleet == [(_tx_9000(), 1), (_tx_3300(), 2)]  # counts aggregated
@@ -359,24 +486,31 @@ def test_manual_arrangement_mixed_models_share_by_own_rating():
     assert big.p_mv_kw < big.p_lv_kw  # own transformer losses, own share
 
 
-def test_manual_arrangement_accepts_an_over_cap_drawing():
-    # The user drew it: an over-current circuit is reported, never refused.
+def test_manual_arrangement_accepts_a_drawing_over_a_stations_switchgear_rating():
+    # The user drew it: architecture.py never refuses to solve a circuit whose
+    # THROUGH current exceeds a station's own switchgear rating — that
+    # judgment is powertool.graph's ``switchgear_through_current_exceeded``
+    # warning, not architecture's own. It always reports the number.
+    tx_big = replace(_tx_9000(), rmu_rated_current_a=350.0)
+    tx_small = replace(_tx_3300(), rmu_rated_current_a=350.0)
     stage1 = _stage1(p_inv_kw=14_500, q_inv_kvar=2_000)
-    layout = arrange_plant_manual(stage1, [[_tx_9000(), _tx_3300()]],
-                                  max_circuit_current_a=50.0, v_mv_kv=20.0)
+    layout = arrange_plant_manual(stage1, [[tx_big, tx_small]], v_mv_kv=20.0)
     (circuit,) = size_circuits(layout, _catalogue(),
                                segment_lengths=_lengths_of(layout))
-    assert not circuit.current_ok
-    assert circuit.i_trunk_a > 50.0
+    # Each station is within its OWN current alone...
+    assert layout.circuit_plans[0][0].i_a < 350.0
+    assert layout.circuit_plans[0][1].i_a < 350.0
+    # ...but the near station's THROUGH current (both, combined) is not.
+    assert circuit.stations[0].through_current_a > 350.0
+    assert circuit.i_trunk_a == pytest.approx(circuit.stations[0].through_current_a)
 
 
 def test_manual_arrangement_needs_stations():
     stage1 = _stage1(43_000, 9_000)
     with pytest.raises(ValueError):
-        arrange_plant_manual(stage1, [], max_circuit_current_a=380.0, v_mv_kv=20.0)
+        arrange_plant_manual(stage1, [], v_mv_kv=20.0)
     with pytest.raises(ValueError):
-        arrange_plant_manual(stage1, [[_tx_2500()], []],
-                             max_circuit_current_a=380.0, v_mv_kv=20.0)
+        arrange_plant_manual(stage1, [[_tx_2500()], []], v_mv_kv=20.0)
 
 
 # --- size_circuits ----------------------------------------------------------------
@@ -394,11 +528,12 @@ def _catalogue(b_us: float = 60.0) -> list[Cable]:
 
 
 def _layout_one_circuit(n_stations: int = 3, q_inv_kvar: float = 2_000.0):
-    # n identical 2500 kVA stations in a single circuit (generous current cap).
+    # n identical 2500 kVA stations in a single circuit: the default
+    # (unpublished) 630 A switchgear rating comfortably covers a handful of
+    # ~70 A stations, so they all land on one circuit.
     stage1 = _stage1(p_inv_kw=2_400.0 * n_stations, q_inv_kvar=q_inv_kvar)
     return arrange_plant(
         stage1, [(_tx_2500(), n_stations)],
-        max_circuit_current_a=10_000.0,
         trunk_length_km=0.8, spacing_km=0.35, v_mv_kv=20.0,
     )
 
@@ -447,7 +582,6 @@ def test_mixed_fleet_circuit_sizing():
     stage1 = _stage1(p_inv_kw=14_500, q_inv_kvar=2_000)
     layout = arrange_plant(
         stage1, [(_tx_9000(), 1), (_tx_3300(), 2)],
-        max_circuit_current_a=10_000.0,
         trunk_length_km=0.8, spacing_km=0.35, v_mv_kv=20.0,
     )
     (circuit,) = size_circuits(layout, _catalogue())
@@ -463,19 +597,11 @@ def test_mixed_fleet_circuit_sizing():
     assert p_out == pytest.approx(p_in, rel=1e-9)
 
 
-def test_trunk_current_within_cap():
+def test_trunk_current_within_switchgear_rating():
     layout = _layout_one_circuit(n_stations=3)
     (circuit,) = size_circuits(layout, _catalogue())
-    assert circuit.i_trunk_a <= layout.max_circuit_current_a
-    assert circuit.current_ok
-
-
-def test_trunk_current_cap_violation_flagged():
-    # Force an inconsistent cap after arrangement — flag it, don't crash.
-    layout = _layout_one_circuit(n_stations=3)
-    layout.max_circuit_current_a = 2.0 * layout.circuit_plans[0][0].i_a
-    (circuit,) = size_circuits(layout, _catalogue())
-    assert not circuit.current_ok
+    rating = layout.circuit_plans[0][0].transformer.switchgear_rated_current_a
+    assert circuit.i_trunk_a <= rating
 
 
 def test_through_current_reads_the_accumulated_segment_walk_not_a_second_computation():
@@ -494,18 +620,177 @@ def test_through_current_reads_the_accumulated_segment_walk_not_a_second_computa
             current_a(segment.s_kva, layout.v_mv_kv))
 
 
-def test_station_over_own_switchgear_rating_raises_before_any_cable_is_sized():
-    # A station whose OWN current alone exceeds its OWN switchgear rated
-    # current is a hard error — the catalogue entry is self-contradictory
-    # (ADR-0006) — raised before through current or cable sizing.
+# --- Cable entry bounds circuit cables (ADR-0007) ---------------------------
+
+
+def test_segment_bound_is_the_stricter_of_its_two_ends():
+    # Station 1 (near the busbar) publishes a generous cable entry; station 2
+    # (far) publishes a tight one. The far segment (station 2 to station 1)
+    # must respect station 2's tighter bound even though station 1's is wide.
+    near = Transformer("NEAR", s_rated_kva_at_40c=9000, uk_percent=8.0, pk_kw=90.0,
+                       p0_kw=9.0, i0_percent=0.0, lv_kv=0.8, rmu_rated_current_a=2000.0,
+                       cable_entry_cables_per_phase=3, cable_entry_max_cross_section_mm2=500.0)
+    far_tx = Transformer("FAR", s_rated_kva_at_40c=3300, uk_percent=8.0, pk_kw=33.0,
+                         p0_kw=3.3, i0_percent=0.0, lv_kv=0.8, rmu_rated_current_a=2000.0,
+                         cable_entry_cables_per_phase=1, cable_entry_max_cross_section_mm2=150.0)
+    stage1 = _stage1(p_inv_kw=8_000.0, q_inv_kvar=1_500.0)
+    layout = arrange_plant_manual(stage1, [[near, far_tx]], v_mv_kv=20.0)
+    (circuit,) = size_circuits(
+        layout, _catalogue(), segment_lengths={(1, 1): 0.8, (1, 2): 0.35})
+
+    far_segment = circuit.segments[-1]  # station 2 (FAR) to station 1 (NEAR)
+    assert far_segment.selection is not None
+    assert far_segment.selection.n_parallel <= 1  # FAR's own limit, not NEAR's 3
+    assert far_segment.selection.cable.cross_section_mm2 <= 150  # FAR's own cap
+
+
+def test_segment_with_no_admissible_cable_is_flagged_not_raised():
+    # Two stations whose own current is comfortably within their own cable
+    # entry, but whose SUM (the trunk's cumulative current) is not — the
+    # trunk is recorded unsized and the circuit still solves (ADR-0007);
+    # this is deliberately NOT the own-current hard error below.
+    tx = Transformer("MID", s_rated_kva_at_40c=9000, uk_percent=8.0, pk_kw=90.0,
+                     p0_kw=9.0, i0_percent=0.0, lv_kv=0.8, rmu_rated_current_a=2000.0)
+    stage1 = _stage1(p_inv_kw=16_000.0, q_inv_kvar=0.0)
+    layout = arrange_plant_manual(stage1, [[tx, tx]], v_mv_kv=20.0)
+    for plan in layout.circuit_plans[0]:
+        assert plan.i_a < 300.0  # comfortably under the fallback's ~376 A ceiling
+
+    (circuit,) = size_circuits(layout, _catalogue())
+
+    trunk = circuit.segments[0]
+    assert trunk.selection is None
+    assert "cable entry" in trunk.cable_label
+    assert trunk.dp_kw == 0.0
+    far_segment = circuit.segments[-1]
+    assert far_segment.selection is not None  # only the trunk is flagged
+
+
+def test_station_over_own_switchgear_rating_raises_at_auto_arrangement():
+    # assign_circuits screens this before any circuit is even formed
+    # (ADR-0006): a station whose OWN current alone exceeds its OWN
+    # switchgear rated current is a hard error, the catalogue entry is
+    # self-contradictory.
     tx = replace(_tx_2500(), rmu_rated_current_a=50.0)  # far below its own MV current
     stage1 = _stage1(p_inv_kw=2_400.0, q_inv_kvar=500.0)
-    layout = arrange_plant(
-        stage1, [(tx, 1)], max_circuit_current_a=10_000.0,
-        trunk_length_km=0.8, spacing_km=0.35, v_mv_kv=20.0,
-    )
+    with pytest.raises(ValueError, match="switchgear rated current"):
+        arrange_plant(stage1, [(tx, 1)],
+                      trunk_length_km=0.8, spacing_km=0.35, v_mv_kv=20.0)
+
+
+def test_station_over_own_switchgear_rating_raises_before_any_cable_is_sized():
+    # A DRAWN plant skips assign_circuits entirely (arrange_plant_manual keeps
+    # the drawn order verbatim, see its own docstring), so size_circuits is
+    # the last line of defense for the same hard error.
+    tx = replace(_tx_2500(), rmu_rated_current_a=50.0)  # far below its own MV current
+    stage1 = _stage1(p_inv_kw=2_400.0, q_inv_kvar=500.0)
+    layout = arrange_plant_manual(stage1, [[tx]], v_mv_kv=20.0)
     with pytest.raises(ValueError, match="switchgear rated current"):
         size_circuits(layout, _catalogue())
+
+
+def test_station_over_own_cable_entry_raises_at_auto_arrangement():
+    # Same standing as the switchgear hard error above, for cable entry
+    # (ADR-0007): arrange_plant's cable_candidates path screens a station
+    # whose own current alone no cable within its own cable entry can carry,
+    # before any circuit is even formed.
+    tx = replace(_tx_2500(), cable_entry_cables_per_phase=1,
+                 cable_entry_max_cross_section_mm2=50.0)  # no catalogue cable fits
+    stage1 = _stage1(p_inv_kw=2_400.0, q_inv_kvar=500.0)
+    with pytest.raises(ValueError, match="cable entry"):
+        arrange_plant(stage1, [(tx, 1)],
+                      trunk_length_km=0.8, spacing_km=0.35, v_mv_kv=20.0,
+                      cable_candidates=_catalogue())
+
+
+def test_arrange_plant_without_cable_candidates_skips_the_cable_entry_check():
+    # cable_candidates is opt-in: omitted (the default), grouping considers
+    # switchgear only, unaffected by a station's cable entry — existing
+    # callers with no cable catalogue in scope keep today's behaviour.
+    tx = replace(_tx_2500(), cable_entry_cables_per_phase=1,
+                 cable_entry_max_cross_section_mm2=50.0)
+    stage1 = _stage1(p_inv_kw=2_400.0, q_inv_kvar=500.0)
+    layout = arrange_plant(stage1, [(tx, 1)],
+                           trunk_length_km=0.8, spacing_km=0.35, v_mv_kv=20.0)
+    assert layout.circuit_sizes == [1]
+
+
+def test_station_over_own_cable_entry_raises_before_any_cable_is_sized():
+    # A DRAWN plant skips assign_circuits entirely, so size_circuits is the
+    # last line of defense for the same hard error (ADR-0007).
+    tx = replace(_tx_2500(), cable_entry_cables_per_phase=1,
+                 cable_entry_max_cross_section_mm2=50.0)
+    stage1 = _stage1(p_inv_kw=2_400.0, q_inv_kvar=500.0)
+    layout = arrange_plant_manual(stage1, [[tx]], v_mv_kv=20.0)
+    with pytest.raises(ValueError, match="cable entry"):
+        size_circuits(layout, _catalogue())
+
+
+def test_arrange_plant_with_an_empty_cable_catalogue_skips_the_cable_entry_check():
+    # An empty (not None) cable_candidates means "no MV cable catalogue for
+    # this voltage yet" — a different problem from an inadmissible cable
+    # entry, so it must not raise the cable-entry hard error here either.
+    tx = replace(_tx_2500(), cable_entry_cables_per_phase=1,
+                 cable_entry_max_cross_section_mm2=50.0)
+    stage1 = _stage1(p_inv_kw=2_400.0, q_inv_kvar=500.0)
+    layout = arrange_plant(stage1, [(tx, 1)],
+                           trunk_length_km=0.8, spacing_km=0.35, v_mv_kv=20.0,
+                           cable_candidates=[])
+    assert layout.circuit_sizes == [1]
+
+
+def test_size_circuits_with_an_empty_cable_catalogue_raises_the_existing_no_cable_error():
+    # Same distinction as above at the size_circuits level: an empty
+    # catalogue must surface select_cable's own "no usable cables" error, not
+    # the cable-entry-specific one — even for a station whose own current
+    # would otherwise trip the cable-entry hard error.
+    tx = replace(_tx_2500(), cable_entry_cables_per_phase=1,
+                 cable_entry_max_cross_section_mm2=50.0)
+    stage1 = _stage1(p_inv_kw=2_400.0, q_inv_kvar=500.0)
+    layout = arrange_plant_manual(stage1, [[tx]], v_mv_kv=20.0)
+    with pytest.raises(ValueError, match="No usable cables in the catalogue"):
+        size_circuits(layout, [])
+
+
+def test_cable_candidates_narrows_stage1_grouping_to_admissible_circuits():
+    # Two identical stations whose own current comfortably fits their own
+    # switchgear (2000 A, generous) but whose SUM exceeds what the fallback
+    # cable entry (2 x 300 mm^2, ~376 A here with only AL_95 <= 300 mm^2 in
+    # this catalogue) can carry: switchgear-only grouping packs them into one
+    # circuit; cable-entry-aware grouping must split them (ADR-0007's
+    # "Stage-1 grouping only forms circuits in which every segment has an
+    # admissible cable").
+    tx = Transformer("BIG", s_rated_kva_at_40c=9000, uk_percent=8.0, pk_kw=90.0,
+                     p0_kw=9.0, i0_percent=0.0, lv_kv=0.8, rmu_rated_current_a=2000.0)
+    stage1 = _stage1(p_inv_kw=16_000.0, q_inv_kvar=0.0)
+
+    switchgear_only = arrange_plant(stage1, [(tx, 2)],
+                                    trunk_length_km=0.5, spacing_km=0.2, v_mv_kv=20.0)
+    assert switchgear_only.circuit_sizes == [2]
+
+    cable_aware = arrange_plant(stage1, [(tx, 2)],
+                                trunk_length_km=0.5, spacing_km=0.2, v_mv_kv=20.0,
+                                cable_candidates=_catalogue())
+    assert cable_aware.circuit_sizes == [1, 1]
+
+
+def test_stage1_grouping_ceiling_also_respects_the_fixed_busbar_end():
+    # A station publishing a GENEROUS cable entry (4 x 630 mm^2) still gets
+    # grouped against the busbar-end ceiling: the trunk's other end is always
+    # the busbar, which has no station to publish a figure and so always
+    # falls back to 2 x 300 mm^2 (ADR-0007) — a station's own wide entry
+    # cannot widen that. Two such stations sum past the fallback's ~376 A
+    # ceiling (only AL_95 <= 300 mm^2 in this catalogue) even though each
+    # station's OWN entry would allow far more.
+    tx = Transformer("BIG", s_rated_kva_at_40c=9000, uk_percent=8.0, pk_kw=90.0,
+                     p0_kw=9.0, i0_percent=0.0, lv_kv=0.8, rmu_rated_current_a=2000.0,
+                     cable_entry_cables_per_phase=4, cable_entry_max_cross_section_mm2=630.0)
+    stage1 = _stage1(p_inv_kw=16_000.0, q_inv_kvar=0.0)
+
+    layout = arrange_plant(stage1, [(tx, 2)],
+                           trunk_length_km=0.5, spacing_km=0.2, v_mv_kv=20.0,
+                           cable_candidates=_catalogue())
+    assert layout.circuit_sizes == [1, 1]
 
 
 def test_charging_recorded_but_never_netted():
@@ -530,13 +815,12 @@ def test_circuit_power_balance():
 def test_all_circuits_sized_and_balanced():
     stage1 = _stage1(p_inv_kw=43_000, q_inv_kvar=9_000)
     layout = arrange_plant(
-        stage1, [(_tx_2500(), 18)],
-        max_circuit_current_a=380.0,
+        stage1, [(_tx_2500(rmu_rated_current_a=380.0), 18)],
         trunk_length_km=0.8, spacing_km=0.35, v_mv_kv=20.0,
     )
     circuits = size_circuits(layout, _catalogue())
     assert [len(c.stations) for c in circuits] == [5, 5, 4, 4]
-    assert all(c.current_ok for c in circuits)
+    assert all(c.i_trunk_a <= 380.0 + 1e-9 for c in circuits)
     assert circuits[0].i_trunk_a == pytest.approx(circuits[1].i_trunk_a)
     assert circuits[2].i_trunk_a == pytest.approx(circuits[3].i_trunk_a)
     p_injected = sum(p.p_mv_kw for c in layout.circuit_plans for p in c)
@@ -623,10 +907,11 @@ def _hv_catalogue() -> list[Cable]:
 
 
 def _full_plant_inputs():
+    # 380 A switchgear rating gives the same 5+5+4+4 split as the golden
+    # 45 MW example (see test_arrange_plant_45mw_example).
     stage1 = _stage1(p_inv_kw=43_000, q_inv_kvar=9_000)
     layout = arrange_plant(
-        stage1, [(_tx_2500(), 18)],
-        max_circuit_current_a=380.0,
+        stage1, [(_tx_2500(rmu_rated_current_a=380.0), 18)],
         trunk_length_km=0.8, spacing_km=0.35, v_mv_kv=20.0,
     )
     return stage1, layout
@@ -746,8 +1031,8 @@ def test_architecture_mixed_fleet_end_to_end():
     # must cover the target.
     stage1 = _stage1(p_inv_kw=14_500, q_inv_kvar=2_000)
     layout = arrange_plant(
-        stage1, [(_tx_9000(), 1), (_tx_3300(), 2)],
-        max_circuit_current_a=500.0,
+        stage1, [(replace(_tx_9000(), rmu_rated_current_a=500.0), 1),
+                 (replace(_tx_3300(), rmu_rated_current_a=500.0), 2)],
         trunk_length_km=0.8, spacing_km=0.35, v_mv_kv=20.0,
     )
     arch = size_architecture(layout, stage1, _catalogue(),
@@ -811,7 +1096,6 @@ def _two_branch_plant(target_multiplier_a: float, target_multiplier_b: float):
     stage1_a = _stage1(p_inv_kw=14_500, q_inv_kvar=2_000)
     layout_a = arrange_plant(
         stage1_a, [(_tx_2500(), 3)],
-        max_circuit_current_a=10_000.0,
         trunk_length_km=0.5, spacing_km=0.2, v_mv_kv=20.0, kind="pv",
     )
     branch_a = size_branch(layout_a, _catalogue(), aux_p_kw=50.0, aux_q_kvar=10.0)
@@ -819,7 +1103,6 @@ def _two_branch_plant(target_multiplier_a: float, target_multiplier_b: float):
     stage1_b = _stage1(p_inv_kw=6_500, q_inv_kvar=1_000)
     layout_b = arrange_plant(
         stage1_b, [(_tx_2500(), 2)],
-        max_circuit_current_a=10_000.0,
         trunk_length_km=3.0, spacing_km=1.5, v_mv_kv=20.0, kind="bess",
     )
     branch_b = size_branch(layout_b, _catalogue(), aux_p_kw=200.0, aux_q_kvar=40.0)
@@ -878,7 +1161,17 @@ def test_recompute_operating_point_preserves_complete_branch_details():
 def test_recompute_operating_point_updates_uniform_loading_and_current():
     stage1, layout = _full_plant_inputs()
     layout = replace(layout, max_loading=0.90)
-    branch = size_branch(layout, _catalogue())
+    # The x1.10 correction below pushes the trunk current just past what
+    # AL_95 (the only _catalogue() cable within the fixed 300 mm^2 busbar-end
+    # cable entry, ADR-0007) can carry at 2 parallel runs; AL_300 keeps this
+    # scenario sized so the assertions below still exercise the recomputed
+    # cable-current arithmetic rather than a flagged-unsized segment.
+    catalogue = _catalogue() + [
+        Cable("AL_300", r_ohm_per_km=0.10, x_ohm_per_km=0.115, b_us_per_km=45.0,
+              cross_section_mm2=300, material="aluminium", rated_current_a=300,
+              rated_voltage_kv=20),
+    ]
+    branch = size_branch(layout, catalogue)
     recomputed = architecture.recompute_branch(branch, stage1, 1.10)
     fleet_loading = stage1.s_inv_kva * 1.10 / layout.s_fleet_kva
     station = recomputed.circuits[0].stations[0]
@@ -897,10 +1190,19 @@ def test_recompute_operating_point_updates_uniform_loading_and_current():
 def test_refinement_reselects_auto_cable_from_original_catalogue():
     stage1 = _stage1(p_inv_kw=1_000.0, q_inv_kvar=200.0)
     layout = arrange_plant(
-        stage1, [(_tx_2500(), 1)], max_circuit_current_a=10_000.0,
+        stage1, [(_tx_2500(), 1)],
         trunk_length_km=10.0, spacing_km=0.35, v_mv_kv=20.0,
     )
-    catalogue = _catalogue()
+    # AL_400 (400 mm^2) is now excluded from the trunk regardless of the
+    # station's own published cable entry: the busbar end of a circuit's
+    # first cable always counts as the engine's 2 x 300 mm^2 cable-entry
+    # fallback (ADR-0007), since no busbar switchgear is sized/published yet.
+    # AL_300 stands in as the escalation target that still fits.
+    catalogue = _catalogue() + [
+        Cable("AL_300", r_ohm_per_km=0.10, x_ohm_per_km=0.115, b_us_per_km=45.0,
+              cross_section_mm2=300, material="aluminium", rated_current_a=470,
+              rated_voltage_kv=20),
+    ]
     initial = size_branch(layout, catalogue, max_parallel=1)
     assert initial.circuits[0].segments[0].cable_label == "Al_3x1x95_20kV"
 
@@ -912,13 +1214,13 @@ def test_refinement_reselects_auto_cable_from_original_catalogue():
         initial.p_busbar_kw
     )
     assert refined.branch_refinements[0].p_poc_refined_delivered_kw >= 2_200.0 - 1e-5
-    assert refined.branches[0].circuits[0].segments[0].cable_label == "Al_3x1x400_20kV"
+    assert refined.branches[0].circuits[0].segments[0].cable_label == "Al_3x1x300_20kV"
 
 
 def test_forced_cable_crossing_after_refinement_is_not_swallowed():
     stage1 = _stage1(p_inv_kw=1_000.0, q_inv_kvar=200.0)
     layout = arrange_plant(
-        stage1, [(_tx_2500(), 1)], max_circuit_current_a=10_000.0,
+        stage1, [(_tx_2500(), 1)],
         trunk_length_km=10.0, spacing_km=0.35, v_mv_kv=20.0,
     )
     cable = _catalogue()[0]
@@ -979,9 +1281,104 @@ def test_manual_arrangement_kind_flows_through_to_station_result():
     stage1 = _stage1(p_inv_kw=6_500, q_inv_kvar=1_000)
     layout = arrange_plant_manual(
         stage1, [[_tx_2500(), _tx_2500()]],
-        max_circuit_current_a=10_000.0, v_mv_kv=20.0, kind="bess",
+        v_mv_kv=20.0, kind="bess",
     )
     assert all(p.kind == "bess" for c in layout.circuit_plans for p in c)
 
     branch = size_branch(layout, _catalogue(), segment_lengths=_lengths_of(layout))
     assert all(st.kind == "bess" for c in branch.circuits for st in c.stations)
+
+
+# --- BusbarSection: several busbars per branch (ticket 05) -------------------
+
+def test_no_sections_argument_builds_one_implicit_section_matching_the_scalar_aux_path():
+    stage1, layout = _full_plant_inputs()
+    branch = size_branch(layout, _catalogue(), aux_p_kw=120.0, aux_q_kvar=40.0)
+
+    assert len(branch.sections) == 1
+    section = branch.sections[0]
+    assert section.circuit_indices == [c.index for c in branch.circuits]
+    assert (section.aux_p_kw, section.aux_q_kvar) == (120.0, 40.0)
+    assert branch.aux_p_kw == pytest.approx(120.0)
+    assert branch.aux_q_kvar == pytest.approx(40.0)
+    # Byte-identical: the branch-level totals are exactly the sole section's
+    # own totals (a sum over one element), the same arithmetic as before this
+    # ticket split circuits into sections at all.
+    assert branch.p_busbar_kw == section.p_busbar_kw
+    assert branch.q_busbar_kvar == section.q_busbar_kvar
+
+
+def test_splitting_circuits_into_two_sections_isolates_each_sections_own_aux():
+    # 4 circuits (indices 1-4); split 1,2 onto busbar "a" and 3,4 onto "b".
+    stage1, layout = _full_plant_inputs()
+    base = size_branch(
+        layout, _catalogue(),
+        sections=[
+            BusbarSection(busbar_id="a", circuit_indices=[1, 2]),
+            BusbarSection(busbar_id="b", circuit_indices=[3, 4]),
+        ],
+    )
+    with_aux_on_b = size_branch(
+        layout, _catalogue(),
+        sections=[
+            BusbarSection(busbar_id="a", circuit_indices=[1, 2]),
+            BusbarSection(busbar_id="b", circuit_indices=[3, 4],
+                         aux_p_kw=200.0, aux_q_kvar=40.0),
+        ],
+    )
+    section_a_base, section_b_base = base.sections
+    section_a_aux, section_b_aux = with_aux_on_b.sections
+
+    # Busbar A's own current is untouched by an aux load drawn on busbar B —
+    # size_branch never lets one busbar's aux leak into another's total.
+    assert section_a_aux.busbar_current_a == pytest.approx(section_a_base.busbar_current_a)
+    assert section_a_aux.p_busbar_kw == pytest.approx(section_a_base.p_busbar_kw)
+    # Busbar B's own current absorbs the direct subtraction.
+    assert section_b_aux.p_busbar_kw == pytest.approx(section_b_base.p_busbar_kw - 200.0)
+    assert section_b_aux.busbar_current_a < section_b_base.busbar_current_a
+    # The fleet-level (branch) total still sees the whole 200 kW / 40 kvar.
+    assert with_aux_on_b.aux_p_kw == pytest.approx(base.aux_p_kw + 200.0)
+    assert with_aux_on_b.aux_q_kvar == pytest.approx(base.aux_q_kvar + 40.0)
+
+
+def test_each_sections_own_export_cable_is_sized_on_its_own_busbar_total():
+    stage1, layout = _full_plant_inputs()
+    branch = size_branch(
+        layout, _catalogue(),
+        sections=[
+            BusbarSection(busbar_id="a", circuit_indices=[1, 2],
+                         export_edge_id="exp_a", export_length_km=1.0,
+                         export_candidates=_catalogue()),
+            BusbarSection(busbar_id="b", circuit_indices=[3, 4],
+                         export_edge_id="exp_b", export_length_km=3.0,
+                         export_candidates=_catalogue()),
+        ],
+    )
+    section_a, section_b = branch.sections
+    assert section_a.mv_export is not None and section_b.mv_export is not None
+    assert section_a.mv_export.s_kva == pytest.approx(
+        math.hypot(section_a.p_busbar_kw, section_a.q_busbar_kvar))
+    assert section_b.mv_export.s_kva == pytest.approx(
+        math.hypot(section_b.p_busbar_kw, section_b.q_busbar_kvar))
+    assert section_a.mv_export.length_km == 1.0
+    assert section_b.mv_export.length_km == 3.0
+    # Different length AND different circuit membership -> different losses;
+    # neither section's export cable was sized on the OTHER's total.
+    assert section_a.mv_export.dp_kw != section_b.mv_export.dp_kw
+
+
+def test_recompute_branch_preserves_the_section_partition():
+    stage1, layout = _full_plant_inputs()
+    branch = size_branch(
+        layout, _catalogue(),
+        sections=[
+            BusbarSection(busbar_id="a", circuit_indices=[1, 2], aux_p_kw=50.0),
+            BusbarSection(busbar_id="b", circuit_indices=[3, 4], aux_p_kw=200.0),
+        ],
+    )
+    recomputed = architecture.recompute_branch(branch, stage1, 1.2)
+
+    assert len(recomputed.sections) == 2
+    assert [s.busbar_id for s in recomputed.sections] == ["a", "b"]
+    assert [s.circuit_indices for s in recomputed.sections] == [[1, 2], [3, 4]]
+    assert [s.aux_p_kw for s in recomputed.sections] == [50.0, 200.0]

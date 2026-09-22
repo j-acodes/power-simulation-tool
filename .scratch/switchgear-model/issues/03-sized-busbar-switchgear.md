@@ -11,11 +11,11 @@ report carries the same. Only MV-side equipment is modelled. See CONTEXT.md "Bus
 
 **Blocked by:** 01, 02 (kept sequential by owner decision; touches neighbouring code).
 
-**Status:** ready-for-agent
+**Status:** done
 
-- [ ] A solved design reports, per busbar, a sized rating for the busbar, the export switchgear and each feeder, each the smallest ladder rating ≥ its current (tests at boundaries: exactly 630 A, 631 A, 4000 A)
-- [ ] Auxiliary load is included in the busbar and export switchgear current, not in any feeder's
-- [ ] A busbar total above 4000 A solves and raises an issue pointing at the busbar node
-- [ ] Busbar inspector shows each rating and its current, marked as sized (Vitest)
-- [ ] PDF report lists the sized busbar switchgear
-- [ ] Full README checks pass
+- [x] A solved design reports, per busbar, a sized rating for the busbar, the export switchgear and each feeder, each the smallest ladder rating ≥ its current (tests at boundaries: exactly 630 A, 631 A, 4000 A)
+- [x] Auxiliary load is included in the busbar and export switchgear current, not in any feeder's
+- [x] A busbar total above 4000 A solves and raises an issue pointing at the busbar node
+- [x] Busbar inspector shows each rating and its current, marked as sized (Vitest)
+- [x] PDF report lists the sized busbar switchgear
+- [x] Full README checks pass

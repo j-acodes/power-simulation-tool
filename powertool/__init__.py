@@ -22,7 +22,18 @@ from .architecture import (
 )
 from .cable_sizing import AutoCable, CableSelection, select_cable
 from .chain import Chain, ChainElement
-from .components import AuxLoad, BessSolution, Cable, PvInverter, PvInverterPairing, Transformer, TransformerGroup, current_a
+from .components import (
+    AuxLoad,
+    BessSolution,
+    BUSBAR_SWITCHGEAR_LADDER_A,
+    Cable,
+    PvInverter,
+    PvInverterPairing,
+    Transformer,
+    TransformerGroup,
+    current_a,
+    size_busbar_switchgear_rating,
+)
 from .database import CatalogueDataWarning, ComponentDatabase
 from .pdf_report import build_pdf_report
 from .sizing import (
@@ -41,6 +52,8 @@ __all__ = [
     "PvInverter",
     "PvInverterPairing",
     "current_a",
+    "BUSBAR_SWITCHGEAR_LADDER_A",
+    "size_busbar_switchgear_rating",
     "ComponentDatabase",
     "CatalogueDataWarning",
     "Chain",

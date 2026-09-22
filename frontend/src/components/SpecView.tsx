@@ -132,6 +132,15 @@ function switchgearRatedCurrent(item: TransformerInfo) {
   return item.switchgear_rating_published ? value : `${value} (not published — standard rating assumed)`
 }
 
+/** The cable entry the engine bounds a circuit cable to — cables per phase x
+ *  maximum cross-section — marked when it came from the ADR-0007 fallback
+ *  rather than a datasheet, the same reason `switchgearRatedCurrent` marks
+ *  its own fallback. */
+function cableEntry(item: TransformerInfo) {
+  const value = `${item.cable_entry_parallel_limit} x ${fmt(item.cable_entry_cross_section_limit_mm2, 0)} mm²`
+  return item.cable_entry_published ? value : `${value} (not published — standard entry assumed)`
+}
+
 function SimulatedTransformerStation({ item }: { item: TransformerInfo }) {
   return (
     <>
@@ -144,6 +153,7 @@ function SimulatedTransformerStation({ item }: { item: TransformerInfo }) {
       <Row label="HV voltage" value={item.hv_kv != null ? `${fmt(item.hv_kv, 2)} kV` : '—'} />
       <Row label="LV voltage" value={item.lv_kv != null ? `${fmt(item.lv_kv, 2)} kV` : '—'} />
       <Row label="Switchgear rated current" value={switchgearRatedCurrent(item)} />
+      <Row label="Cable entry (simulated)" value={cableEntry(item)} />
     </>
   )
 }

@@ -51,7 +51,7 @@ def _settings(hv_kv: float | None = None) -> dict:
     return {
         "tiers": {"lv_kv": 0.8, "mv_kv": 20.0, "hv_kv": hv_kv},
         "rules": {"max_utilization": 0.80, "collection_loss_pct": 1.30,
-                  "export_loss_pct_per_km": 0.10, "max_circuit_current_a": 400.0},
+                  "export_loss_pct_per_km": 0.10},
     }
 
 
@@ -258,6 +258,270 @@ def test_circuit_over_switchgear_through_current_still_solves_flagged_at_offendi
     assert "642" in matches[0]["message"] or "630" in matches[0]["message"]
 
 
+def test_busbar_payload_reports_sized_ratings_for_busbar_export_and_each_feeder():
+    # ADR-0007: the busbar and export switchgear are sized on the busbar's net
+    # total (the aux node's own p_kw/q_kvar, reported separately, taken out);
+    # the one feeder is sized on its circuit's head current — the sending end
+    # of the trunk cable, cross-checked here against that cable's own s_kva
+    # rather than recomputed the same way the engine computes it.
+    result = client.post("/api/solve", json=_minimal()).json()
+
+    assert result["issues"] == []
+    bus = result["results"]["nodes"]["bus"]
+    aux = result["results"]["nodes"]["aux"]
+    trunk = result["results"]["edges"]["e_t1"]
+
+    expected_busbar_i = math.hypot(
+        bus["p_kw"] - aux["p_kw"], bus["q_kvar"] - aux["q_kvar"]
+    ) / (math.sqrt(3.0) * 20.0)
+    expected_feeder_i = trunk["s_kva"] / (math.sqrt(3.0) * 20.0)
+
+    assert bus["i_a"] == pytest.approx(expected_busbar_i)
+    assert bus["switchgear_rated_a"] == 630.0
+    # Busbar and export switchgear share this ticket's current, but each is
+    # reported under its own key — see the busbar payload's own comment.
+    assert bus["export_i_a"] == pytest.approx(expected_busbar_i)
+    assert bus["export_switchgear_rated_a"] == 630.0
+    assert bus["feeder_i_a"] == pytest.approx([expected_feeder_i])
+    assert bus["feeder_switchgear_rated_a"] == [630.0]
+
+
+def test_auxiliary_load_is_included_in_busbar_and_export_current_but_not_the_feeder():
+    # A near-zero-length trunk cable (1 m — zero itself is rejected, see
+    # ``missing_length``) leaves cable losses negligible, so the trunk's own
+    # p_kw/q_kvar match the busbar's raw p_kw/q_kvar to within a fraction of
+    # a kW. Whatever gap remains between the feeder's current (read straight
+    # off that near-lossless segment) and the busbar/export current is then
+    # attributable to the fixture's 50 kW / 10 kvar aux load alone
+    # (ADR-0007), not to cable losses along the way.
+    diagram = _minimal()
+    diagram["edges"][1]["length_m"] = 1.0  # bus -> s1
+
+    result = client.post("/api/solve", json=diagram).json()
+    assert result["issues"] == []
+    bus = result["results"]["nodes"]["bus"]
+    trunk = result["results"]["edges"]["e_t1"]
+
+    assert trunk["p_kw"] == pytest.approx(bus["p_kw"], abs=0.1)
+    assert trunk["q_kvar"] == pytest.approx(bus["q_kvar"], abs=0.1)
+    feeder_i = trunk["s_kva"] / (math.sqrt(3.0) * 20.0)
+    assert bus["feeder_i_a"] == pytest.approx([feeder_i])
+    # Aux is netted out of the busbar/export current, never the feeder's —
+    # the gap is at least 1 A (the fixture's aux is 50 kW / 10 kvar against a
+    # ~3 MW design), well above what the near-zero-length trunk's own cable
+    # loss alone could produce (a fraction of a kW).
+    assert bus["i_a"] < feeder_i - 1.0
+    assert bus["export_i_a"] < feeder_i - 1.0
+
+
+def test_busbar_total_above_4000a_still_solves_flagged_at_the_busbar_node():
+    # Thirteen identical stations chained on one circuit (ADR-0006 style
+    # topology, extended): each station's OWN current stays safely under its
+    # 630 A switchgear rating, but the busbar's combined total — everything
+    # this branch delivers, aux included — clears the 4000 A top of the
+    # standard busbar switchgear ladder. No admissible size exists; the
+    # design still solves in full and the busbar is flagged.
+    n_stations = 13
+    diagram = _minimal()
+    diagram["nodes"][0]["props"].update({"p_target_mw": 21.0 * n_stations / 2, "pf": 0.95})
+    diagram["nodes"][2]["props"].update({
+        "model": "SUNGROW_MVS3200",
+        "pv_inverter": "sungrow-sg350hx-20",
+        "inverter_count": 10,
+    })
+    prev = "s1"
+    for i in range(2, n_stations + 1):
+        sid = f"s{i}"
+        diagram["nodes"].append(_node(
+            sid, "station", mode="catalogue", model="SUNGROW_MVS3200",
+            pv_inverter="sungrow-sg350hx-20", inverter_count=10,
+        ))
+        diagram["edges"].append(_edge(f"e_t{i}", prev, sid, length_m=400.0))
+        prev = sid
+
+    result = solve_diagram(diagram, db)
+
+    assert result["issues"] == []
+    assert result["results"] is not None
+    nodes = result["results"]["nodes"]
+    for i in range(1, n_stations + 1):
+        assert nodes[f"s{i}"]["i_a"] < 630.0  # each station's OWN current is fine
+
+    bus = nodes["bus"]
+    assert bus["i_a"] > 4000.0
+    assert bus["switchgear_rated_a"] is None
+    assert bus["export_switchgear_rated_a"] is None
+    assert bus["feeder_switchgear_rated_a"] == [None]
+
+    warnings = result["results"]["warnings"]
+    matches = [w for w in warnings if w["code"] == "busbar_switchgear_no_admissible_rating"]
+    assert len(matches) == 1
+    assert matches[0]["node_id"] == "bus"
+
+
+# --- pinned busbar switchgear (ADR-0007, ticket 04) --------------------------
+
+def _two_circuit_diagram() -> dict:
+    """Two independent single-station circuits off one busbar (``e_t1`` feeds
+    ``s1``, ``e_t2`` feeds ``s2``) — for feeder pin tests, where the trunk
+    edge <-> circuit mapping must be exact rather than assumed."""
+    diagram = _minimal()
+    diagram["nodes"].append(_node(
+        "s2", "station", mode="catalogue", model="HUAWEI_JUPITER3000",
+        pv_inverter="huawei-sun2000-330ktl-h1", inverter_count=11,
+    ))
+    diagram["edges"].append(_edge("e_t2", "bus", "s2", length_m=800.0))
+    return diagram
+
+
+def test_pinned_busbar_switchgear_is_reported_exactly_as_pinned_not_resized():
+    diagram = _minimal()
+    diagram["nodes"][1]["props"]["export_switchgear_pin_a"] = 800.0  # above the sized 630 A
+
+    result = solve_diagram(diagram, db)
+    assert result["issues"] == []
+    bus = result["results"]["nodes"]["bus"]
+    assert bus["export_switchgear_rated_a"] == 800.0
+    assert bus["export_switchgear_pinned"] is True
+    # The sibling part (busbar) is untouched by the export pin — still sized.
+    assert bus["switchgear_rated_a"] == 630.0
+    assert bus["switchgear_pinned"] is False
+
+
+def test_removing_a_pin_returns_that_part_to_sizing():
+    diagram = _minimal()
+    diagram["nodes"][1]["props"]["busbar_switchgear_pin_a"] = None
+
+    result = solve_diagram(diagram, db)
+    assert result["issues"] == []
+    bus = result["results"]["nodes"]["bus"]
+    assert bus["switchgear_rated_a"] == 630.0
+    assert bus["switchgear_pinned"] is False
+
+
+def test_pinned_rating_below_current_solves_and_flags_shortfall_at_the_busbar():
+    diagram = _minimal()
+    diagram["nodes"][1]["props"]["busbar_switchgear_pin_a"] = 50.0  # well below ~91 A
+
+    result = solve_diagram(diagram, db)
+    assert result["issues"] == []  # a pinned shortfall still solves (ADR-0007)
+    bus = result["results"]["nodes"]["bus"]
+    assert bus["switchgear_rated_a"] == 50.0
+    assert bus["switchgear_pinned"] is True
+
+    warnings = result["results"]["warnings"]
+    matches = [w for w in warnings if w["code"] == "busbar_switchgear_pin_undersized"]
+    assert len(matches) == 1
+    assert matches[0]["node_id"] == "bus"
+    assert "busbar switchgear" in matches[0]["message"]
+    assert "50" in matches[0]["message"]
+    # A pinned part is checked against its pin, never the ladder top, so no
+    # "no admissible rating" warning fires alongside the shortfall.
+    assert not any(w["code"] == "busbar_switchgear_no_admissible_rating" for w in warnings)
+
+
+def test_pinned_feeder_below_current_names_its_circuit_and_first_station():
+    diagram = _minimal()
+    diagram["nodes"][1]["props"]["feeder_switchgear_pins_a"] = {"e_t1": 10.0}
+
+    result = solve_diagram(diagram, db)
+    assert result["issues"] == []
+    warnings = result["results"]["warnings"]
+    matches = [w for w in warnings if w["code"] == "busbar_switchgear_pin_undersized"]
+    assert len(matches) == 1
+    assert matches[0]["node_id"] == "bus"
+    assert "circuit 1" in matches[0]["message"]
+    assert "s1" in matches[0]["message"]
+
+
+def test_feeder_pin_is_keyed_by_the_trunk_edge_and_pins_only_that_feeder():
+    # Two independent circuits off one busbar; pinning e_t1 (circuit 1's
+    # trunk) must leave e_t2 (circuit 2's trunk) sized, following the drawn
+    # edge id rather than circuit position.
+    diagram = _two_circuit_diagram()
+    diagram["nodes"][1]["props"]["feeder_switchgear_pins_a"] = {"e_t1": 4000.0}
+
+    assert validate_graph(diagram, db) == []
+    result = solve_diagram(diagram, db)
+    assert result["issues"] == []
+    bus = result["results"]["nodes"]["bus"]
+
+    assert bus["feeder_edge_ids"] == ["e_t1", "e_t2"]
+    assert bus["feeder_switchgear_rated_a"][0] == 4000.0
+    assert bus["feeder_switchgear_pinned"][0] is True
+    assert bus["feeder_switchgear_rated_a"][1] == 630.0
+    assert bus["feeder_switchgear_pinned"][1] is False
+
+
+def test_feeder_pin_keyed_by_a_non_trunk_edge_id_is_ignored():
+    diagram = _minimal()
+    diagram["nodes"][1]["props"]["feeder_switchgear_pins_a"] = {"e_aux": 4000.0}  # not a trunk edge
+
+    assert validate_graph(diagram, db) == []
+    result = solve_diagram(diagram, db)
+    assert result["issues"] == []
+    bus = result["results"]["nodes"]["bus"]
+    assert bus["feeder_switchgear_rated_a"] == [630.0]
+    assert bus["feeder_switchgear_pinned"] == [False]
+
+
+def test_pinned_busbar_above_4000a_is_checked_against_the_pin_not_the_ladder():
+    # Same 13-station over-4000A topology as the sized case above, but the
+    # busbar is pinned high enough to carry it: no "no admissible rating"
+    # warning for the busbar, while the still-unpinned export switchgear
+    # (same current) keeps its own.
+    n_stations = 13
+    diagram = _minimal()
+    diagram["nodes"][0]["props"].update({"p_target_mw": 21.0 * n_stations / 2, "pf": 0.95})
+    diagram["nodes"][1]["props"]["busbar_switchgear_pin_a"] = 5000.0
+    diagram["nodes"][2]["props"].update({
+        "model": "SUNGROW_MVS3200",
+        "pv_inverter": "sungrow-sg350hx-20",
+        "inverter_count": 10,
+    })
+    prev = "s1"
+    for i in range(2, n_stations + 1):
+        sid = f"s{i}"
+        diagram["nodes"].append(_node(
+            sid, "station", mode="catalogue", model="SUNGROW_MVS3200",
+            pv_inverter="sungrow-sg350hx-20", inverter_count=10,
+        ))
+        diagram["edges"].append(_edge(f"e_t{i}", prev, sid, length_m=400.0))
+        prev = sid
+
+    result = solve_diagram(diagram, db)
+    assert result["issues"] == []
+    bus = result["results"]["nodes"]["bus"]
+    assert bus["i_a"] > 4000.0
+    assert bus["switchgear_rated_a"] == 5000.0
+    assert bus["switchgear_pinned"] is True
+    assert bus["export_switchgear_rated_a"] is None
+    assert bus["export_switchgear_pinned"] is False
+
+    warnings = result["results"]["warnings"]
+    matches = [w for w in warnings if w["code"] == "busbar_switchgear_no_admissible_rating"]
+    assert len(matches) == 1
+    assert "fits the export switchgear;" in matches[0]["message"]
+
+
+def test_busbar_pin_props_reject_non_positive_or_non_numeric_values():
+    diagram = _minimal()
+    diagram["nodes"][1]["props"]["busbar_switchgear_pin_a"] = -5.0
+    assert "bad_props" in _codes(validate_graph(diagram, db))
+
+    diagram = _minimal()
+    diagram["nodes"][1]["props"]["export_switchgear_pin_a"] = "not-a-number"
+    assert "bad_props" in _codes(validate_graph(diagram, db))
+
+    diagram = _minimal()
+    diagram["nodes"][1]["props"]["feeder_switchgear_pins_a"] = {"e_t1": 0}
+    assert "bad_props" in _codes(validate_graph(diagram, db))
+
+    diagram = _minimal()
+    diagram["nodes"][1]["props"]["feeder_switchgear_pins_a"] = "not-a-dict"
+    assert "bad_props" in _codes(validate_graph(diagram, db))
+
+
 def test_station_over_own_switchgear_rating_on_its_own_current_is_an_engine_error():
     # A single station whose OWN current alone (no downstream) already exceeds
     # its OWN switchgear rated current is a hard error: the catalogue is
@@ -355,6 +619,35 @@ def test_unknown_keys_are_ignored():
     diagram["nodes"][0]["props"]["colour"] = "red"
     diagram["edges"][0]["animated"] = True
     assert validate_graph(diagram, db) == []
+
+
+def test_saved_max_circuit_current_a_rule_is_ignored_not_read():
+    # ADR-0006 retired the flat 400 A planning cap outright — a design saved
+    # before the retirement may still carry the key in settings.rules, and it
+    # must be ignored (never fail, never change a number), same as any other
+    # unknown rule key: solve to the byte-identical result with or without it.
+    with_stray_key = _hv_diagram()
+    with_stray_key["settings"]["rules"]["max_circuit_current_a"] = 50.0
+    without = _hv_diagram()
+
+    with_result = solve_diagram(with_stray_key, db)
+    without_result = solve_diagram(without, db)
+    assert with_result["issues"] == without_result["issues"] == []
+    assert with_result == without_result
+
+
+def test_feeders_per_busbar_defaults_to_twelve():
+    # A design saved before this setting existed (ADR-0007, ticket 06) reads
+    # the same 12-feeder default Stage-1 planning uses.
+    diagram = _minimal()
+    assert "feeders_per_busbar" not in diagram["settings"]["rules"]
+    assert graph_to_inputs(diagram, db).feeders_per_busbar == 12
+
+
+def test_feeders_per_busbar_override_is_read():
+    diagram = _minimal()
+    diagram["settings"]["rules"]["feeders_per_busbar"] = 6
+    assert graph_to_inputs(diagram, db).feeders_per_busbar == 6
 
 
 def test_no_poc():
@@ -884,6 +1177,12 @@ def test_map_results_keys_every_drawn_element():
     assert results["summary"]["n_circuits"] == 2
     assert results["summary"]["circuit_sizes"] == [1, 2]
     assert results["summary"]["power_balance_ok"]
+    # ticket 07: through current beside the station's own switchgear rated
+    # current, on every station payload.
+    for node_id in ("a1", "b1", "b2"):
+        station = results["nodes"][node_id]
+        assert station["through_current_a"] > 0
+        assert station["switchgear_rated_current_a"] == 630.0  # neither publishes it
     # No 132 kV cables in the catalogue yet: the export span is reported unsized.
     assert results["edges"]["e_exp"]["sized"] is False
     assert any(w["code"] == "hv_cable_not_sized" for w in results["warnings"])
@@ -947,6 +1246,33 @@ def test_mv_interconnection_sizes_the_drawn_export_run():
     assert export["dp_kw"] > 0
     assert results["summary"]["v_hv_kv"] == 20.0  # export at the MV voltage
     assert "hv" not in results["nodes"]
+
+
+def test_export_cable_keeps_escalating_past_two_parallel_runs_through_the_real_path():
+    # ADR-0007 bounds circuit cables by cable entry, but export cables keep
+    # today's behaviour (this ticket's acceptance criterion) — pinned here
+    # through the actual solve path, not just cable_sizing's unit test, with
+    # a fleet large enough that even the biggest catalogue cable (AL_630,
+    # 600 A) needs more than 2 parallel runs to carry it.
+    nodes = [_node("poc", "poc", p_target_mw=45.0, pf=0.95), _node("bus", "busbar")]
+    edges = [_edge("e_poc", "poc", "bus", length_m=1000.0)]
+    previous = "bus"
+    for i in range(1, 6):
+        station_id = f"s{i}"
+        nodes.append(_node(
+            station_id, "station", mode="catalogue", model="HUAWEI_JUPITER9000",
+            pv_inverter="huawei-sun2000-330ktl-h1", inverter_count=30,
+            x=0.0, y=float(i)))
+        edges.append(_edge(f"e_t{i}", previous, station_id, length_m=300.0))
+        previous = station_id
+    diagram = {"schema_version": 1, "settings": _settings(), "nodes": nodes, "edges": edges}
+    assert validate_graph(diagram, db) == []
+
+    body = client.post("/api/solve", json=diagram).json()
+    assert body["issues"] == []
+    export = body["results"]["edges"]["e_poc"]
+    assert export["sized"]
+    assert export["n_parallel"] > 2
 
 
 def _hybrid_mv_export_diagram() -> dict:
@@ -1033,16 +1359,6 @@ def test_forced_hybrid_mv_export_that_cannot_carry_is_an_engine_error():
     assert "No cable can carry" in body["issues"][0]["message"]
 
 
-def test_over_current_warning_points_at_the_trunk():
-    diagram = _hv_diagram()
-    diagram["settings"]["rules"]["max_circuit_current_a"] = 50.0
-    resp = client.post("/api/solve", json=diagram)
-    assert resp.status_code == 200
-    warnings = resp.json()["results"]["warnings"]
-    over = [w for w in warnings if w["code"] == "circuit_over_current"]
-    assert over and {w["edge_id"] for w in over} == {"e_a1", "e_b1"}
-
-
 # --- /api/solve -------------------------------------------------------------
 
 def test_solve_returns_issues_with_http_200():
@@ -1058,9 +1374,12 @@ def test_solve_returns_issues_with_http_200():
 
 def test_solve_turns_engine_errors_into_issues_not_500s():
     # A forced 95 mm² trunk cannot carry a 20 MW plant: select_cable raises, and
-    # the API must answer with an issue, never a server error.
+    # the API must answer with an issue, never a server error. No station in
+    # this diagram publishes a cable entry, so the trunk is capped at 2
+    # parallel runs (ADR-0007) — forcing a single small cable type there fails
+    # on ampacity at the catalogue's normal utilization, no extreme setting
+    # needed any more.
     diagram = _hv_diagram()
-    diagram["settings"]["rules"]["max_utilization"] = 0.10
     diagram["edges"][3]["sizing"] = {"mode": "forced", "cable": "AL_95_20kV"}
     resp = client.post("/api/solve", json=diagram)
     assert resp.status_code == 200
@@ -1106,7 +1425,6 @@ def _auto_reference():
     fleet = [(db.transformer("HUAWEI_JUPITER9000"), 5),
              (db.transformer("HUAWEI_JUPITER3000"), 3)]
     layout = arrange_plant(stage1, fleet, max_loading=1.0,
-                           max_circuit_current_a=400.0,
                            trunk_length_km=TRUNK_M / 1000.0,
                            spacing_km=SPACING_M / 1000.0, v_mv_kv=V_MV_KV)
     lengths = {
@@ -1169,10 +1487,12 @@ def _drawn_example(layout) -> tuple[dict, list[list[str]], dict]:
 
 def test_golden_45mw_example_drawn_equals_the_auto_path():
     stage1, layout, arch = _auto_reference()
-    # Anchor the fixture: this is the arrangement the auto path produces today.
-    assert layout.circuit_sizes == [2, 2, 2, 1, 1]
+    # Anchor the fixture: this is the arrangement the auto path produces today
+    # (ADR-0006: each station's own 630 A fallback switchgear rating, not the
+    # retired flat 400 A cap — a materially bigger bound, fewer circuits).
+    assert layout.circuit_sizes == [4, 2, 2]
     assert [[p.transformer.s_rated_kva_at_40c for p in c] for c in layout.circuit_plans] == \
-           [[9000, 3300], [9000, 3300], [9000, 3300], [9000], [9000]]
+           [[9000, 3300, 3300, 3300], [9000, 9000], [9000, 9000]]
 
     diagram, station_ids, edge_ids = _drawn_example(layout)
     assert validate_graph(diagram, db) == []
@@ -1204,9 +1524,11 @@ def test_golden_45mw_example_drawn_equals_the_auto_path():
     assert summary["worst_trunk_current_a"] == max(
         c.i_trunk_a for c in arch.branches[0].circuits)
     # The fixture draws Huawei stations, which publish no switchgear rated
-    # current, so the ADR-0006 fallback notice is expected here. Nothing else is.
+    # current and no cable entry, so both ADR-0006/ADR-0007 fallback notices
+    # are expected here. Nothing else is.
     assert summary["power_balance_ok"]
-    assert [w["code"] for w in results["warnings"]] == ["switchgear_rating_not_published"]
+    assert sorted(w["code"] for w in results["warnings"]) == sorted(
+        ["switchgear_rating_not_published", "cable_entry_not_published"])
     assert summary["p_poc_refined_delivered_kw"] >= P_POC_KW
 
     # Every cable run: same section, same losses, keyed to the drawn edge.
@@ -1241,25 +1563,36 @@ def test_golden_45mw_example_drawn_equals_the_auto_path():
 
 def test_golden_rearranging_the_drawing_changes_the_numbers():
     # Sanity on the golden test: it compares real numbers, not a tautology —
-    # moving one station to another circuit must move the losses.
+    # moving one station to another circuit must move the numbers.
     _stage1, layout, arch = _auto_reference()
     diagram, _ids, _edges = _drawn_example(layout)
 
-    # Hang circuit 4's lone 9 MVA station off the end of circuit 1: four
-    # circuits now, one of them a three-station chain whose trunk carries much
-    # more power over the same lengths.
+    # Hang circuit 3's far 9 MVA station off the end of circuit 1's chain:
+    # circuit 1 grows to 5 stations, circuit 3 shrinks to its lone remaining
+    # one (still attached to the busbar), circuit 2 untouched.
     moved = {e["id"]: e for e in diagram["edges"]}
-    moved["c4_seg1"]["source"] = "s1_2"
+    moved["c3_seg2"]["source"] = "s1_4"
     resp = client.post("/api/solve", json=diagram)
     assert resp.status_code == 200
     body = resp.json()
     results = body["results"]
     assert body["issues"] == []
-    assert results["summary"]["circuit_sizes"] == [3, 2, 2, 1]
-    assert results["summary"]["total_cable_loss_kw"] > arch.total_cable_loss_kw
-    # ... and the drawing is now over the 400 A feeder cap, flagged on its trunk.
-    assert [w["edge_id"] for w in results["warnings"]
-            if w["code"] == "circuit_over_current"] == ["c1_seg1"]
+    assert results["summary"]["circuit_sizes"] == [5, 2, 1]
+    # The grown trunk's ~735 A now exceeds what 2 x 300 mm^2 (no station here
+    # publishes a cable entry) can carry, so it is flagged and recorded
+    # unsized (zero loss) rather than costed — total loss can move either way
+    # once a segment drops out like this, so the number merely has to differ,
+    # not increase (ADR-0007).
+    assert results["summary"]["total_cable_loss_kw"] != arch.total_cable_loss_kw
+    # ... and circuit 1's near station now carries more than its own 630 A
+    # switchgear rated current in through current — flagged, never refused.
+    through_current_warnings = [
+        w for w in results["warnings"] if w["code"] == "switchgear_through_current_exceeded"]
+    assert [w["node_id"] for w in through_current_warnings] == ["s1_1"]
+    # The grown trunk itself is flagged too: no cable fits its cable entry.
+    cable_entry_warnings = [
+        w for w in results["warnings"] if w["code"] == "circuit_cable_entry_exceeded"]
+    assert [w["edge_id"] for w in cable_entry_warnings] == [_edges[(1, 1)]]
 
 
 def test_unrecognised_fleet_kind_is_rejected_not_coerced():
@@ -1277,16 +1610,21 @@ def test_unrecognised_fleet_kind_is_rejected_not_coerced():
 
 # --- hybrid topology: one busbar per fleet kind (ticket 05) -----------------
 
-def test_duplicate_busbar_is_rejected_and_named():
-    # A second busbar of a kind that already exists is the relaxed rule's
-    # narrower replacement for the old plant-wide multiple_busbar.
+def test_a_second_busbar_of_the_same_kind_is_accepted():
+    # Ticket 05 supersedes the old duplicate_busbar rule (which itself
+    # superseded the older plant-wide multiple_busbar): a fleet's branch may
+    # hold more than one busbar in parallel, each with its own station.
     diagram = _minimal()
     diagram["nodes"].append(_node("bus2", "busbar"))  # defaults to "pv", same as "bus"
+    diagram["nodes"].append(_node(
+        "s2", "station", mode="catalogue", model="HUAWEI_JUPITER3000",
+        pv_inverter="huawei-sun2000-330ktl-h1", inverter_count=11,
+    ))
     diagram["edges"].append(_edge("e_bus2", "poc", "bus2", length_m=0.0))
+    diagram["edges"].append(_edge("e_t2", "bus2", "s2", length_m=800.0))
     issues = validate_graph(diagram, db)
-    assert "duplicate_busbar" in _codes(issues)
-    assert any(i.node_id == "bus2" for i in issues if i.code == "duplicate_busbar")
-    # The old plant-wide code must not fire any more.
+    assert issues == []
+    assert "duplicate_busbar" not in _codes(issues)
     assert "multiple_busbar" not in _codes(issues)
 
 
@@ -1349,6 +1687,20 @@ def test_unpublished_switchgear_rating_falls_back_with_notice():
     assert "Huawei" in notices[0]["message"]
 
 
+def test_unpublished_cable_entry_falls_back_with_notice():
+    # No station in today's catalogue publishes a cable entry (ADR-0007), so
+    # every design exercises this fallback too. Silence must never mean "no
+    # limit", the same stance as the switchgear notice above.
+    result = solve_diagram(_minimal(), db)
+
+    assert result["issues"] == []
+    notices = [w for w in result["results"]["warnings"]
+               if w["code"] == "cable_entry_not_published"]
+    assert len(notices) == 1
+    assert "2 x 300 mm" in notices[0]["message"]
+    assert "Huawei" in notices[0]["message"]
+
+
 def test_published_switchgear_rating_raises_no_notice():
     diagram = _minimal()
     diagram["nodes"][2]["props"].update({
@@ -1362,3 +1714,211 @@ def test_published_switchgear_rating_raises_no_notice():
     assert result["issues"] == []
     assert not any(w["code"] == "switchgear_rating_not_published"
                    for w in result["results"]["warnings"])
+
+
+# --- ticket 07: what limited each circuit ------------------------------------
+
+def test_binding_limit_is_station_switchgear_on_the_default_catalogue():
+    # _minimal()'s one Huawei station publishes neither a switchgear rated
+    # current nor a cable entry, so both fall back (630 A, 2 x 300 mm^2 ->
+    # 664 A ceiling); with no feeder pin the 630 A switchgear fallback is the
+    # tightest of the three, and it wins.
+    result = solve_diagram(_minimal(), db)
+    assert result["issues"] == []
+    bus = result["results"]["nodes"]["bus"]
+    assert bus["feeder_binding_limit"] == ["station_switchgear"]
+
+
+def test_binding_limit_is_cable_entry_when_a_stations_own_entry_is_tightest(monkeypatch):
+    # 1 x 95 mm^2 admits AL_95_20kV (220 A) at 0.80 utilization: a 176 A
+    # ceiling, well below the 630 A switchgear fallback this station still
+    # carries (it still publishes no rmu_rated_current_a).
+    tx = db.transformer("HUAWEI_JUPITER3000")
+    monkeypatch.setitem(db.transformers, "HUAWEI_JUPITER3000", replace(
+        tx, cable_entry_cables_per_phase=1, cable_entry_max_cross_section_mm2=95.0))
+
+    result = solve_diagram(_minimal(), db)
+    assert result["issues"] == []
+    bus = result["results"]["nodes"]["bus"]
+    assert bus["feeder_binding_limit"] == ["cable_entry"]
+
+
+def test_binding_limit_is_feeder_when_pinned_below_the_stations_own_headroom():
+    # A 100 A feeder pin, on a ~93 A trunk, leaves ~7 A of headroom — far
+    # below the switchgear fallback's ~537 A and the cable-entry fallback
+    # ceiling's ~571 A, so the feeder is what actually decided this circuit's
+    # size, and it still solves (the pin is not undersized: 100 > 93).
+    diagram = _minimal()
+    diagram["nodes"][1]["props"]["feeder_switchgear_pins_a"] = {"e_t1": 100.0}
+
+    result = solve_diagram(diagram, db)
+    assert result["issues"] == []
+    warnings = result["results"]["warnings"]
+    assert not any(w["code"] == "busbar_switchgear_pin_undersized" for w in warnings)
+    bus = result["results"]["nodes"]["bus"]
+    assert bus["feeder_binding_limit"] == ["feeder"]
+
+
+def test_a_drawn_circuit_reports_its_closest_limit_even_under_a_compound_violation():
+    # Moving circuit 3's far station onto circuit 1 (as in the rearranging
+    # golden test above) leaves circuit 1 over BOTH its stations' 630 A
+    # switchgear fallback AND its trunk's 2 x 300 mm^2 cable-entry ceiling
+    # (664 A) — two separate warnings fire. The binding limit still names
+    # whichever is genuinely closest (least headroom: -104.6 A for the 630 A
+    # switchgear vs. -70.6 A for the 664 A cable-entry ceiling at ~734.6 A),
+    # not just "a limit was exceeded somewhere".
+    _stage1, layout, arch = _auto_reference()
+    diagram, _ids, edges = _drawn_example(layout)
+    moved = {e["id"]: e for e in diagram["edges"]}
+    moved["c3_seg2"]["source"] = "s1_4"
+
+    result = solve_diagram(diagram, db)
+    assert result["issues"] == []
+    warnings = {w["code"] for w in result["results"]["warnings"]}
+    assert "switchgear_through_current_exceeded" in warnings
+    assert "circuit_cable_entry_exceeded" in warnings
+
+    bus = result["results"]["nodes"]["bus"]
+    assert bus["feeder_edge_ids"][0] == edges[(1, 1)]
+    assert bus["feeder_binding_limit"][0] == "station_switchgear"
+
+
+# --- ticket 05: several busbars per fleet ------------------------------------
+
+def _hv_diagram_two_busbars() -> dict:
+    """_hv_diagram, but circuit b1->b2 hangs from a SECOND busbar under the
+    same shared HV transformer instead of the first — same stations, same
+    circuits, same lengths, only which busbar owns which circuit differs."""
+    diagram = _hv_diagram()
+    diagram["nodes"].append(_node("bus2", "busbar"))
+    diagram["edges"].append(_edge("e_sub2", "hv", "bus2"))
+    for edge in diagram["edges"]:
+        if edge["id"] == "e_b1":
+            edge["source"] = "bus2"
+    return diagram
+
+
+def _two_pv_busbars_mv() -> dict:
+    """Two PV busbars straight off the POC (MV interconnection, no HV
+    transformer): each gets its own real-length MV export run."""
+    diagram = _minimal()
+    for edge in diagram["edges"]:
+        if edge["id"] == "e_poc":
+            edge["length_m"] = 300.0
+    diagram["nodes"].append(_node("bus2", "busbar"))
+    diagram["nodes"].append(_node(
+        "s2", "station", mode="catalogue", model="HUAWEI_JUPITER3000",
+        pv_inverter="huawei-sun2000-330ktl-h1", inverter_count=11,
+    ))
+    diagram["edges"].append(_edge("e_poc2", "poc", "bus2", length_m=500.0))
+    diagram["edges"].append(_edge("e_t2", "bus2", "s2", length_m=800.0))
+    return diagram
+
+
+def test_two_pv_busbars_under_one_hv_transformer_each_report_their_own_circuits():
+    diagram = _hv_diagram_two_busbars()
+    assert validate_graph(diagram, db) == []
+    result = solve_diagram(diagram, db)
+    assert result["issues"] == []
+    nodes = result["results"]["nodes"]
+    bus1, bus2 = nodes["bus"], nodes["bus2"]
+    assert bus1["kind"] == "busbar" and bus2["kind"] == "busbar"
+    assert bus1["n_circuits"] == 1 and bus1["circuit_sizes"] == [1]  # a1
+    assert bus2["n_circuits"] == 1 and bus2["circuit_sizes"] == [2]  # b1, b2
+    # Each busbar has its own feeders and switchgear, not shared or summed.
+    assert bus1["feeder_edge_ids"] == ["e_a1"]
+    assert bus2["feeder_edge_ids"] == ["e_b1"]
+    assert bus1["switchgear_rated_a"] is not None
+    assert bus2["switchgear_rated_a"] is not None
+    assert bus1["i_a"] != bus2["i_a"]
+    # Stations still solve under the fleet-continuous circuit numbering the
+    # module docstring promises, whichever busbar they are drawn against.
+    assert nodes["a1"]["circuit"] == 1
+    assert nodes["b1"]["circuit"] == 2 and nodes["b2"]["circuit"] == 2
+
+
+def test_two_pv_busbars_in_mv_interconnection_each_size_their_own_export_cable():
+    diagram = _two_pv_busbars_mv()
+    assert validate_graph(diagram, db) == []
+    result = solve_diagram(diagram, db)
+    assert result["issues"] == []
+    edges = result["results"]["edges"]
+    assert edges["e_poc"]["sized"] is True
+    assert edges["e_poc2"]["sized"] is True
+    # Different real lengths (300 m vs 500 m) drawn for each busbar's own run
+    # produce different losses — proof each was sized on ITS OWN busbar power
+    # and length, not one shared plant-level line.
+    assert edges["e_poc"]["length_m"] == pytest.approx(300.0)
+    assert edges["e_poc2"]["length_m"] == pytest.approx(500.0)
+    assert edges["e_poc"]["dp_kw"] != edges["e_poc2"]["dp_kw"]
+
+
+def test_every_station_in_the_fleet_runs_at_the_same_loading_across_busbars():
+    diagram = _hv_diagram_two_busbars()
+    result = solve_diagram(diagram, db)
+    assert result["issues"] == []
+    nodes = result["results"]["nodes"]
+    fleet_loading = result["results"]["summary"]["fleet_loading"]
+    for station_id in ("a1", "b1", "b2"):
+        assert nodes[station_id]["loading"] == pytest.approx(fleet_loading)
+
+
+def test_splitting_one_busbars_circuits_across_two_leaves_poc_compliance_intact():
+    """Same stations, same circuits, same lengths — only whether b1/b2 hang
+    off the SAME busbar as a1 (baseline, _hv_diagram) or a SECOND one under
+    the same HV transformer (_hv_diagram_two_busbars) differs. Compliance,
+    station loadings and circuit/segment figures must not move; only the
+    busbar/export-side figures (which node reports which circuit) differ."""
+    one_busbar = solve_diagram(_hv_diagram(), db)
+    two_busbars = solve_diagram(_hv_diagram_two_busbars(), db)
+    assert one_busbar["issues"] == [] and two_busbars["issues"] == []
+
+    for result in (one_busbar, two_busbars):
+        summary = result["results"]["summary"]
+        assert summary["p_poc_refined_delivered_kw"] >= 20_000.0 - 1e-6
+
+    one_nodes, two_nodes = one_busbar["results"]["nodes"], two_busbars["results"]["nodes"]
+    one_edges, two_edges = one_busbar["results"]["edges"], two_busbars["results"]["edges"]
+    for station_id in ("a1", "b1", "b2"):
+        assert one_nodes[station_id] == two_nodes[station_id], station_id
+    for edge_id in ("e_a1", "e_b1", "e_b2"):
+        assert one_edges[edge_id] == two_edges[edge_id], edge_id
+
+
+def test_aux_attaches_to_the_busbar_it_is_drawn_against():
+    """The DIRECT attachment point — which busbar's own total absorbs an aux
+    load — is per busbar, checked here at the reported aux figures (which
+    read straight off ``BusbarInputs.aux_p_kw``/``aux_q_kvar``, independent of
+    the solve). The reported switchgear CURRENT additionally reflects the
+    fleet-wide refinement correction (loading stays per FLEET, not per
+    busbar — see CONTEXT.md's Auxiliary load entry — so a change anywhere in
+    the fleet ripples to every busbar's current a little); that isolation is
+    checked without the refinement confound in
+    test_architecture.py::test_splitting_circuits_into_two_sections_isolates_each_sections_own_aux.
+    """
+    diagram = _hv_diagram_two_busbars()
+    diagram["nodes"].append(_node("aux2", "aux", p_kw=80.0, q_kvar=20.0))
+    diagram["edges"].append(_edge("e_aux2", "bus2", "aux2"))
+
+    result = solve_diagram(diagram, db)
+    assert result["issues"] == []
+    nodes = result["results"]["nodes"]
+    assert nodes["aux2"]["p_kw"] == pytest.approx(80.0)
+    assert nodes["aux2"]["q_kvar"] == pytest.approx(20.0)
+    # bus's own long-standing aux load (e_aux, inherited from _hv_diagram) is
+    # unaffected by the second aux load drawn against bus2.
+    assert nodes["aux"]["p_kw"] == pytest.approx(120.0)
+    assert nodes["aux"]["q_kvar"] == pytest.approx(40.0)
+
+
+def test_station_under_the_wrong_kind_busbar_is_still_rejected_with_two_busbars():
+    diagram = _hv_diagram_two_busbars()
+    for node in diagram["nodes"]:
+        if node["id"] == "bus2":
+            node["props"]["fleet_kind"] = "pv"
+        if node["id"] == "b1":
+            node["props"]["fleet_kind"] = "bess"
+    issues = validate_graph(diagram, db)
+    codes = {i.code for i in issues}
+    assert "busbar_kind_mismatch" in codes
+    assert any(i.node_id == "b1" for i in issues if i.code == "busbar_kind_mismatch")

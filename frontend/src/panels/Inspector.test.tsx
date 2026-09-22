@@ -2,7 +2,10 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { Inspector } from './Inspector'
 import { EMPTY_DIAGRAM, useStore } from '../store'
-import type { BessSolutionInfo, CatalogueResponse, DiagramNode, PvInverterInfo, TransformerInfo } from '../types'
+import type {
+  BessSolutionInfo, BusbarNodeResult, CatalogueResponse, DiagramNode, PvInverterInfo,
+  SolveResults, TransformerInfo,
+} from '../types'
 
 const bessSolution: BessSolutionInfo = {
   key: 'sungrow-st6900ux-4h', display_name: 'PowerTitan 3.0 — ST6900UX-4H',
@@ -22,6 +25,7 @@ const bessTransformer: TransformerInfo = {
   key: 'GENERIC_BESS_TX_2750_LV069', display_name: '2750 kVA - Generic', s_rated_kva_at_40c: 2750,
   hv_kv: null, lv_kv: 0.69, brand: 'Generic', uk_percent: 8, pk_kw: 27.5, p0_kw: 2.75,
   switchgear_rated_current_a: 630, switchgear_rating_published: true,
+  cable_entry_parallel_limit: 2, cable_entry_cross_section_limit_mm2: 300, cable_entry_published: false,
   i0_percent: 0, model: null, vector_group: null, cooling: null, datasheet_url: null,
   s_rated_kva_at_30c: null,
   mv_kv_min: null, mv_kv_max: null, lv_winding_count: 1, insulation_level: null,
@@ -32,6 +36,7 @@ const bessTransformer: TransformerInfo = {
   cabinet_protection: null, surge_protection: null, ac_insulation_detection: null,
   cabinet_temp_control: null, ups: null,
   width_mm: null, height_mm: null, depth_mm: null, weight_kg: null, cable_entry: null,
+  cable_entry_cables_per_phase: null, cable_entry_max_cross_section_mm2: null,
   corrosion_class: null, temp_min_c: null, temp_max_c: null, humidity_min_pct: null,
   humidity_max_pct: null, altitude_max_m: null, communication: null, standards: null,
   datasheet_version: null, preliminary: false,
@@ -42,6 +47,7 @@ const pvTransformer: TransformerInfo = {
   key: 'ACME_1000', display_name: 'ACME 1000', s_rated_kva_at_40c: 1000,
   hv_kv: 20, lv_kv: 0.8, brand: 'Acme', uk_percent: 6, pk_kw: 8, p0_kw: 1,
   switchgear_rated_current_a: 630, switchgear_rating_published: true,
+  cable_entry_parallel_limit: 2, cable_entry_cross_section_limit_mm2: 300, cable_entry_published: false,
   i0_percent: 0.5, model: null, vector_group: null, cooling: null, datasheet_url: null,
   s_rated_kva_at_30c: null,
   mv_kv_min: null, mv_kv_max: null, lv_winding_count: 1, insulation_level: null,
@@ -52,6 +58,7 @@ const pvTransformer: TransformerInfo = {
   cabinet_protection: null, surge_protection: null, ac_insulation_detection: null,
   cabinet_temp_control: null, ups: null,
   width_mm: null, height_mm: null, depth_mm: null, weight_kg: null, cable_entry: null,
+  cable_entry_cables_per_phase: null, cable_entry_max_cross_section_mm2: null,
   corrosion_class: null, temp_min_c: null, temp_max_c: null, humidity_min_pct: null,
   humidity_max_pct: null, altitude_max_m: null, communication: null, standards: null,
   datasheet_version: null, preliminary: false,
@@ -109,7 +116,7 @@ const catalogue: CatalogueResponse = {
   cables: {},
   defaults: {
     tiers: { lv_kv: 0.8, mv_kv: 20, hv_kv: 132 },
-    rules: { max_utilization: 0.8, collection_loss_pct: 1.3, export_loss_pct_per_km: 0.1, max_circuit_current_a: 400 },
+    rules: { max_utilization: 0.8, collection_loss_pct: 1.3, export_loss_pct_per_km: 0.1 },
   },
   bess_solutions: [bessSolution],
   bess_transformers: [bessTransformer],
@@ -383,5 +390,141 @@ describe('Inspector — expand control for a placed station (ticket 06)', () => 
 
     expect(screen.getByRole('button', { name: 'Station transformer specification' })).toBeTruthy()
     expect(screen.queryByRole('button', { name: 'BESS solution specification' })).toBeNull()
+  })
+})
+
+/** Only the "Results" section reads `results` — the summary is never touched
+ * by the busbar case, so it is left empty rather than hand-built in full. */
+function withBusbarResult(busbar: BusbarNodeResult) {
+  useStore.setState({
+    diagram: { ...EMPTY_DIAGRAM, nodes: [{ id: 'bus', kind: 'busbar', x: 0, y: 0, props: {} }] },
+    selection: { type: 'node', id: 'bus' },
+    results: { edges: {}, nodes: { bus: busbar }, warnings: [], summary: {} } as unknown as SolveResults,
+  })
+}
+
+describe('Inspector — sized busbar switchgear (ticket 03)', () => {
+  beforeEach(() => {
+    useStore.setState({ selection: null, diagram: EMPTY_DIAGRAM, designMeta: null, results: null })
+  })
+
+  it('shows the busbar, export switchgear and each feeder, sized rating beside its current', () => {
+    withBusbarResult({
+      kind: 'busbar', p_kw: 3050, q_kvar: 996, s_kva: 3209, n_circuits: 2,
+      circuit_sizes: [1, 1], v_kv: 20,
+      i_a: 91.16, switchgear_rated_a: 630, switchgear_pinned: false,
+      export_i_a: 91.16, export_switchgear_rated_a: 630, export_switchgear_pinned: false,
+      feeder_i_a: [92.88, 45.0], feeder_switchgear_rated_a: [630, 630],
+      feeder_switchgear_pinned: [false, false], feeder_edge_ids: ['e_t1', 'e_t2'],
+      feeder_binding_limit: ['station_switchgear', 'station_switchgear'],
+    })
+    render(<Inspector />)
+
+    // The busbar and export switchgear share this ticket's current and
+    // rating, so their rows read identically.
+    expect(screen.getAllByText('630 A (sized) — 91 A')).toHaveLength(2)
+    expect(screen.getByText('Busbar')).toBeTruthy()
+    expect(screen.getByText('Export switchgear')).toBeTruthy()
+    expect(screen.getByText('Circuit 1 feeder')).toBeTruthy()
+    expect(screen.getByText('Circuit 2 feeder')).toBeTruthy()
+    expect(screen.getByText('630 A (sized) — 93 A')).toBeTruthy()
+    expect(screen.getByText('630 A (sized) — 45 A')).toBeTruthy()
+  })
+
+  it('shows an unsized busbar or export switchgear that clears the 4000 A ladder top', () => {
+    withBusbarResult({
+      kind: 'busbar', p_kw: 145_000, q_kvar: 40_000, s_kva: 150_000, n_circuits: 1,
+      circuit_sizes: [13], v_kv: 20,
+      i_a: 4148, switchgear_rated_a: null, switchgear_pinned: false,
+      export_i_a: 4148, export_switchgear_rated_a: null, export_switchgear_pinned: false,
+      feeder_i_a: [4148], feeder_switchgear_rated_a: [null],
+      feeder_switchgear_pinned: [false], feeder_edge_ids: ['e_t1'],
+      feeder_binding_limit: ['station_switchgear'],
+    })
+    render(<Inspector />)
+
+    const unsized = screen.getAllByText('not sized — 4,148 A exceeds the 4,000 A ladder top')
+    // Busbar and export switchgear share this ticket's current, and the
+    // circuit's one feeder carries the same total — three rows, same text.
+    expect(unsized).toHaveLength(3)
+  })
+})
+
+describe('Inspector — pinned busbar switchgear (ticket 04)', () => {
+  beforeEach(() => {
+    useStore.setState({ selection: null, diagram: EMPTY_DIAGRAM, designMeta: null, results: null })
+  })
+
+  it('marks a pinned rating as pinned rather than sized', () => {
+    withBusbarResult({
+      kind: 'busbar', p_kw: 3050, q_kvar: 996, s_kva: 3209, n_circuits: 1,
+      circuit_sizes: [1], v_kv: 20,
+      i_a: 4500, switchgear_rated_a: 4000, switchgear_pinned: true,
+      export_i_a: 4500, export_switchgear_rated_a: null, export_switchgear_pinned: false,
+      feeder_i_a: [92.88], feeder_switchgear_rated_a: [4000],
+      feeder_switchgear_pinned: [true], feeder_edge_ids: ['e_t1'],
+      feeder_binding_limit: ['feeder'],
+    })
+    render(<Inspector />)
+
+    expect(screen.getByText('4,000 A (pinned) — 4,500 A')).toBeTruthy() // busbar, pinned though above 4000 A
+    expect(screen.getByText('not sized — 4,500 A exceeds the 4,000 A ladder top')).toBeTruthy() // export, still sized
+    expect(screen.getByText('4,000 A (pinned) — 93 A')).toBeTruthy() // feeder, pinned
+  })
+
+  it('offers both fleet kinds on a busbar even when another busbar already uses one (ticket 05)', () => {
+    useStore.setState({
+      diagram: {
+        ...EMPTY_DIAGRAM,
+        nodes: [
+          { id: 'bus', kind: 'busbar', x: 0, y: 0, props: { fleet_kind: 'pv' } },
+          { id: 'bus2', kind: 'busbar', x: 0, y: 0, props: { fleet_kind: 'pv' } },
+        ],
+      },
+      selection: { type: 'node', id: 'bus2' },
+      results: null,
+    })
+    render(<Inspector />)
+
+    const select = screen.getByLabelText('Fleet kind') as HTMLSelectElement
+    const options = Array.from(select.options)
+    expect(options).toHaveLength(2)
+    expect(options.every((o) => !o.disabled)).toBe(true)
+    expect(options.map((o) => o.textContent)).toEqual(['PV', 'BESS'])
+  })
+
+  it('sets and clears each pin from the busbar properties, keyed by the trunk edge for a feeder', () => {
+    useStore.setState({
+      diagram: {
+        ...EMPTY_DIAGRAM,
+        nodes: [
+          { id: 'bus', kind: 'busbar', x: 0, y: 0, props: {} },
+          { id: 's1', kind: 'station', x: 0, y: 0, props: {} },
+        ],
+        edges: [
+          { id: 'e_t1', source: 'bus', target: 's1', tier: 'mv', sizing: { mode: 'auto' } },
+        ],
+      },
+      selection: { type: 'node', id: 'bus' },
+      results: null,
+    })
+    render(<Inspector />)
+
+    fireEvent.change(screen.getByLabelText('Busbar pin'), { target: { value: '800' } })
+    fireEvent.change(screen.getByLabelText('Export switchgear pin'), { target: { value: '1600' } })
+    fireEvent.change(screen.getByLabelText('Feeder pin → s1'), { target: { value: '2500' } })
+
+    let node = useStore.getState().diagram.nodes[0]
+    expect(node.props.busbar_switchgear_pin_a).toBe(800)
+    expect(node.props.export_switchgear_pin_a).toBe(1600)
+    expect(node.props.feeder_switchgear_pins_a).toEqual({ e_t1: 2500 })
+
+    fireEvent.change(screen.getByLabelText('Busbar pin'), { target: { value: '' } })
+    fireEvent.change(screen.getByLabelText('Feeder pin → s1'), { target: { value: '' } })
+
+    node = useStore.getState().diagram.nodes[0]
+    expect(node.props.busbar_switchgear_pin_a).toBeNull()
+    expect(node.props.export_switchgear_pin_a).toBe(1600) // untouched
+    expect(node.props.feeder_switchgear_pins_a).toEqual({})
   })
 })
