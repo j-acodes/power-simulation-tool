@@ -167,6 +167,24 @@ def test_seeding_is_deterministic_and_every_station_respects_its_switchgear_rati
     assert [w["code"] for w in result["results"]["warnings"]] == ["cable_entry_not_published"]
 
 
+def test_every_seeded_circuit_reports_exactly_one_binding_limit():
+    # Ticket 07: on the default catalogue (a published switchgear rating, no
+    # feeder pins, no published cable entry) the station switchgear is the
+    # tightest of the three for every Stage-1 circuit.
+    diagram = seed_diagram(REFERENCE_PARAMS, db)
+    result = solve_diagram(diagram, db)
+    assert result["issues"] == []
+
+    busbars = [n for n in result["results"]["nodes"].values() if n.get("kind") == "busbar"]
+    assert busbars  # the fixture draws at least one
+    for busbar in busbars:
+        assert busbar["feeder_binding_limit"]  # one per circuit, never empty
+        for limit in busbar["feeder_binding_limit"]:
+            assert limit in ("station_switchgear", "cable_entry", "feeder")
+        assert busbar["feeder_binding_limit"] == ["station_switchgear"] * len(
+            busbar["feeder_binding_limit"])
+
+
 def test_seed_mv_interconnection_variant_validates_and_solves():
     params = dict(REFERENCE_PARAMS)
     params["interconnection"] = "MV"

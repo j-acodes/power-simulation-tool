@@ -595,6 +595,11 @@ class StationResult:
     # resolved at the ambient the design asked for. Naming a temperature here would
     # be a lie the moment the ambient setting can be anything but 40 °C.
     s_rated_kva: float
+    # This station's own switchgear rated current, read straight off the
+    # transformer (ADR-0006's 630 A fallback already resolved). Carried here
+    # so the binding-limit rule and the results/PDF display never need the
+    # StationPlan this StationResult was built from.
+    switchgear_rated_current_a: float
     model: str  # display label, e.g. "3300 kVA - Huawei"
     v_lv_kv: float  # the station's own transformer LV rating
     kind: str = "pv"  # fleet kind ("pv" or "bess"); see powertool.graph
@@ -629,6 +634,13 @@ class SegmentResult:
     dp_kw: float
     dq_series_kvar: float
     q_charging_kvar: float
+    # The highest current an admissible cable within THIS segment's own
+    # cable entry could carry (``_cable_entry_ceiling_a``), for the
+    # binding-limit rule (ADR-0007, ticket 07). None for an export span, and
+    # for a circuit segment whose candidate catalogue is empty (pending) —
+    # that segment then contributes no cable-entry headroom, rather than a
+    # false zero.
+    cable_entry_ceiling_a: float | None = None
 
 
 @dataclass
@@ -650,6 +662,64 @@ class CircuitResult:
     @property
     def dp_transformers_kw(self) -> float:
         return sum(s.dp_tx_kw for s in self.stations)
+
+
+# The three things that can decide a circuit's size (ADR-0006, ADR-0007,
+# ticket 07's owner decision). Feeders-per-busbar is deliberately absent:
+# ticket 06 opens another busbar instead of enlarging a circuit, so the
+# feeder count never binds a circuit.
+BindingLimit = str  # one of "station_switchgear", "cable_entry", "feeder"
+
+_BINDING_LIMIT_TIEBREAK = ("station_switchgear", "cable_entry", "feeder")
+
+
+def circuit_binding_limit(
+    circuit: CircuitResult, feeder_pin_a: float | None = None,
+) -> BindingLimit:
+    """The equipment that decided this circuit's size: whichever of its
+    station switchgear, cable entry, or feeder has the LEAST headroom in
+    amperes (ticket 07's owner decision).
+
+    - station switchgear: min over the circuit's stations of (that station's
+      own switchgear rated current minus its through current).
+    - cable entry: min over the circuit's segments of (that segment's own
+      cable-entry ceiling minus the current it carries — the through current
+      of the station at its matching position; ``segments`` and ``stations``
+      share one order, see :class:`CircuitResult`). A segment whose ceiling
+      is unknown (catalogue pending, ``cable_entry_ceiling_a`` is None)
+      contributes no headroom rather than a false one.
+    - feeder: (``feeder_pin_a`` if the engineer pinned it, else the top of
+      ``BUSBAR_SWITCHGEAR_LADDER_A``) minus the circuit's head current.
+
+    Ties break station switchgear, then cable entry, then feeder — a fixed
+    order rather than an arbitrary numeric tiebreak. One rule for a Stage-1
+    planned circuit and a drawn one alike, because the solve cannot tell them
+    apart (ticket 07's owner decision): on a Stage-1 circuit this is in fact
+    the limit that decided its size, since every station in it is the same
+    model.
+    """
+    station_headroom = min(
+        st.switchgear_rated_current_a - st.through_current_a
+        for st in circuit.stations
+    )
+    cable_headrooms = [
+        seg.cable_entry_ceiling_a - st.through_current_a
+        for seg, st in zip(circuit.segments, circuit.stations)
+        if seg.cable_entry_ceiling_a is not None
+    ]
+    feeder_rating_a = (
+        feeder_pin_a if feeder_pin_a is not None else BUSBAR_SWITCHGEAR_LADDER_A[-1]
+    )
+    feeder_headroom = feeder_rating_a - circuit.i_trunk_a
+
+    candidates: list[tuple[float, str]] = [(station_headroom, "station_switchgear")]
+    if cable_headrooms:
+        candidates.append((min(cable_headrooms), "cable_entry"))
+    candidates.append((feeder_headroom, "feeder"))
+
+    order = {name: i for i, name in enumerate(_BINDING_LIMIT_TIEBREAK)}
+    candidates.sort(key=lambda pair: (pair[0], order[pair[1]]))
+    return candidates[0][1]
 
 
 def size_circuits(
@@ -761,6 +831,7 @@ def size_circuits(
                 s_mv_kva=plan.s_mv_kva,
                 loading=plan.loading,
                 s_rated_kva=plan.transformer.rating_at(layout.ambient_c),
+                switchgear_rated_current_a=plan.transformer.switchgear_rated_current_a,
                 model=plan.transformer.display_name,
                 v_lv_kv=plan.v_lv_kv,
                 kind=plan.kind,
@@ -813,6 +884,16 @@ def size_circuits(
                 plans[k - 1].transformer.cable_entry_cross_section_limit_mm2,
                 other_tx.cable_entry_cross_section_limit_mm2 if other_tx is not None
                 else DEFAULT_CABLE_ENTRY_MAX_CROSS_SECTION_MM2,
+            )
+            # Cached for the binding-limit rule (ADR-0007, ticket 07), using
+            # the SAME per-segment bound just computed above — never a second
+            # notion of this segment's cable entry. None when the catalogue
+            # offered here is empty (pending): that segment then contributes
+            # no cable-entry headroom rather than a false zero.
+            cable_entry_ceiling_a = (
+                _cable_entry_ceiling_a(candidates, seg_max_parallel,
+                                       seg_max_cross_section, max_utilization)
+                if candidates else None
             )
 
             try:
@@ -869,6 +950,7 @@ def size_circuits(
                     dp_kw=dp,
                     dq_series_kvar=dq_series,
                     q_charging_kvar=q_charging,
+                    cable_entry_ceiling_a=cable_entry_ceiling_a,
                 )
             )
             if k == 1:

@@ -152,6 +152,29 @@ def test_a_pinned_busbar_switchgear_rating_is_marked_pinned_not_sized():
     assert "630 A (sized)" in text  # export switchgear and the feeder
 
 
+def test_the_report_names_the_circuits_binding_limit():
+    # Ticket 07: the default catalogue's station switchgear fallback binds,
+    # named beside the feeder row it decided the size of.
+    text = _story_text(_minimal())
+    assert "Binding limit" in text
+    assert "Station switchgear" in text
+
+
+def test_the_report_lists_each_stations_through_and_rated_current():
+    # Ticket 07: through current beside switchgear rated current, per station
+    # — a figure _transformer_rows aggregates away by model.
+    text = _story_text(_minimal())
+    assert "93 / 630 A" in text  # s1's through current (~92.9 A) / 630 A fallback
+
+
+def test_the_report_shows_feeders_used_against_the_limit():
+    # Ticket 07: feeder count vs. the feeders-per-busbar rule, and the
+    # busbar's own current against the 4,000 A ladder top.
+    text = _story_text(_minimal())
+    assert "1 / 12" in text
+    assert "4,000 A" in text
+
+
 def test_a_busbar_switchgear_section_appears_for_each_fleet_of_a_hybrid():
     text = _story_text(_hybrid_with_drawn_bess(p_target_bess_mw=2.0))
     assert text.count("Busbar switchgear") >= 2

@@ -175,6 +175,11 @@ export interface StationNodeResult {
   q_mv_kvar: number
   s_mv_kva: number
   i_a: number
+  /** This station's own current plus every station downstream of it in its
+   * circuit (ADR-0006's "through current"), beside its own switchgear rated
+   * current — what the results view and PDF show as "through / rated". */
+  through_current_a: number
+  switchgear_rated_current_a: number
   /** PV-only inverter compliance, present once the station has an explicit
    * catalogue inverter selection. Limits use 100% of ambient-rated power. */
   inverter_model?: string
@@ -189,6 +194,13 @@ export interface StationNodeResult {
   inverter_apparent_ok?: boolean
   inverter_power_factor_ok?: boolean
 }
+
+/** What decided a circuit's size (ticket 07's owner decision): the
+ * equipment with the least headroom in amperes among the circuit's own
+ * station switchgear, its cable entry, and its feeder. Feeders-per-busbar
+ * is never a candidate — ticket 06 opens another busbar instead of
+ * enlarging a circuit — so it is never one of these three values. */
+export type BindingLimit = 'station_switchgear' | 'cable_entry' | 'feeder'
 
 export interface BusbarNodeResult {
   kind: 'busbar'
@@ -224,6 +236,8 @@ export interface BusbarNodeResult {
    * feeder pin (`feeder_switchgear_pins_a` on the busbar's props) is keyed
    * by, so the editor can tie a result row back to its pin control. */
   feeder_edge_ids: string[]
+  /** One binding limit per circuit, same order as `feeder_i_a`. */
+  feeder_binding_limit: BindingLimit[]
 }
 
 export interface AuxNodeResult {

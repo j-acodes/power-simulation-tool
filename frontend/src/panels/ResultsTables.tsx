@@ -6,11 +6,26 @@ import { ModalShell } from '../components/Modal'
 import { fmt, pct, powerFactor } from '../format'
 import { useStore } from '../store'
 import type {
+  BindingLimit,
+  BusbarNodeResult,
   Diagram,
   HvTxNodeResult,
   SolveResults,
   StationNodeResult,
 } from '../types'
+
+// The top of the busbar switchgear standard rating ladder (ADR-0007) — a
+// busbar or export switchgear above this has no admissible standard size.
+// Mirrors powertool.components.BUSBAR_SWITCHGEAR_LADDER_A[-1].
+const BUSBAR_LADDER_TOP_A = 4000
+
+// Plain-word labels for a circuit's binding limit (ticket 07's owner
+// decision) — see powertool.architecture.circuit_binding_limit.
+const BINDING_LIMIT_LABEL: Record<BindingLimit, string> = {
+  station_switchgear: 'Station switchgear',
+  cable_entry: 'Cable entry',
+  feeder: 'Feeder',
+}
 
 /** The full solve, element by element — the same tables the Markdown/PDF report
  * carries (powertool/report.py `_transformer_table` / `_cable_table`), but per
@@ -61,6 +76,7 @@ export function ResultsTables({ onClose }: { onClose: () => void }) {
         <PlantSummary results={results} />
         <FleetSummaries results={results} />
         <Stations diagram={diagram} results={results} />
+        <Busbars diagram={diagram} results={results} />
         <Cables diagram={diagram} results={results} />
       </div>
       <div className="modal-actions">
@@ -220,6 +236,7 @@ function Stations({ diagram, results }: { diagram: Diagram; results: SolveResult
               <th className="num">ΔQ [kvar]</th>
               <th className="num">S MV [kVA]</th>
               <th className="num">Current [A]</th>
+              <th className="num">Through / rated [A]</th>
             </tr>
           </thead>
           <tbody>
@@ -236,6 +253,9 @@ function Stations({ diagram, results }: { diagram: Diagram; results: SolveResult
                 <td className="num">{fmt(result.dq_tx_kvar, 2)}</td>
                 <td className="num">{fmt(result.s_mv_kva, 1)}</td>
                 <td className="num">{fmt(result.i_a, 1)}</td>
+                <td className="num">
+                  {fmt(result.through_current_a, 0)} / {fmt(result.switchgear_rated_current_a, 0)}
+                </td>
               </tr>
             ))}
             {hvRows.map(({ node, result }) => (
@@ -259,8 +279,75 @@ function Stations({ diagram, results }: { diagram: Diagram; results: SolveResult
                 <td className="num">{fmt(result.dq_kvar, 2)}</td>
                 <td className="num">{fmt(result.s_through_kva, 1)}</td>
                 <td className="num">—</td>
+                <td className="num">—</td>
               </tr>
             ))}
+          </tbody>
+        </table>
+      </div>
+    </section>
+  )
+}
+
+function Busbars({ diagram, results }: { diagram: Diagram; results: SolveResults }) {
+  const feedersPerBusbar = diagram.settings.rules.feeders_per_busbar ?? 12
+
+  const rows = diagram.nodes
+    .map((node) => ({ node, result: results.nodes[node.id] }))
+    .filter((r) => r.result?.kind === 'busbar')
+    .map((r) => ({ node: r.node, result: r.result as BusbarNodeResult }))
+
+  if (rows.length === 0) return null
+
+  return (
+    <section>
+      <h3>Busbars</h3>
+      <div className="table-scroll">
+        <table className="data-table">
+          <thead>
+            <tr>
+              <th>Busbar</th>
+              <th className="num">Feeders</th>
+              <th className="num">Current [A]</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map(({ node, result }) => (
+              <tr key={node.id}>
+                <td className="row-name">{nodeLabel(node)}</td>
+                <td className="num">
+                  {result.n_circuits} / {feedersPerBusbar}
+                </td>
+                <td className="num">
+                  {fmt(result.i_a, 0)} / {BUSBAR_LADDER_TOP_A} A
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      <h3>Circuits</h3>
+      <div className="table-scroll">
+        <table className="data-table">
+          <thead>
+            <tr>
+              <th>Busbar</th>
+              <th>Circuit</th>
+              <th>Binding limit</th>
+              <th className="num">Feeder current [A]</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.flatMap(({ node, result }) =>
+              result.feeder_binding_limit.map((limit, i) => (
+                <tr key={`${node.id}-${i}`}>
+                  <td className="row-name">{nodeLabel(node)}</td>
+                  <td>Circuit {i + 1}</td>
+                  <td>{BINDING_LIMIT_LABEL[limit]}</td>
+                  <td className="num">{fmt(result.feeder_i_a[i], 1)}</td>
+                </tr>
+              )),
+            )}
           </tbody>
         </table>
       </div>

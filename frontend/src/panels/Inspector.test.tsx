@@ -416,6 +416,7 @@ describe('Inspector — sized busbar switchgear (ticket 03)', () => {
       export_i_a: 91.16, export_switchgear_rated_a: 630, export_switchgear_pinned: false,
       feeder_i_a: [92.88, 45.0], feeder_switchgear_rated_a: [630, 630],
       feeder_switchgear_pinned: [false, false], feeder_edge_ids: ['e_t1', 'e_t2'],
+      feeder_binding_limit: ['station_switchgear', 'station_switchgear'],
     })
     render(<Inspector />)
 
@@ -438,6 +439,7 @@ describe('Inspector — sized busbar switchgear (ticket 03)', () => {
       export_i_a: 4148, export_switchgear_rated_a: null, export_switchgear_pinned: false,
       feeder_i_a: [4148], feeder_switchgear_rated_a: [null],
       feeder_switchgear_pinned: [false], feeder_edge_ids: ['e_t1'],
+      feeder_binding_limit: ['station_switchgear'],
     })
     render(<Inspector />)
 
@@ -461,6 +463,7 @@ describe('Inspector — pinned busbar switchgear (ticket 04)', () => {
       export_i_a: 4500, export_switchgear_rated_a: null, export_switchgear_pinned: false,
       feeder_i_a: [92.88], feeder_switchgear_rated_a: [4000],
       feeder_switchgear_pinned: [true], feeder_edge_ids: ['e_t1'],
+      feeder_binding_limit: ['feeder'],
     })
     render(<Inspector />)
 

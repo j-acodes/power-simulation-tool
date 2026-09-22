@@ -1177,6 +1177,12 @@ def test_map_results_keys_every_drawn_element():
     assert results["summary"]["n_circuits"] == 2
     assert results["summary"]["circuit_sizes"] == [1, 2]
     assert results["summary"]["power_balance_ok"]
+    # ticket 07: through current beside the station's own switchgear rated
+    # current, on every station payload.
+    for node_id in ("a1", "b1", "b2"):
+        station = results["nodes"][node_id]
+        assert station["through_current_a"] > 0
+        assert station["switchgear_rated_current_a"] == 630.0  # neither publishes it
     # No 132 kV cables in the catalogue yet: the export span is reported unsized.
     assert results["edges"]["e_exp"]["sized"] is False
     assert any(w["code"] == "hv_cable_not_sized" for w in results["warnings"])
@@ -1708,6 +1714,73 @@ def test_published_switchgear_rating_raises_no_notice():
     assert result["issues"] == []
     assert not any(w["code"] == "switchgear_rating_not_published"
                    for w in result["results"]["warnings"])
+
+
+# --- ticket 07: what limited each circuit ------------------------------------
+
+def test_binding_limit_is_station_switchgear_on_the_default_catalogue():
+    # _minimal()'s one Huawei station publishes neither a switchgear rated
+    # current nor a cable entry, so both fall back (630 A, 2 x 300 mm^2 ->
+    # 664 A ceiling); with no feeder pin the 630 A switchgear fallback is the
+    # tightest of the three, and it wins.
+    result = solve_diagram(_minimal(), db)
+    assert result["issues"] == []
+    bus = result["results"]["nodes"]["bus"]
+    assert bus["feeder_binding_limit"] == ["station_switchgear"]
+
+
+def test_binding_limit_is_cable_entry_when_a_stations_own_entry_is_tightest(monkeypatch):
+    # 1 x 95 mm^2 admits AL_95_20kV (220 A) at 0.80 utilization: a 176 A
+    # ceiling, well below the 630 A switchgear fallback this station still
+    # carries (it still publishes no rmu_rated_current_a).
+    tx = db.transformer("HUAWEI_JUPITER3000")
+    monkeypatch.setitem(db.transformers, "HUAWEI_JUPITER3000", replace(
+        tx, cable_entry_cables_per_phase=1, cable_entry_max_cross_section_mm2=95.0))
+
+    result = solve_diagram(_minimal(), db)
+    assert result["issues"] == []
+    bus = result["results"]["nodes"]["bus"]
+    assert bus["feeder_binding_limit"] == ["cable_entry"]
+
+
+def test_binding_limit_is_feeder_when_pinned_below_the_stations_own_headroom():
+    # A 100 A feeder pin, on a ~93 A trunk, leaves ~7 A of headroom — far
+    # below the switchgear fallback's ~537 A and the cable-entry fallback
+    # ceiling's ~571 A, so the feeder is what actually decided this circuit's
+    # size, and it still solves (the pin is not undersized: 100 > 93).
+    diagram = _minimal()
+    diagram["nodes"][1]["props"]["feeder_switchgear_pins_a"] = {"e_t1": 100.0}
+
+    result = solve_diagram(diagram, db)
+    assert result["issues"] == []
+    warnings = result["results"]["warnings"]
+    assert not any(w["code"] == "busbar_switchgear_pin_undersized" for w in warnings)
+    bus = result["results"]["nodes"]["bus"]
+    assert bus["feeder_binding_limit"] == ["feeder"]
+
+
+def test_a_drawn_circuit_reports_its_closest_limit_even_under_a_compound_violation():
+    # Moving circuit 3's far station onto circuit 1 (as in the rearranging
+    # golden test above) leaves circuit 1 over BOTH its stations' 630 A
+    # switchgear fallback AND its trunk's 2 x 300 mm^2 cable-entry ceiling
+    # (664 A) — two separate warnings fire. The binding limit still names
+    # whichever is genuinely closest (least headroom: -104.6 A for the 630 A
+    # switchgear vs. -70.6 A for the 664 A cable-entry ceiling at ~734.6 A),
+    # not just "a limit was exceeded somewhere".
+    _stage1, layout, arch = _auto_reference()
+    diagram, _ids, edges = _drawn_example(layout)
+    moved = {e["id"]: e for e in diagram["edges"]}
+    moved["c3_seg2"]["source"] = "s1_4"
+
+    result = solve_diagram(diagram, db)
+    assert result["issues"] == []
+    warnings = {w["code"] for w in result["results"]["warnings"]}
+    assert "switchgear_through_current_exceeded" in warnings
+    assert "circuit_cable_entry_exceeded" in warnings
+
+    bus = result["results"]["nodes"]["bus"]
+    assert bus["feeder_edge_ids"][0] == edges[(1, 1)]
+    assert bus["feeder_binding_limit"][0] == "station_switchgear"
 
 
 # --- ticket 05: several busbars per fleet ------------------------------------

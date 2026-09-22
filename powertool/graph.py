@@ -57,7 +57,11 @@ from __future__ import annotations
 import math
 from dataclasses import dataclass, field
 
-from .architecture import DEFAULT_FEEDERS_PER_BUSBAR, PlantArchitecture
+from .architecture import (
+    DEFAULT_FEEDERS_PER_BUSBAR,
+    PlantArchitecture,
+    circuit_binding_limit,
+)
 from .components import (
     DEFAULT_AMBIENT_C,
     DEFAULT_CABLE_ENTRY_CABLES_PER_PHASE,
@@ -1756,6 +1760,12 @@ def map_results(inputs: GraphInputs, stage1s: list[SizingResult],
                     "q_mv_kvar": station.q_mv_kvar,
                     "s_mv_kva": station.s_mv_kva,
                     "i_a": plan.i_a,
+                    # Through current beside the station's own switchgear
+                    # rated current (ADR-0006, ticket 07), so the results
+                    # view and PDF can show them side by side without
+                    # re-deriving either from the raw circuit figures.
+                    "through_current_a": station.through_current_a,
+                    "switchgear_rated_current_a": station.switchgear_rated_current_a,
                 }
                 if installation is not None:
                     capacity = installation.installed_power_kw
@@ -1885,6 +1895,17 @@ def map_results(inputs: GraphInputs, stage1s: list[SizingResult],
                 busbar_switchgear_rating(i, pin)
                 for pin, i in zip(feeder_pins_a, feeder_current_a)
             ]
+            # One of "station_switchgear", "cable_entry", "feeder" per circuit
+            # (ticket 07's owner decision): the equipment with the LEAST
+            # headroom decided that circuit's size. Feeders-per-busbar is
+            # never a candidate — ticket 06 opens another busbar instead of
+            # enlarging a circuit — so it is reported separately below by the
+            # frontend/PDF comparing n_circuits against the feeders-per-busbar
+            # setting, not folded into this list.
+            feeder_binding_limit = [
+                circuit_binding_limit(c, pin)
+                for c, pin in zip(section.circuits, feeder_pins_a)
+            ]
             nodes[busbar_inputs.busbar_id] = {
                 "kind": "busbar",
                 "p_kw": p_busbar,
@@ -1907,6 +1928,7 @@ def map_results(inputs: GraphInputs, stage1s: list[SizingResult],
                 "feeder_switchgear_rated_a": feeder_switchgear_rated_a,
                 "feeder_switchgear_pinned": [pin is not None for pin in feeder_pins_a],
                 "feeder_edge_ids": feeder_edge_ids,
+                "feeder_binding_limit": feeder_binding_limit,
             }
             # No standard rating carries this current (ADR-0007) — only
             # reported for a part that is SIZED: a pinned part is checked

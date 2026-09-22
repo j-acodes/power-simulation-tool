@@ -35,6 +35,9 @@
           "export_i_a": 364.64227528067283,
           "export_switchgear_pinned": false,
           "export_switchgear_rated_a": 630.0,
+          "feeder_binding_limit": [
+            "station_switchgear"
+          ],
           "feeder_edge_ids": [
             "e_t1"
           ],
@@ -83,7 +86,9 @@
           "q_mv_kvar": 3973.1934151568084,
           "s_lv_kva": 15369.505168638827,
           "s_mv_kva": 12738.042131577531,
-          "s_rated_kva": 4000
+          "s_rated_kva": 4000,
+          "switchgear_rated_current_a": 630.0,
+          "through_current_a": 367.71560268075416
         }
       },
       "summary": {
@@ -222,6 +227,9 @@
           "export_i_a": 91.16056882322316,
           "export_switchgear_pinned": false,
           "export_switchgear_rated_a": 630.0,
+          "feeder_binding_limit": [
+            "station_switchgear"
+          ],
           "feeder_edge_ids": [
             "e_t1"
           ],
@@ -270,7 +278,9 @@
           "q_mv_kvar": 998.5987844041396,
           "s_lv_kva": 3321.2520028631047,
           "s_mv_kva": 3217.374570317772,
-          "s_rated_kva": 4000
+          "s_rated_kva": 4000,
+          "switchgear_rated_current_a": 630.0,
+          "through_current_a": 92.87760371284112
         }
       },
       "summary": {
@@ -403,6 +413,9 @@
           "export_i_a": 91.16056882390491,
           "export_switchgear_pinned": false,
           "export_switchgear_rated_a": 630.0,
+          "feeder_binding_limit": [
+            "station_switchgear"
+          ],
           "feeder_edge_ids": [
             "e_t1"
           ],
@@ -451,7 +464,9 @@
           "q_mv_kvar": 998.5987844204893,
           "s_lv_kva": 3374.6230774458313,
           "s_mv_kva": 3217.3745703415007,
-          "s_rated_kva": 2750
+          "s_rated_kva": 2750,
+          "switchgear_rated_current_a": 630.0,
+          "through_current_a": 92.87760371352611
         }
       },
       "summary": {
@@ -590,6 +605,9 @@
           "export_i_a": 91.16056882322316,
           "export_switchgear_pinned": false,
           "export_switchgear_rated_a": 630.0,
+          "feeder_binding_limit": [
+            "station_switchgear"
+          ],
           "feeder_edge_ids": [
             "e_t1"
           ],
@@ -638,7 +656,9 @@
           "q_mv_kvar": 998.5987844041396,
           "s_lv_kva": 3321.2520028631047,
           "s_mv_kva": 3217.374570317772,
-          "s_rated_kva": 4000
+          "s_rated_kva": 4000,
+          "switchgear_rated_current_a": 630.0,
+          "through_current_a": 92.87760371284112
         }
       },
       "summary": {
@@ -771,6 +791,9 @@
           "export_i_a": 91.16056882390491,
           "export_switchgear_pinned": false,
           "export_switchgear_rated_a": 630.0,
+          "feeder_binding_limit": [
+            "station_switchgear"
+          ],
           "feeder_edge_ids": [
             "e_t1"
           ],
@@ -818,7 +841,9 @@
           "q_mv_kvar": 998.5987844204893,
           "s_lv_kva": 3374.6230774458313,
           "s_mv_kva": 3217.3745703415007,
-          "s_rated_kva": 2750
+          "s_rated_kva": 2750,
+          "switchgear_rated_current_a": 630.0,
+          "through_current_a": 92.87760371352611
         }
       },
       "summary": {
@@ -980,6 +1005,9 @@
           "export_i_a": 91.16056908127166,
           "export_switchgear_pinned": false,
           "export_switchgear_rated_a": 630.0,
+          "feeder_binding_limit": [
+            "station_switchgear"
+          ],
           "feeder_edge_ids": [
             "e_t1"
           ],
@@ -1009,6 +1037,9 @@
           "export_i_a": 91.16056912596063,
           "export_switchgear_pinned": false,
           "export_switchgear_rated_a": 630.0,
+          "feeder_binding_limit": [
+            "station_switchgear"
+          ],
           "feeder_edge_ids": [
             "e_tb1"
           ],
@@ -1067,7 +1098,9 @@
           "q_mv_kvar": 998.5987900402756,
           "s_lv_kva": 3345.221287960321,
           "s_mv_kva": 3217.374579300369,
-          "s_rated_kva": 3300
+          "s_rated_kva": 3300,
+          "switchgear_rated_current_a": 630.0,
+          "through_current_a": 92.87760397214636
         },
         "s_b1": {
           "circuit": 1,
@@ -1086,7 +1119,9 @@
           "q_mv_kvar": 995.9474919942736,
           "s_lv_kva": 3361.0485208259356,
           "s_mv_kva": 3204.9840236721975,
-          "s_rated_kva": 2750
+          "s_rated_kva": 2750,
+          "switchgear_rated_current_a": 630.0,
+          "through_current_a": 92.51991944077967
         }
       },
       "summary": {
@@ -1280,6 +1315,9 @@
           "export_i_a": 91.16056882352743,
           "export_switchgear_pinned": false,
           "export_switchgear_rated_a": 630.0,
+          "feeder_binding_limit": [
+            "station_switchgear"
+          ],
           "feeder_edge_ids": [
             "e_t1"
           ],
@@ -1338,7 +1376,9 @@
           "q_mv_kvar": 998.5987844113572,
           "s_lv_kva": 3345.2212779994097,
           "s_mv_kva": 3217.374570328363,
-          "s_rated_kva": 3300
+          "s_rated_kva": 3300,
+          "switchgear_rated_current_a": 630.0,
+          "through_current_a": 92.87760371314685
         }
       },
       "summary": {
@@ -1477,6 +1517,9 @@
           "export_i_a": 86.60254039115375,
           "export_switchgear_pinned": false,
           "export_switchgear_rated_a": 630.0,
+          "feeder_binding_limit": [
+            "station_switchgear"
+          ],
           "feeder_edge_ids": [
             "e_t1"
           ],
@@ -1535,7 +1578,9 @@
           "q_mv_kvar": 12.299959893709826,
           "s_lv_kva": 3099.6440257341496,
           "s_mv_kva": 3057.6837928944738,
-          "s_rated_kva": 3300
+          "s_rated_kva": 3300,
+          "switchgear_rated_current_a": 630.0,
+          "through_current_a": 88.26772804621902
         }
       },
       "summary": {
@@ -1657,6 +1702,9 @@
           "export_i_a": 91.16056882278389,
           "export_switchgear_pinned": false,
           "export_switchgear_rated_a": 630.0,
+          "feeder_binding_limit": [
+            "station_switchgear"
+          ],
           "feeder_edge_ids": [
             "e_t1"
           ],
@@ -1715,7 +1763,9 @@
           "q_mv_kvar": 988.5188393585813,
           "s_lv_kva": 3290.561879695376,
           "s_mv_kva": 3166.4679548899953,
-          "s_rated_kva": 3300
+          "s_rated_kva": 3300,
+          "switchgear_rated_current_a": 630.0,
+          "through_current_a": 91.40805630680313
         }
       },
       "summary": {
@@ -1898,6 +1948,9 @@
             "export_i_a": 318.1294719196747,
             "export_switchgear_pinned": false,
             "export_switchgear_rated_a": 630.0,
+            "feeder_binding_limit": [
+              "station_switchgear"
+            ],
             "feeder_edge_ids": [
               "c1_seg1"
             ],
@@ -1967,7 +2020,9 @@
             "q_mv_kvar": 1537.8320951230796,
             "s_lv_kva": 3920.052655555401,
             "s_mv_kva": 3766.581524999754,
-            "s_rated_kva": 4480
+            "s_rated_kva": 4480,
+            "switchgear_rated_current_a": 630.0,
+            "through_current_a": 326.00270984017675
           },
           "s1_2": {
             "circuit": 1,
@@ -1996,7 +2051,9 @@
             "q_mv_kvar": 1537.8320951230796,
             "s_lv_kva": 3920.052655555401,
             "s_mv_kva": 3766.581524999754,
-            "s_rated_kva": 4480
+            "s_rated_kva": 4480,
+            "switchgear_rated_current_a": 630.0,
+            "through_current_a": 217.41157613967678
           },
           "s1_3": {
             "circuit": 1,
@@ -2025,7 +2082,9 @@
             "q_mv_kvar": 1537.8320951230796,
             "s_lv_kva": 3920.052655555401,
             "s_mv_kva": 3766.581524999754,
-            "s_rated_kva": 4480
+            "s_rated_kva": 4480,
+            "switchgear_rated_current_a": 630.0,
+            "through_current_a": 108.73184286916397
           }
         },
         "summary": {
@@ -2737,6 +2796,15 @@
             "export_i_a": 3805.5532529065326,
             "export_switchgear_pinned": false,
             "export_switchgear_rated_a": 4000.0,
+            "feeder_binding_limit": [
+              "station_switchgear",
+              "station_switchgear",
+              "station_switchgear",
+              "station_switchgear",
+              "station_switchgear",
+              "station_switchgear",
+              "station_switchgear"
+            ],
             "feeder_edge_ids": [
               "c1_seg1",
               "c2_seg1",
@@ -2830,7 +2898,9 @@
             "q_mv_kvar": 1679.3738632331465,
             "s_lv_kva": 4325.335601117001,
             "s_mv_kva": 4139.24565921132,
-            "s_rated_kva": 4480
+            "s_rated_kva": 4480,
+            "switchgear_rated_current_a": 630.0,
+            "through_current_a": 596.73761356527
           },
           "s1_2": {
             "circuit": 1,
@@ -2859,7 +2929,9 @@
             "q_mv_kvar": 1679.3738632331465,
             "s_lv_kva": 4325.335601117001,
             "s_mv_kva": 4139.24565921132,
-            "s_rated_kva": 4480
+            "s_rated_kva": 4480,
+            "switchgear_rated_current_a": 630.0,
+            "through_current_a": 477.52712208718197
           },
           "s1_3": {
             "circuit": 1,
@@ -2888,7 +2960,9 @@
             "q_mv_kvar": 1679.3738632331465,
             "s_lv_kva": 4325.335601117001,
             "s_mv_kva": 4139.24565921132,
-            "s_rated_kva": 4480
+            "s_rated_kva": 4480,
+            "switchgear_rated_current_a": 630.0,
+            "through_current_a": 358.26643752588546
           },
           "s1_4": {
             "circuit": 1,
@@ -2917,7 +2991,9 @@
             "q_mv_kvar": 1679.3738632331465,
             "s_lv_kva": 4325.335601117001,
             "s_mv_kva": 4139.24565921132,
-            "s_rated_kva": 4480
+            "s_rated_kva": 4480,
+            "switchgear_rated_current_a": 630.0,
+            "through_current_a": 238.916505821135
           },
           "s1_5": {
             "circuit": 1,
@@ -2946,7 +3022,9 @@
             "q_mv_kvar": 1679.3738632331465,
             "s_lv_kva": 4325.335601117001,
             "s_mv_kva": 4139.24565921132,
-            "s_rated_kva": 4480
+            "s_rated_kva": 4480,
+            "switchgear_rated_current_a": 630.0,
+            "through_current_a": 119.4897297793823
           },
           "s2_1": {
             "circuit": 2,
@@ -2975,7 +3053,9 @@
             "q_mv_kvar": 1679.3738632331465,
             "s_lv_kva": 4325.335601117001,
             "s_mv_kva": 4139.24565921132,
-            "s_rated_kva": 4480
+            "s_rated_kva": 4480,
+            "switchgear_rated_current_a": 630.0,
+            "through_current_a": 596.73761356527
           },
           "s2_2": {
             "circuit": 2,
@@ -3004,7 +3084,9 @@
             "q_mv_kvar": 1679.3738632331465,
             "s_lv_kva": 4325.335601117001,
             "s_mv_kva": 4139.24565921132,
-            "s_rated_kva": 4480
+            "s_rated_kva": 4480,
+            "switchgear_rated_current_a": 630.0,
+            "through_current_a": 477.52712208718197
           },
           "s2_3": {
             "circuit": 2,
@@ -3033,7 +3115,9 @@
             "q_mv_kvar": 1679.3738632331465,
             "s_lv_kva": 4325.335601117001,
             "s_mv_kva": 4139.24565921132,
-            "s_rated_kva": 4480
+            "s_rated_kva": 4480,
+            "switchgear_rated_current_a": 630.0,
+            "through_current_a": 358.26643752588546
           },
           "s2_4": {
             "circuit": 2,
@@ -3062,7 +3146,9 @@
             "q_mv_kvar": 1679.3738632331465,
             "s_lv_kva": 4325.335601117001,
             "s_mv_kva": 4139.24565921132,
-            "s_rated_kva": 4480
+            "s_rated_kva": 4480,
+            "switchgear_rated_current_a": 630.0,
+            "through_current_a": 238.916505821135
           },
           "s2_5": {
             "circuit": 2,
@@ -3091,7 +3177,9 @@
             "q_mv_kvar": 1679.3738632331465,
             "s_lv_kva": 4325.335601117001,
             "s_mv_kva": 4139.24565921132,
-            "s_rated_kva": 4480
+            "s_rated_kva": 4480,
+            "switchgear_rated_current_a": 630.0,
+            "through_current_a": 119.4897297793823
           },
           "s3_1": {
             "circuit": 3,
@@ -3120,7 +3208,9 @@
             "q_mv_kvar": 1679.3738632331465,
             "s_lv_kva": 4325.335601117001,
             "s_mv_kva": 4139.24565921132,
-            "s_rated_kva": 4480
+            "s_rated_kva": 4480,
+            "switchgear_rated_current_a": 630.0,
+            "through_current_a": 596.73761356527
           },
           "s3_2": {
             "circuit": 3,
@@ -3149,7 +3239,9 @@
             "q_mv_kvar": 1679.3738632331465,
             "s_lv_kva": 4325.335601117001,
             "s_mv_kva": 4139.24565921132,
-            "s_rated_kva": 4480
+            "s_rated_kva": 4480,
+            "switchgear_rated_current_a": 630.0,
+            "through_current_a": 477.52712208718197
           },
           "s3_3": {
             "circuit": 3,
@@ -3178,7 +3270,9 @@
             "q_mv_kvar": 1679.3738632331465,
             "s_lv_kva": 4325.335601117001,
             "s_mv_kva": 4139.24565921132,
-            "s_rated_kva": 4480
+            "s_rated_kva": 4480,
+            "switchgear_rated_current_a": 630.0,
+            "through_current_a": 358.26643752588546
           },
           "s3_4": {
             "circuit": 3,
@@ -3207,7 +3301,9 @@
             "q_mv_kvar": 1679.3738632331465,
             "s_lv_kva": 4325.335601117001,
             "s_mv_kva": 4139.24565921132,
-            "s_rated_kva": 4480
+            "s_rated_kva": 4480,
+            "switchgear_rated_current_a": 630.0,
+            "through_current_a": 238.916505821135
           },
           "s3_5": {
             "circuit": 3,
@@ -3236,7 +3332,9 @@
             "q_mv_kvar": 1679.3738632331465,
             "s_lv_kva": 4325.335601117001,
             "s_mv_kva": 4139.24565921132,
-            "s_rated_kva": 4480
+            "s_rated_kva": 4480,
+            "switchgear_rated_current_a": 630.0,
+            "through_current_a": 119.4897297793823
           },
           "s4_1": {
             "circuit": 4,
@@ -3265,7 +3363,9 @@
             "q_mv_kvar": 1679.3738632331465,
             "s_lv_kva": 4325.335601117001,
             "s_mv_kva": 4139.24565921132,
-            "s_rated_kva": 4480
+            "s_rated_kva": 4480,
+            "switchgear_rated_current_a": 630.0,
+            "through_current_a": 596.73761356527
           },
           "s4_2": {
             "circuit": 4,
@@ -3294,7 +3394,9 @@
             "q_mv_kvar": 1679.3738632331465,
             "s_lv_kva": 4325.335601117001,
             "s_mv_kva": 4139.24565921132,
-            "s_rated_kva": 4480
+            "s_rated_kva": 4480,
+            "switchgear_rated_current_a": 630.0,
+            "through_current_a": 477.52712208718197
           },
           "s4_3": {
             "circuit": 4,
@@ -3323,7 +3425,9 @@
             "q_mv_kvar": 1679.3738632331465,
             "s_lv_kva": 4325.335601117001,
             "s_mv_kva": 4139.24565921132,
-            "s_rated_kva": 4480
+            "s_rated_kva": 4480,
+            "switchgear_rated_current_a": 630.0,
+            "through_current_a": 358.26643752588546
           },
           "s4_4": {
             "circuit": 4,
@@ -3352,7 +3456,9 @@
             "q_mv_kvar": 1679.3738632331465,
             "s_lv_kva": 4325.335601117001,
             "s_mv_kva": 4139.24565921132,
-            "s_rated_kva": 4480
+            "s_rated_kva": 4480,
+            "switchgear_rated_current_a": 630.0,
+            "through_current_a": 238.916505821135
           },
           "s4_5": {
             "circuit": 4,
@@ -3381,7 +3487,9 @@
             "q_mv_kvar": 1679.3738632331465,
             "s_lv_kva": 4325.335601117001,
             "s_mv_kva": 4139.24565921132,
-            "s_rated_kva": 4480
+            "s_rated_kva": 4480,
+            "switchgear_rated_current_a": 630.0,
+            "through_current_a": 119.4897297793823
           },
           "s5_1": {
             "circuit": 5,
@@ -3410,7 +3518,9 @@
             "q_mv_kvar": 1679.3738632331465,
             "s_lv_kva": 4325.335601117001,
             "s_mv_kva": 4139.24565921132,
-            "s_rated_kva": 4480
+            "s_rated_kva": 4480,
+            "switchgear_rated_current_a": 630.0,
+            "through_current_a": 477.52712208718197
           },
           "s5_2": {
             "circuit": 5,
@@ -3439,7 +3549,9 @@
             "q_mv_kvar": 1679.3738632331465,
             "s_lv_kva": 4325.335601117001,
             "s_mv_kva": 4139.24565921132,
-            "s_rated_kva": 4480
+            "s_rated_kva": 4480,
+            "switchgear_rated_current_a": 630.0,
+            "through_current_a": 358.26643752588546
           },
           "s5_3": {
             "circuit": 5,
@@ -3468,7 +3580,9 @@
             "q_mv_kvar": 1679.3738632331465,
             "s_lv_kva": 4325.335601117001,
             "s_mv_kva": 4139.24565921132,
-            "s_rated_kva": 4480
+            "s_rated_kva": 4480,
+            "switchgear_rated_current_a": 630.0,
+            "through_current_a": 238.916505821135
           },
           "s5_4": {
             "circuit": 5,
@@ -3497,7 +3611,9 @@
             "q_mv_kvar": 1679.3738632331465,
             "s_lv_kva": 4325.335601117001,
             "s_mv_kva": 4139.24565921132,
-            "s_rated_kva": 4480
+            "s_rated_kva": 4480,
+            "switchgear_rated_current_a": 630.0,
+            "through_current_a": 119.4897297793823
           },
           "s6_1": {
             "circuit": 6,
@@ -3526,7 +3642,9 @@
             "q_mv_kvar": 1679.3738632331465,
             "s_lv_kva": 4325.335601117001,
             "s_mv_kva": 4139.24565921132,
-            "s_rated_kva": 4480
+            "s_rated_kva": 4480,
+            "switchgear_rated_current_a": 630.0,
+            "through_current_a": 477.52712208718197
           },
           "s6_2": {
             "circuit": 6,
@@ -3555,7 +3673,9 @@
             "q_mv_kvar": 1679.3738632331465,
             "s_lv_kva": 4325.335601117001,
             "s_mv_kva": 4139.24565921132,
-            "s_rated_kva": 4480
+            "s_rated_kva": 4480,
+            "switchgear_rated_current_a": 630.0,
+            "through_current_a": 358.26643752588546
           },
           "s6_3": {
             "circuit": 6,
@@ -3584,7 +3704,9 @@
             "q_mv_kvar": 1679.3738632331465,
             "s_lv_kva": 4325.335601117001,
             "s_mv_kva": 4139.24565921132,
-            "s_rated_kva": 4480
+            "s_rated_kva": 4480,
+            "switchgear_rated_current_a": 630.0,
+            "through_current_a": 238.916505821135
           },
           "s6_4": {
             "circuit": 6,
@@ -3613,7 +3735,9 @@
             "q_mv_kvar": 1679.3738632331465,
             "s_lv_kva": 4325.335601117001,
             "s_mv_kva": 4139.24565921132,
-            "s_rated_kva": 4480
+            "s_rated_kva": 4480,
+            "switchgear_rated_current_a": 630.0,
+            "through_current_a": 119.4897297793823
           },
           "s7_1": {
             "circuit": 7,
@@ -3642,7 +3766,9 @@
             "q_mv_kvar": 1679.3738632331465,
             "s_lv_kva": 4325.335601117001,
             "s_mv_kva": 4139.24565921132,
-            "s_rated_kva": 4480
+            "s_rated_kva": 4480,
+            "switchgear_rated_current_a": 630.0,
+            "through_current_a": 477.52712208718197
           },
           "s7_2": {
             "circuit": 7,
@@ -3671,7 +3797,9 @@
             "q_mv_kvar": 1679.3738632331465,
             "s_lv_kva": 4325.335601117001,
             "s_mv_kva": 4139.24565921132,
-            "s_rated_kva": 4480
+            "s_rated_kva": 4480,
+            "switchgear_rated_current_a": 630.0,
+            "through_current_a": 358.26643752588546
           },
           "s7_3": {
             "circuit": 7,
@@ -3700,7 +3828,9 @@
             "q_mv_kvar": 1679.3738632331465,
             "s_lv_kva": 4325.335601117001,
             "s_mv_kva": 4139.24565921132,
-            "s_rated_kva": 4480
+            "s_rated_kva": 4480,
+            "switchgear_rated_current_a": 630.0,
+            "through_current_a": 238.916505821135
           },
           "s7_4": {
             "circuit": 7,
@@ -3729,7 +3859,9 @@
             "q_mv_kvar": 1679.3738632331465,
             "s_lv_kva": 4325.335601117001,
             "s_mv_kva": 4139.24565921132,
-            "s_rated_kva": 4480
+            "s_rated_kva": 4480,
+            "switchgear_rated_current_a": 630.0,
+            "through_current_a": 119.4897297793823
           }
         },
         "summary": {
@@ -4101,6 +4233,11 @@
             "export_i_a": 1441.059447834019,
             "export_switchgear_pinned": false,
             "export_switchgear_rated_a": 1600.0,
+            "feeder_binding_limit": [
+              "station_switchgear",
+              "station_switchgear",
+              "station_switchgear"
+            ],
             "feeder_edge_ids": [
               "c1_seg1",
               "c2_seg1",
@@ -4178,7 +4315,9 @@
             "q_mv_kvar": 1774.2289024871054,
             "s_lv_kva": 4390.151339434687,
             "s_mv_kva": 4193.08352374357,
-            "s_rated_kva": 4480
+            "s_rated_kva": 4480,
+            "switchgear_rated_current_a": 630.0,
+            "through_current_a": 483.7328820648574
           },
           "s1_2": {
             "circuit": 1,
@@ -4207,7 +4346,9 @@
             "q_mv_kvar": 1774.2289024871054,
             "s_lv_kva": 4390.151339434687,
             "s_mv_kva": 4193.08352374357,
-            "s_rated_kva": 4480
+            "s_rated_kva": 4480,
+            "switchgear_rated_current_a": 630.0,
+            "through_current_a": 362.9236624840504
           },
           "s1_3": {
             "circuit": 1,
@@ -4236,7 +4377,9 @@
             "q_mv_kvar": 1774.2289024871054,
             "s_lv_kva": 4390.151339434687,
             "s_mv_kva": 4193.08352374357,
-            "s_rated_kva": 4480
+            "s_rated_kva": 4480,
+            "switchgear_rated_current_a": 630.0,
+            "through_current_a": 242.02335657507922
           },
           "s1_4": {
             "circuit": 1,
@@ -4265,7 +4408,9 @@
             "q_mv_kvar": 1774.2289024871054,
             "s_lv_kva": 4390.151339434687,
             "s_mv_kva": 4193.08352374357,
-            "s_rated_kva": 4480
+            "s_rated_kva": 4480,
+            "switchgear_rated_current_a": 630.0,
+            "through_current_a": 121.04389505839676
           },
           "s2_1": {
             "circuit": 2,
@@ -4294,7 +4439,9 @@
             "q_mv_kvar": 1774.2289024871054,
             "s_lv_kva": 4390.151339434687,
             "s_mv_kva": 4193.08352374357,
-            "s_rated_kva": 4480
+            "s_rated_kva": 4480,
+            "switchgear_rated_current_a": 630.0,
+            "through_current_a": 483.7328820648574
           },
           "s2_2": {
             "circuit": 2,
@@ -4323,7 +4470,9 @@
             "q_mv_kvar": 1774.2289024871054,
             "s_lv_kva": 4390.151339434687,
             "s_mv_kva": 4193.08352374357,
-            "s_rated_kva": 4480
+            "s_rated_kva": 4480,
+            "switchgear_rated_current_a": 630.0,
+            "through_current_a": 362.9236624840504
           },
           "s2_3": {
             "circuit": 2,
@@ -4352,7 +4501,9 @@
             "q_mv_kvar": 1774.2289024871054,
             "s_lv_kva": 4390.151339434687,
             "s_mv_kva": 4193.08352374357,
-            "s_rated_kva": 4480
+            "s_rated_kva": 4480,
+            "switchgear_rated_current_a": 630.0,
+            "through_current_a": 242.02335657507922
           },
           "s2_4": {
             "circuit": 2,
@@ -4381,7 +4532,9 @@
             "q_mv_kvar": 1774.2289024871054,
             "s_lv_kva": 4390.151339434687,
             "s_mv_kva": 4193.08352374357,
-            "s_rated_kva": 4480
+            "s_rated_kva": 4480,
+            "switchgear_rated_current_a": 630.0,
+            "through_current_a": 121.04389505839676
           },
           "s3_1": {
             "circuit": 3,
@@ -4410,7 +4563,9 @@
             "q_mv_kvar": 1774.2289024871054,
             "s_lv_kva": 4390.151339434687,
             "s_mv_kva": 4193.08352374357,
-            "s_rated_kva": 4480
+            "s_rated_kva": 4480,
+            "switchgear_rated_current_a": 630.0,
+            "through_current_a": 483.7328820648574
           },
           "s3_2": {
             "circuit": 3,
@@ -4439,7 +4594,9 @@
             "q_mv_kvar": 1774.2289024871054,
             "s_lv_kva": 4390.151339434687,
             "s_mv_kva": 4193.08352374357,
-            "s_rated_kva": 4480
+            "s_rated_kva": 4480,
+            "switchgear_rated_current_a": 630.0,
+            "through_current_a": 362.9236624840504
           },
           "s3_3": {
             "circuit": 3,
@@ -4468,7 +4625,9 @@
             "q_mv_kvar": 1774.2289024871054,
             "s_lv_kva": 4390.151339434687,
             "s_mv_kva": 4193.08352374357,
-            "s_rated_kva": 4480
+            "s_rated_kva": 4480,
+            "switchgear_rated_current_a": 630.0,
+            "through_current_a": 242.02335657507922
           },
           "s3_4": {
             "circuit": 3,
@@ -4497,7 +4656,9 @@
             "q_mv_kvar": 1774.2289024871054,
             "s_lv_kva": 4390.151339434687,
             "s_mv_kva": 4193.08352374357,
-            "s_rated_kva": 4480
+            "s_rated_kva": 4480,
+            "switchgear_rated_current_a": 630.0,
+            "through_current_a": 121.04389505839676
           }
         },
         "summary": {
@@ -4839,6 +5000,11 @@
             "export_i_a": 1367.408532294088,
             "export_switchgear_pinned": false,
             "export_switchgear_rated_a": 1600.0,
+            "feeder_binding_limit": [
+              "station_switchgear",
+              "station_switchgear",
+              "station_switchgear"
+            ],
             "feeder_edge_ids": [
               "c1_seg1",
               "c2_seg1",
@@ -4905,7 +5071,9 @@
             "q_mv_kvar": 1242.2961576783123,
             "s_lv_kva": 4123.369405115283,
             "s_mv_kva": 3979.990878697119,
-            "s_rated_kva": 4480
+            "s_rated_kva": 4480,
+            "switchgear_rated_current_a": 630.0,
+            "through_current_a": 459.1196226969703
           },
           "s1_2": {
             "circuit": 1,
@@ -4934,7 +5102,9 @@
             "q_mv_kvar": 1242.2961576783123,
             "s_lv_kva": 4123.369405115283,
             "s_mv_kva": 3979.990878697119,
-            "s_rated_kva": 4480
+            "s_rated_kva": 4480,
+            "switchgear_rated_current_a": 630.0,
+            "through_current_a": 344.49081703215336
           },
           "s1_3": {
             "circuit": 1,
@@ -4963,7 +5133,9 @@
             "q_mv_kvar": 1242.2961576783123,
             "s_lv_kva": 4123.369405115283,
             "s_mv_kva": 3979.990878697119,
-            "s_rated_kva": 4480
+            "s_rated_kva": 4480,
+            "switchgear_rated_current_a": 630.0,
+            "through_current_a": 229.72623168531925
           },
           "s1_4": {
             "circuit": 1,
@@ -4992,7 +5164,9 @@
             "q_mv_kvar": 1242.2961576783123,
             "s_lv_kva": 4123.369405115283,
             "s_mv_kva": 3979.990878697119,
-            "s_rated_kva": 4480
+            "s_rated_kva": 4480,
+            "switchgear_rated_current_a": 630.0,
+            "through_current_a": 114.89244025940185
           },
           "s2_1": {
             "circuit": 2,
@@ -5021,7 +5195,9 @@
             "q_mv_kvar": 1242.2961576783123,
             "s_lv_kva": 4123.369405115283,
             "s_mv_kva": 3979.990878697119,
-            "s_rated_kva": 4480
+            "s_rated_kva": 4480,
+            "switchgear_rated_current_a": 630.0,
+            "through_current_a": 459.1196226969703
           },
           "s2_2": {
             "circuit": 2,
@@ -5050,7 +5226,9 @@
             "q_mv_kvar": 1242.2961576783123,
             "s_lv_kva": 4123.369405115283,
             "s_mv_kva": 3979.990878697119,
-            "s_rated_kva": 4480
+            "s_rated_kva": 4480,
+            "switchgear_rated_current_a": 630.0,
+            "through_current_a": 344.49081703215336
           },
           "s2_3": {
             "circuit": 2,
@@ -5079,7 +5257,9 @@
             "q_mv_kvar": 1242.2961576783123,
             "s_lv_kva": 4123.369405115283,
             "s_mv_kva": 3979.990878697119,
-            "s_rated_kva": 4480
+            "s_rated_kva": 4480,
+            "switchgear_rated_current_a": 630.0,
+            "through_current_a": 229.72623168531925
           },
           "s2_4": {
             "circuit": 2,
@@ -5108,7 +5288,9 @@
             "q_mv_kvar": 1242.2961576783123,
             "s_lv_kva": 4123.369405115283,
             "s_mv_kva": 3979.990878697119,
-            "s_rated_kva": 4480
+            "s_rated_kva": 4480,
+            "switchgear_rated_current_a": 630.0,
+            "through_current_a": 114.89244025940185
           },
           "s3_1": {
             "circuit": 3,
@@ -5137,7 +5319,9 @@
             "q_mv_kvar": 1242.2961576783123,
             "s_lv_kva": 4123.369405115283,
             "s_mv_kva": 3979.990878697119,
-            "s_rated_kva": 4480
+            "s_rated_kva": 4480,
+            "switchgear_rated_current_a": 630.0,
+            "through_current_a": 459.1196226969703
           },
           "s3_2": {
             "circuit": 3,
@@ -5166,7 +5350,9 @@
             "q_mv_kvar": 1242.2961576783123,
             "s_lv_kva": 4123.369405115283,
             "s_mv_kva": 3979.990878697119,
-            "s_rated_kva": 4480
+            "s_rated_kva": 4480,
+            "switchgear_rated_current_a": 630.0,
+            "through_current_a": 344.49081703215336
           },
           "s3_3": {
             "circuit": 3,
@@ -5195,7 +5381,9 @@
             "q_mv_kvar": 1242.2961576783123,
             "s_lv_kva": 4123.369405115283,
             "s_mv_kva": 3979.990878697119,
-            "s_rated_kva": 4480
+            "s_rated_kva": 4480,
+            "switchgear_rated_current_a": 630.0,
+            "through_current_a": 229.72623168531925
           },
           "s3_4": {
             "circuit": 3,
@@ -5224,7 +5412,9 @@
             "q_mv_kvar": 1242.2961576783123,
             "s_lv_kva": 4123.369405115283,
             "s_mv_kva": 3979.990878697119,
-            "s_rated_kva": 4480
+            "s_rated_kva": 4480,
+            "switchgear_rated_current_a": 630.0,
+            "through_current_a": 114.89244025940185
           }
         },
         "summary": {
