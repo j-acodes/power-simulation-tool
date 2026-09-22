@@ -465,7 +465,8 @@ def report_pdf(diagram: dict, db: ComponentDatabase, plant_name: str,
                             feeders_per_busbar=inputs.feeders_per_busbar,
                             notices=[n.message for n in fallback_notices(arch)],
                             sld_sheets=design_sld_sheets(inputs, arch, fleets),
-                            project_name=project_name)
+                            project_name=project_name,
+                            pf_target=inputs.pf_target)
 
 
 def design_sld_sheets(inputs, arch, fleets: list[dict]) -> list[Sheet]:
