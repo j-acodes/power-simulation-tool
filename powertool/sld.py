@@ -87,6 +87,27 @@ from .components import (
 _INDICATIVE_NOTE = (
     "Protection devices are indicative; the tool does not size them."
 )
+_AUX_NOTE = (
+    "Auxiliary transformers are sized for the drawing only (smallest standard "
+    "rating at or above the auxiliary apparent power / 0.80, LV 0.4 kV) and are "
+    "not in the loss calculation."
+)
+
+# Standard auxiliary transformer ratings, kVA (the SLD spec's list).
+_AUX_RATINGS_KVA = (50, 100, 160, 250, 315, 400, 500, 630, 800, 1000, 1250, 1600, 2000, 2500)
+_AUX_LOADING = 0.80
+
+
+def aux_transformer_rating(p_kw: float | None, q_kvar: float | None) -> str:
+    """The drawn auxiliary transformer's rating label: the smallest standard
+    rating at or above S_aux / 0.80. Drawing only — never enters the power
+    balance. An unpublished load (None) or one above the range gets a † label."""
+    if p_kw is None or q_kvar is None:
+        return "kVA TBD†"
+    needed = (p_kw ** 2 + q_kvar ** 2) ** 0.5 / _AUX_LOADING
+    # ponytail: 1e-9 absorbs float noise so an exact boundary picks that rating
+    rating = next((r for r in _AUX_RATINGS_KVA if needed <= r + 1e-9), None)
+    return f"{rating} kVA" if rating is not None else f"> {_AUX_RATINGS_KVA[-1]} kVA†"
 
 # Legend caption per symbol kind — only the kinds a given sheet actually uses
 # are listed (:func:`sld_sheets` builds each sheet's own subset), one entry
@@ -101,11 +122,14 @@ _LEGEND_LABEL = {
     "hv_breaker": "Circuit breaker",
     "mv_breaker": "Circuit breaker",
     "feeder_breaker": "Circuit breaker",
+    "aux_breaker": "Circuit breaker",
     "hv_transformer": "HV transformer",
     "busbar": "Busbar",
     "station": "Transformer station",
     "bess_station": "BESS station (transformer, PCS, battery)",
     "cable_label": "Cable (drawn as the connecting line)",
+    "aux_transformer": "Auxiliary transformer (drawing only)",
+    "load": "Auxiliary load",
 }
 
 # ---------------------------------------------------------------------------
@@ -209,7 +233,7 @@ def sld_sheets(arch: PlantArchitecture, fleets: list[dict] | None = None) -> lis
     sized.
     """
     sheets: list[Sheet] = []
-    counters = {"BB": 0, "C": 0, "TS": 0}
+    counters = {"BB": 0, "C": 0, "TS": 0, "AUX": 0}
     for b_i, branch in enumerate(arch.branches):
         fleet = fleets[b_i] if fleets and b_i < len(fleets) else {}
         for s_i, section in enumerate(branch.sections):
@@ -245,6 +269,8 @@ def _busbar_sheet(arch: PlantArchitecture, branch, section, fleet: dict, s_i: in
     # re-derived from the ladder alone).
     busbars = fleet.get("busbars") or []
     feeder_pins = busbars[s_i].get("feeder_switchgear_pins_a") if s_i < len(busbars) else None
+    aux_by_busbar = fleet.get("aux_loads") or []
+    aux_loads = aux_by_busbar[s_i] if s_i < len(aux_by_busbar) else []
 
     # † notes list only what appears on THIS sheet (the spec's "on the sheet
     # it appears on"), so the fallback models come from this busbar's own
@@ -405,6 +431,40 @@ def _busbar_sheet(arch: PlantArchitecture, branch, section, fleet: dict, s_i: in
             prev_station_id = st_id
             prev_y = st_y
 
+    # --- auxiliary feeders: breaker, AUX transformer, load (drawing only) --
+    for a_i, load in enumerate(aux_loads):
+        counters["AUX"] += 1
+        aux_tag = f"AUX{counters['AUX']}"
+        # At the busbar's end, right of the circuits — never centred with
+        # them, which would put an AUX column under the incomer line.
+        x = x_start + (n_circuits + a_i) * _CIRCUIT_DX
+        feeder_y = busbar_y - _FEEDER_GAP
+        p_kw, q_kvar = load.get("p_kw"), load.get("q_kvar")
+        rating = aux_transformer_rating(p_kw, q_kvar)
+        breaker_id, tx_id, load_id = f"aux_breaker_{a_i}", f"aux_tx_{a_i}", f"aux_load_{a_i}"
+        elements += [
+            SldElement(id=breaker_id, kind="aux_breaker", x=x, y=feeder_y),
+            SldElement(id=tx_id, kind="aux_transformer", x=x, y=feeder_y - _STATION_DY,
+                       tag=aux_tag, labels=[aux_tag, rating, f"{section.v_mv_kv:g}/0.4 kV"]),
+            SldElement(id=load_id, kind="load", x=x, y=feeder_y - 2 * _STATION_DY,
+                       labels=([load["label"]] if load.get("label") else [])
+                       + ["kW TBD†" if p_kw is None else f"{p_kw:,.0f} kW"]),
+        ]
+        connections += [SldConnection(busbar_id, breaker_id),
+                        SldConnection(breaker_id, tx_id), SldConnection(tx_id, load_id)]
+        for kind in ("aux_breaker", "aux_transformer", "load"):
+            _add_legend(kind)
+        if p_kw is None:
+            names = ", ".join(load.get("unpublished") or [])
+            notes.append(f"No auxiliary consumption is published for {names} — "
+                         f"{aux_tag} is drawn as kVA TBD†.")
+        elif rating.startswith(">"):
+            notes.append(f"{aux_tag}: the auxiliary load needs more than the largest "
+                         f"standard auxiliary transformer ({_AUX_RATINGS_KVA[-1]} kVA) — "
+                         f"marked {rating}.")
+    if aux_loads:
+        notes.insert(1, _AUX_NOTE)
+
     return Sheet(
         busbar_tag=busbar_tag, elements=elements, connections=connections,
         notes=notes, legend=[(k, _LEGEND_LABEL.get(k, k)) for k in legend_kinds],
@@ -453,11 +513,17 @@ def _symbol(kind: str, px: float, py: float, scale: float) -> list:
         shapes.append(Line(px - r, py - r, px + r, py + r,
                            strokeColor=_INK, strokeWidth=1.4))
         shapes.append(Circle(px - r, py - r, 1.2, strokeColor=_INK, fillColor=_INK))
-    elif kind in ("hv_breaker", "mv_breaker", "feeder_breaker"):
+    elif kind in ("hv_breaker", "mv_breaker", "feeder_breaker", "aux_breaker"):
         s = r * 0.9
         shapes.append(Rect(px - s / 2, py - s / 2, s, s,
                            strokeColor=_INK, fillColor=colors.white, strokeWidth=1.3))
-    elif kind == "hv_transformer":
+    elif kind == "load":
+        # IEC load: an arrowhead pointing away from the supply.
+        shapes.append(Line(px - r * 0.7, py + r * 0.5, px, py - r * 0.5,
+                           strokeColor=_INK, strokeWidth=1.2))
+        shapes.append(Line(px + r * 0.7, py + r * 0.5, px, py - r * 0.5,
+                           strokeColor=_INK, strokeWidth=1.2))
+    elif kind in ("hv_transformer", "aux_transformer"):
         shapes.append(Circle(px, py - r * 0.5, r, strokeColor=_INK, fillColor=None,
                              strokeWidth=1.2))
         shapes.append(Circle(px, py + r * 0.5, r, strokeColor=_INK, fillColor=None,
@@ -680,7 +746,8 @@ def sheet_to_drawing(
     # the other symbols so feeder lines land on top of it.
     busbar = next((e for e in sheet.elements if e.kind == "busbar"), None)
     if busbar is not None:
-        feeder_xs = [to_page(e.x, e.y)[0] for e in sheet.elements if e.kind == "feeder_breaker"]
+        feeder_xs = [to_page(e.x, e.y)[0] for e in sheet.elements
+                     if e.kind in ("feeder_breaker", "aux_breaker")]
         bx, by = to_page(busbar.x, busbar.y)
         left = min(feeder_xs + [bx]) - 10
         right = max(feeder_xs + [bx]) + 10

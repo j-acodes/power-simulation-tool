@@ -29,7 +29,13 @@ from powertool.architecture import (                          # noqa: E402
 )
 from powertool.components import DEFAULT_SWITCHGEAR_RATED_CURRENT_A  # noqa: E402
 from powertool.graph import branches_summary, graph_to_inputs, sld_fleets  # noqa: E402
-from powertool.sld import Sheet, build_sld_pdf, sheet_to_drawing, sld_sheets  # noqa: E402
+from powertool.sld import (                                    # noqa: E402
+    Sheet,
+    aux_transformer_rating,
+    build_sld_pdf,
+    sheet_to_drawing,
+    sld_sheets,
+)
 
 from backend.main import db                                    # noqa: E402
 from backend.solve import solve_architecture                   # noqa: E402
@@ -510,6 +516,74 @@ def test_feeder_pin_is_read_from_its_own_busbar():
 def test_hybrid_pdf_has_one_page_per_busbar_sheet():
     sheets = _sheets_from_diagram(_hybrid_with_hv_export())
     assert _page_count(build_sld_pdf(sheets)) == 2
+
+
+# --- auxiliary transformer (drawing only, ticket 04) ---------------------------
+
+@pytest.mark.parametrize("p_kw, q_kvar, expected", [
+    (128.0, 0.0, "160 kVA"),        # S / 0.8 exactly 160: that rating
+    (128.1, 0.0, "250 kVA"),        # just above: the next rating
+    (120.0, 160.0, "250 kVA"),      # Q counts: S = 200, P alone would give 160
+    (0.0, 0.0, "50 kVA"),           # smallest rating
+    (2000.0, 0.0, "2500 kVA"),      # top of the range
+    (2000.1, 0.0, "> 2500 kVA†"),   # above it
+    (None, None, "kVA TBD†"),       # unpublished
+])
+def test_aux_transformer_rating(p_kw, q_kvar, expected):
+    assert aux_transformer_rating(p_kw, q_kvar) == expected
+
+
+def _aux(sheet: Sheet, kind: str) -> list:
+    return [e for e in sheet.elements if e.kind == kind]
+
+
+def test_busbar_without_an_auxiliary_load_has_no_aux_feeder_or_note():
+    sheet = _sheet_from_diagram(_pv_diagram_with_hv())
+    assert _aux(sheet, "aux_transformer") == [] and _aux(sheet, "load") == []
+    assert not [n for n in sheet.notes if "drawing only" in n]
+
+
+def test_bess_busbar_draws_each_auxiliary_load_on_its_own_feeder():
+    pv_sheet, bess_sheet = _sheets_from_diagram(_hybrid_with_hv_export())
+    # The PV busbar's own aux node (50 kW + 10 kvar) comes first, plant-wide.
+    assert [e.tag for e in _aux(pv_sheet, "aux_transformer")] == ["AUX1"]
+
+    # The BESS busbar's drawn aux node (40 kW + 8 kvar -> S/0.8 = 51 kVA) and
+    # its BESS solution's own auxiliaries, which the supplier does not publish.
+    txs = _aux(bess_sheet, "aux_transformer")
+    assert [e.tag for e in txs] == ["AUX2", "AUX3"]
+    assert txs[0].labels == ["AUX2", "100 kVA", "20/0.4 kV"]
+    assert txs[1].labels == ["AUX3", "kVA TBD†", "20/0.4 kV"]
+    loads = _aux(bess_sheet, "load")
+    assert loads[0].labels == ["40 kW"]
+    assert loads[1].labels == ["BESS auxiliaries", "kW TBD†"]
+
+    # Each on its own feeder: busbar -> breaker -> AUX transformer -> load.
+    by_id = {e.id: e for e in bess_sheet.elements}
+    edges = {(c.from_id, c.to_id) for c in bess_sheet.connections}
+    for tx, load in zip(txs, loads):
+        breaker = next(by_id[a] for a, b in edges if b == tx.id)
+        assert breaker.kind == "aux_breaker"
+        assert ("busbar", breaker.id) in edges
+        assert (tx.id, load.id) in edges
+    assert {"aux_transformer", "load"} <= {k for k, _caption in bess_sheet.legend}
+
+
+def test_aux_notes_list_the_drawing_only_rule_and_each_dagger():
+    _pv_sheet, bess_sheet = _sheets_from_diagram(_hybrid_with_hv_export())
+    drawing_only = [n for n in bess_sheet.notes if "drawing only" in n]
+    assert len(drawing_only) == 1 and "loss calculation" in drawing_only[0]
+    assert any("sungrow-st6900ux-4h" in n and "AUX3" in n for n in bess_sheet.notes)
+
+
+def test_aux_above_the_largest_rating_is_marked_and_noted():
+    diagram = _hybrid_with_hv_export()
+    aux = next(n for n in diagram["nodes"] if n["id"] == "aux")
+    aux["props"].update(p_kw=3000.0, q_kvar=0.0)
+    pv_sheet, _bess_sheet = _sheets_from_diagram(diagram)
+    tx = _aux(pv_sheet, "aux_transformer")[0]
+    assert tx.labels[1] == "> 2500 kVA†"
+    assert any("AUX1" in n and "2500 kVA" in n for n in pv_sheet.notes)
 
 
 # --- title block: project name --------------------------------------------------

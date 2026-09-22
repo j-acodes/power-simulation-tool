@@ -1126,6 +1126,9 @@ class BusbarInputs:
     switchgear_pin_a: float | None = None
     export_switchgear_pin_a: float | None = None
     feeder_switchgear_pins_a: dict[str, float] = field(default_factory=dict)
+    # Each aux node's own (p_kw, q_kvar), aligned with ``aux_ids`` — the SLD
+    # draws one auxiliary feeder per load; the engine only uses the sums above.
+    aux_loads: list[tuple[float, float]] = field(default_factory=list)
 
 
 @dataclass
@@ -1437,15 +1440,15 @@ def graph_to_inputs(diagram: dict, db) -> GraphInputs:
             }
 
             aux_ids: list[str] = []
-            aux_p_kw = aux_q_kvar = 0.0
+            aux_loads: list[tuple[float, float]] = []
             busbar_circuit_indices: list[int] = []
 
             for child, edge in tree.children[busbar_id]:
                 if nodes[child]["kind"] == "aux":
                     props = _props(nodes[child])
                     aux_ids.append(child)
-                    aux_p_kw += _num(props.get("p_kw", 0.0)) or 0.0
-                    aux_q_kvar += _num(props.get("q_kvar", 0.0)) or 0.0
+                    aux_loads.append((_num(props.get("p_kw", 0.0)) or 0.0,
+                                      _num(props.get("q_kvar", 0.0)) or 0.0))
                     continue
                 c_idx = len(circuits) + 1
                 busbar_circuit_indices.append(c_idx)
@@ -1475,8 +1478,9 @@ def graph_to_inputs(diagram: dict, db) -> GraphInputs:
             busbars.append(BusbarInputs(
                 busbar_id=busbar_id,
                 aux_ids=aux_ids,
-                aux_p_kw=aux_p_kw,
-                aux_q_kvar=aux_q_kvar,
+                aux_p_kw=sum(p for p, _q in aux_loads),
+                aux_q_kvar=sum(q for _p, q in aux_loads),
+                aux_loads=aux_loads,
                 circuit_indices=busbar_circuit_indices,
                 export_edge_id=busbar_edge["id"] if mv_export_applicable else None,
                 export_length_km=mv_export_length_km if mv_export_applicable else 0.0,
@@ -1707,6 +1711,13 @@ def sld_fleets(inputs: GraphInputs) -> list[dict]:
     with ``station_ids`` (the drawn circuits are kept verbatim, see
     :func:`backend.solve.solve_architecture`), because a BESS station's
     container count depends on its own transformer pairing. Empty for PV.
+
+    ``aux_loads[j]`` is busbar ``j``'s auxiliary loads, one SLD feeder each:
+    every drawn aux node (``{"p_kw", "q_kvar"}``), then — on a BESS busbar —
+    its stations' solutions' own auxiliary draw summed, labelled
+    ``"BESS auxiliaries"``. ``p_kw``/``q_kvar`` are None when any of those
+    solutions publishes no figure, and ``unpublished`` names them (catalogue
+    keys): a partial sum would understate the transformer.
     """
     out: list[dict] = []
     for branch_inputs in inputs.branches:
@@ -1722,12 +1733,30 @@ def sld_fleets(inputs: GraphInputs) -> list[dict]:
                     "battery_mwh": containers * solution.e_nominal_kwh / 1000.0,
                 })
             bess_stations.append(row)
+        aux_loads = []
+        for busbar in branch_inputs.busbars:
+            loads = [{"p_kw": p, "q_kvar": q} for p, q in busbar.aux_loads]
+            solutions = [branch_inputs.bess_by_station[sid][0]
+                         for c in busbar.circuit_indices
+                         for sid in branch_inputs.station_ids[c - 1]
+                         if sid in branch_inputs.bess_by_station]
+            if solutions:
+                unpublished = sorted({s.name for s in solutions
+                                      if s.aux_p_kw is None or s.aux_q_kvar is None})
+                loads.append({
+                    "label": "BESS auxiliaries",
+                    "p_kw": None if unpublished else sum(s.aux_p_kw for s in solutions),
+                    "q_kvar": None if unpublished else sum(s.aux_q_kvar for s in solutions),
+                    "unpublished": unpublished,
+                })
+            aux_loads.append(loads)
         out.append({
             # Catalogue key, never the display label — powertool.sld draws
             # only catalogue keys.
             "pv_inverter_model": installation.inverter.name if installation else None,
             "pv_inverter_count": installation.count if installation else None,
             "bess_stations": bess_stations if branch_inputs.kind == "bess" else [],
+            "aux_loads": aux_loads,
         })
     return out
 
