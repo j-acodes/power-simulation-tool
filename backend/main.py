@@ -315,16 +315,29 @@ def _filename_slug(name: str) -> str:
     return (cleaned or "plant")[:60]
 
 
+def _project_name(session: Session, project_id: int | None) -> str:
+    """The project's name for an SLD title block, looked up here rather than
+    trusted from the client; a missing or unknown id is just no name."""
+    project = session.get(Project, project_id) if project_id is not None else None
+    return project.name if project is not None else ""
+
+
 @app.post("/api/report")
-def post_report(diagram: dict = Body(...), name: str = "Plant") -> Response:
+def post_report(
+    diagram: dict = Body(...),
+    name: str = "Plant",
+    project_id: int | None = None,
+    session: Session = Depends(get_session),
+) -> Response:
     """Download the PDF sizing report for a drawn diagram.
 
     Body is the diagram payload (as for /api/solve); ``name`` titles the report
-    and names the file. A diagram that cannot be solved is a 400 carrying the
-    reason, since there is no partial report worth downloading.
+    and names the file; ``project_id`` names the project in the embedded SLD
+    sheets' title blocks, as on /api/sld. A diagram that cannot be solved is a
+    400 carrying the reason, since there is no partial report worth downloading.
     """
     try:
-        pdf = report_pdf(diagram, db, name)
+        pdf = report_pdf(diagram, db, name, _project_name(session, project_id))
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     return Response(
@@ -351,17 +364,10 @@ def post_sld(
     title block — looked up here rather than trusted from the client, same
     reasoning as the filename slug; a missing or unknown id falls back to no
     project name rather than a 4xx, since the SLD is still worth downloading
-    without it. A diagram that cannot be solved, or sits outside this
-    release's SLD scope (more than one busbar, a BESS fleet, a hybrid plant,
-    or an MV interconnection), is a 400 carrying the reason.
+    without it. A diagram that cannot be solved is a 400 carrying the reason.
     """
-    project_name = ""
-    if project_id is not None:
-        project = session.get(Project, project_id)
-        if project is not None:
-            project_name = project.name
     try:
-        pdf = sld_pdf(diagram, db, name, project_name)
+        pdf = sld_pdf(diagram, db, name, _project_name(session, project_id))
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     return Response(

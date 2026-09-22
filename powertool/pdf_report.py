@@ -609,7 +609,7 @@ def arch_total(arch: PlantArchitecture, what: str) -> float:
     return total
 
 
-def _sld_section(sheets: list[Sheet], plant_name: str) -> list:
+def _sld_section(sheets: list[Sheet], plant_name: str, project_name: str) -> list:
     """Each SLD sheet as a vector drawing scaled to the A4 text width, with a
     caption pointing at the standalone download (too small to read here)."""
     if not sheets:
@@ -617,7 +617,7 @@ def _sld_section(sheets: list[Sheet], plant_name: str) -> list:
     width = A4[0] - 2 * _MARGIN
     out: list = [Paragraph("Single-line diagram", _H2)]
     for sheet in sheets:
-        drawing = sheet_to_drawing(sheet, design_name=plant_name)
+        drawing = sheet_to_drawing(sheet, project_name=project_name, design_name=plant_name)
         s = width / drawing.width
         drawing.scale(s, s)
         drawing.width, drawing.height = drawing.width * s, drawing.height * s
@@ -641,6 +641,7 @@ def report_story(
     feeders_per_busbar: int = DEFAULT_FEEDERS_PER_BUSBAR,
     notices: list[str] | None = None,
     sld_sheets: list[Sheet] | None = None,
+    project_name: str = "",
 ) -> list:
     """The report as a list of ReportLab flowables, before it becomes a PDF.
 
@@ -668,7 +669,8 @@ def report_story(
 
     ``sld_sheets`` are the same :class:`powertool.sld.Sheet` list the
     standalone SLD download renders, so the two cannot differ; each is drawn
-    after the notices, scaled to the page width. Omit it and the section is
+    after the notices, scaled to the page width, with ``project_name`` in
+    each sheet's title block as on the download. Omit it and the section is
     absent.
     """
     story: list = [
@@ -681,7 +683,7 @@ def report_story(
     if notices:
         story.append(Paragraph("Notices", _H2))
         story += [Paragraph(n, _BODY) for n in notices]
-    story += _sld_section(sld_sheets or [], plant_name)
+    story += _sld_section(sld_sheets or [], plant_name, project_name)
     story += _methodology()
     for i, stage1 in enumerate(stage1s):
         story += _stage1(stage1, fleets[i] if fleets else None, len(stage1s))
@@ -709,6 +711,7 @@ def build_pdf_report(
     feeders_per_busbar: int = DEFAULT_FEEDERS_PER_BUSBAR,
     notices: list[str] | None = None,
     sld_sheets: list[Sheet] | None = None,
+    project_name: str = "",
 ) -> bytes:
     """Full PDF sizing report: methodology + detailed loss tables. Returns bytes."""
     when = (generated_at or datetime.now()).strftime("%Y-%m-%d %H:%M")
@@ -719,5 +722,6 @@ def build_pdf_report(
         topMargin=14 * mm, bottomMargin=14 * mm)
     doc.build(report_story(stage1s, arch, fleets=fleets, plant_name=plant_name, when=when,
                            ambient_c=ambient_c, feeders_per_busbar=feeders_per_busbar,
-                           notices=notices, sld_sheets=sld_sheets))
+                           notices=notices, sld_sheets=sld_sheets,
+                           project_name=project_name))
     return buf.getvalue()

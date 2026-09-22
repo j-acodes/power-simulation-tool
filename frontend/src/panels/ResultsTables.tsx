@@ -48,7 +48,7 @@ export function ResultsTables({ onClose }: { onClose: () => void }) {
     setReportError(null)
     try {
       const name = designMeta?.name ?? 'Plant'
-      const blob = await reportPdf(diagram, name)
+      const blob = await reportPdf(diagram, name, designMeta?.projectId)
       const url = URL.createObjectURL(blob)
       const link = document.createElement('a')
       link.href = url

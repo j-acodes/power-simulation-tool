@@ -440,7 +440,8 @@ def solve_diagram(diagram: dict, db: ComponentDatabase) -> dict:
     return {"issues": [], "results": map_results(inputs, stage1s, arch)}
 
 
-def report_pdf(diagram: dict, db: ComponentDatabase, plant_name: str) -> bytes:
+def report_pdf(diagram: dict, db: ComponentDatabase, plant_name: str,
+               project_name: str = "") -> bytes:
     """PDF sizing report for a drawn diagram — methodology + full loss tables.
 
     Same pipeline as :func:`solve_diagram`, but the architecture goes to
@@ -463,7 +464,8 @@ def report_pdf(diagram: dict, db: ComponentDatabase, plant_name: str) -> bytes:
                             ambient_c=inputs.ambient_c,
                             feeders_per_busbar=inputs.feeders_per_busbar,
                             notices=[n.message for n in fallback_notices(arch)],
-                            sld_sheets=design_sld_sheets(inputs, arch, fleets))
+                            sld_sheets=design_sld_sheets(inputs, arch, fleets),
+                            project_name=project_name)
 
 
 def design_sld_sheets(inputs, arch, fleets: list[dict]) -> list[Sheet]:

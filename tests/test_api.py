@@ -454,3 +454,26 @@ def test_sld_on_an_mv_interconnected_hybrid_returns_a_pdf():
                        params={"name": "Hybrid"})
     assert resp.status_code == 200
     assert resp.headers["content-type"] == "application/pdf"
+
+
+def test_report_project_id_puts_the_real_project_name_on_the_embedded_sld(monkeypatch):
+    """Same server-side lookup as /api/sld, so the report's embedded sheets
+    carry the title block the standalone download does."""
+    import backend.solve as solve_module
+
+    project = client.post("/api/projects", json={"name": "Acme Energy Co"}).json()
+    captured = {}
+
+    def fake_build_pdf_report(*args, project_name="", **kwargs):
+        captured["project_name"] = project_name
+        return b"%PDF-1.4 fake"
+
+    monkeypatch.setattr(solve_module, "build_pdf_report", fake_build_pdf_report)
+    resp = client.post("/api/report", json=_example_diagram(),
+                       params={"name": "Test Plant", "project_id": project["id"]})
+    assert resp.status_code == 200
+    assert captured["project_name"] == "Acme Energy Co"
+    resp = client.post("/api/report", json=_example_diagram(),
+                       params={"name": "Test Plant", "project_id": 999999})
+    assert resp.status_code == 200
+    assert captured["project_name"] == ""

@@ -327,3 +327,22 @@ def test_an_embedded_sheet_fits_the_a4_text_width_and_stays_vector():
 def test_the_report_pdf_carries_the_sld_page():
     pdf = report_pdf(_hybrid_with_drawn_bess(p_target_bess_mw=2.0), db, "Hybrid plant")
     assert pdf[:4] == b"%PDF"
+
+
+def test_the_embedded_sheet_carries_the_project_name_in_its_title_block():
+    from reportlab.graphics.shapes import Drawing, String
+    from backend.solve import design_sld_sheets
+    inputs = graph_to_inputs(_minimal(), db)
+    stage1s, _layouts, arch = solve_architecture(inputs, db)
+    fleets = branches_summary(inputs, arch, stage1s)
+    story = report_story(stage1s, arch, fleets=fleets, plant_name="Test plant",
+                         project_name="Acme Energy Co",
+                         sld_sheets=design_sld_sheets(inputs, arch, fleets))
+    drawing = next(f for f in story if isinstance(f, Drawing))
+
+    def texts(node):
+        for c in getattr(node, "contents", []):
+            if isinstance(c, String):
+                yield c.text
+            yield from texts(c)
+    assert "Acme Energy Co" in set(texts(drawing))
