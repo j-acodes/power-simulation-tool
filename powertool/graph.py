@@ -57,7 +57,7 @@ from __future__ import annotations
 import math
 from dataclasses import dataclass, field
 
-from .architecture import PlantArchitecture
+from .architecture import DEFAULT_FEEDERS_PER_BUSBAR, PlantArchitecture
 from .components import (
     DEFAULT_AMBIENT_C,
     DEFAULT_CABLE_ENTRY_CABLES_PER_PHASE,
@@ -97,6 +97,12 @@ DEFAULT_RULES = {
     # as it always has, which is why the fallback is the same constant the
     # engine used to hard-code (powertool.components.DEFAULT_AMBIENT_C).
     "ambient_temp_c": DEFAULT_AMBIENT_C,
+    # How many circuits Stage-1 planning packs onto one busbar before opening
+    # another (ADR-0007, ticket 06) — see powertool.architecture.arrange_plant
+    # and DEFAULT_FEEDERS_PER_BUSBAR. A drawn diagram's own busbars are fixed
+    # by the drawing; this only governs a future re-seed and is otherwise
+    # carried here for display (the settings panel, the PDF report).
+    "feeders_per_busbar": DEFAULT_FEEDERS_PER_BUSBAR,
 }
 DEFAULT_TIERS = {"lv_kv": 0.8, "mv_kv": 20.0, "hv_kv": None}
 
@@ -1259,6 +1265,12 @@ class GraphInputs:
     # explicitly down to the architecture layer, rather than every sizing
     # call site reaching back into the diagram or a global constant.
     ambient_c: float
+    # Stage-1 planning's feeders-per-busbar limit (ADR-0007, ticket 06) — see
+    # DEFAULT_RULES above. A drawn diagram's own busbars never move because
+    # of this; it is read here only to carry it through to display (the PDF
+    # report), the same standing as ``ambient_c`` above for figures it does
+    # not itself drive.
+    feeders_per_busbar: int
     # export step
     hv_mode: str  # "none" | "auto" | "model" | "custom"
     hv_transformer: Transformer | None  # None for "none" and "auto"
@@ -1561,6 +1573,7 @@ def graph_to_inputs(diagram: dict, db) -> GraphInputs:
         collection_loss_pct=_rule(diagram, "collection_loss_pct"),
         export_loss_pct_per_km=_rule(diagram, "export_loss_pct_per_km"),
         ambient_c=ambient_c,
+        feeders_per_busbar=int(_rule(diagram, "feeders_per_busbar")),
         hv_mode=hv_mode,
         hv_transformer=hv_transformer,
         hv_n_parallel=hv_n_parallel,

@@ -636,6 +636,20 @@ def test_saved_max_circuit_current_a_rule_is_ignored_not_read():
     assert with_result == without_result
 
 
+def test_feeders_per_busbar_defaults_to_twelve():
+    # A design saved before this setting existed (ADR-0007, ticket 06) reads
+    # the same 12-feeder default Stage-1 planning uses.
+    diagram = _minimal()
+    assert "feeders_per_busbar" not in diagram["settings"]["rules"]
+    assert graph_to_inputs(diagram, db).feeders_per_busbar == 12
+
+
+def test_feeders_per_busbar_override_is_read():
+    diagram = _minimal()
+    diagram["settings"]["rules"]["feeders_per_busbar"] = 6
+    assert graph_to_inputs(diagram, db).feeders_per_busbar == 6
+
+
 def test_no_poc():
     diagram = _minimal()
     diagram["nodes"] = [n for n in diagram["nodes"] if n["kind"] != "poc"]

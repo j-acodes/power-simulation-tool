@@ -22,7 +22,12 @@ from powertool import (
     size_generation,
     size_generation_pq,
 )
-from powertool.architecture import BusbarSection, size_branch, size_plant
+from powertool.architecture import (
+    DEFAULT_FEEDERS_PER_BUSBAR,
+    BusbarSection,
+    size_branch,
+    size_plant,
+)
 from powertool.graph import (
     BranchInputs,
     GraphInputs,
@@ -39,6 +44,10 @@ from powertool.graph import (
 MAX_UTILIZATION = 0.80
 COLLECTION_LOSS_PCT = 1.30
 EXPORT_LOSS_PCT_PER_KM = 0.10
+# Stage-1 planning's feeders-per-busbar limit (ADR-0007, ticket 06) — mirrors
+# powertool.graph.DEFAULT_RULES["feeders_per_busbar"]; echoed the same way as
+# the constants above for the frontend catalogue endpoint.
+FEEDERS_PER_BUSBAR = DEFAULT_FEEDERS_PER_BUSBAR
 
 
 def build_chain(
@@ -446,4 +455,5 @@ def report_pdf(diagram: dict, db: ComponentDatabase, plant_name: str) -> bytes:
     # rather than the first one with the others silently missing.
     fleets = branches_summary(inputs, arch, stage1s)
     return build_pdf_report(stage1s, arch, fleets=fleets, plant_name=plant_name,
-                            ambient_c=inputs.ambient_c)
+                            ambient_c=inputs.ambient_c,
+                            feeders_per_busbar=inputs.feeders_per_busbar)

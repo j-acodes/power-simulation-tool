@@ -102,6 +102,10 @@ export interface RuleSettings {
    *  (never a free number): unset means 40, matching every design saved
    *  before this setting existed. */
   ambient_temp_c?: 30 | 40
+  /** How many circuits Stage-1 planning packs onto one busbar before opening
+   *  another (ADR-0007, ticket 06). Unset means 12. A drawn diagram's own
+   *  busbars are never rearranged by this — it only governs a future re-seed. */
+  feeders_per_busbar?: number
 }
 
 export interface DiagramSettings {
@@ -589,6 +593,9 @@ export interface SeedParams {
   spacing_m: number
   aux_p_kw?: number
   aux_q_kvar?: number
+  /** How many circuits a Stage-1 busbar carries before another opens
+   *  (ADR-0007, ticket 06). Unset means the backend's default of 12. */
+  feeders_per_busbar?: number
 }
 
 // --- Stage-1 conceptual sizing (POST /api/stage1) ---------------------------

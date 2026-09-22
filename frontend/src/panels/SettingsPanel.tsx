@@ -120,6 +120,20 @@ export function SettingsPanel() {
           onChange={(e) => updateSettings({ rules: { ...rules, max_loading: e.target.valueAsNumber } })}
         />
       </label>
+      <label className="field inline">
+        {/* Stage-1 planning only (ADR-0007, ticket 06): a drawn diagram's own
+         *  busbars never move because of this — it decides a future re-seed. */}
+        <span>Feeders per busbar</span>
+        <input
+          type="number"
+          step={1}
+          min={1}
+          value={rules.feeders_per_busbar ?? 12}
+          onChange={(e) =>
+            updateSettings({ rules: { ...rules, feeders_per_busbar: e.target.valueAsNumber } })
+          }
+        />
+      </label>
       {/* Per-fleet overrides are opt-in: an empty box means "use the plant-wide
           figure above", which is what every design drawn before hybrid support
           means by leaving it alone. */}

@@ -50,7 +50,8 @@ def _story_text(diagram) -> str:
     stage1s, _layouts, arch = solve_architecture(inputs, db)
     fleets = branches_summary(inputs, arch, stage1s)
     story = report_story(stage1s, arch, fleets=fleets, plant_name="Test plant",
-                         when="2026-09-04 12:00")
+                         when="2026-09-04 12:00",
+                         feeders_per_busbar=inputs.feeders_per_busbar)
     out = []
 
     def walk(flowables):
@@ -114,6 +115,20 @@ def test_the_two_fleets_of_a_hybrid_are_presented_distinctly():
     # Each fleet gets its own named section rather than one merged station table.
     assert "PV fleet" in text
     assert "BESS fleet" in text
+
+
+def test_the_report_states_the_feeders_per_busbar_limit():
+    # ADR-0007, ticket 06: the Stage-1 planning rule is carried through for
+    # display, default and overridden alike.
+    text = _story_text(_minimal())
+    assert "Feeders per busbar limit" in text
+    assert "12" in text
+
+    diagram = _minimal()
+    diagram["settings"]["rules"]["feeders_per_busbar"] = 6
+    text = _story_text(diagram)
+    assert "Feeders per busbar limit" in text
+    assert "6" in text
 
 
 def test_the_report_lists_the_sized_busbar_switchgear():

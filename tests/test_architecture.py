@@ -304,6 +304,87 @@ def test_arrange_plant_invalid_inputs():
                       trunk_length_km=0.8, spacing_km=0.35, v_mv_kv=20.0)
 
 
+# --- Stage-1 busbar opening (ADR-0007, ticket 06) ---------------------------------
+
+def test_arrange_plant_one_busbar_fits_stays_one_group():
+    # 45 MW reference plant (4 circuits, well under the 12-feeder default and
+    # nowhere near 4000 A): unchanged from before this ticket, one busbar.
+    stage1 = _stage1(p_inv_kw=43_000, q_inv_kvar=9_000)
+    layout = arrange_plant(
+        stage1, [(_tx_2500(rmu_rated_current_a=380.0), 18)],
+        trunk_length_km=0.8, spacing_km=0.35, v_mv_kv=20.0,
+    )
+    assert layout.busbar_groups == [[0, 1, 2, 3]]
+    assert layout.n_busbars == 1
+
+
+def test_arrange_plant_thirteen_circuits_at_the_default_limit_opens_a_second_busbar():
+    # 13 stations, each forced into its own circuit (a 40 A switchgear rating
+    # admits one ~34.4 A station but not two): the default 12-feeder limit
+    # (well below the 4000 A cap here) splits the 13th circuit onto a second
+    # busbar, 12 + 1, without reordering any circuit.
+    stage1 = _stage1(p_inv_kw=13 * 1_200, q_inv_kvar=0.0)
+    layout = arrange_plant(
+        stage1, [(_tx_2500(rmu_rated_current_a=40.0), 13)],
+        trunk_length_km=0.5, spacing_km=0.2, v_mv_kv=20.0,
+    )
+    assert layout.circuit_sizes == [1] * 13
+    assert layout.busbar_groups == [list(range(12)), [12]]
+    assert layout.n_busbars == 2
+
+
+def test_arrange_plant_feeders_per_busbar_setting_is_honoured():
+    # Same 13-single-station-circuit plant, but with the limit lowered to 5:
+    # three busbars (5 + 5 + 3), proving the split follows the SETTING, not a
+    # hard-coded 12.
+    stage1 = _stage1(p_inv_kw=13 * 1_200, q_inv_kvar=0.0)
+    layout = arrange_plant(
+        stage1, [(_tx_2500(rmu_rated_current_a=40.0), 13)],
+        trunk_length_km=0.5, spacing_km=0.2, v_mv_kv=20.0,
+        feeders_per_busbar=5,
+    )
+    assert layout.busbar_groups == [
+        [0, 1, 2, 3, 4], [5, 6, 7, 8, 9], [10, 11, 12],
+    ]
+
+
+def test_arrange_plant_busbar_total_above_4000a_opens_a_second_busbar_regardless_of_feeder_count():
+    # Two stations, each forced into its own circuit by a 2200 A switchgear
+    # ceiling (one station's own ~2191 A fits, two combined would not), each
+    # circuit near 2191 A: together they would put a single busbar at
+    # ~4383 A, above the 4000 A ladder top, even though only 2 of the
+    # default 12 feeder slots would be used.
+    tx = Transformer("BIG", s_rated_kva_at_40c=76_000, uk_percent=8.0, pk_kw=304.0,
+                     p0_kw=45.0, i0_percent=0.3, lv_kv=0.8,
+                     rmu_rated_current_a=2200.0)
+    stage1 = _stage1(p_inv_kw=152_000.0, q_inv_kvar=0.0)
+    layout = arrange_plant(
+        stage1, [(tx, 2)],
+        trunk_length_km=0.5, spacing_km=0.2, v_mv_kv=20.0,
+    )
+    assert layout.circuit_sizes == [1, 1]
+    single_busbar_a = current_a(
+        math.hypot(sum(p.p_mv_kw for c in layout.circuit_plans for p in c),
+                   sum(p.q_mv_kvar for c in layout.circuit_plans for p in c)),
+        20.0,
+    )
+    assert single_busbar_a > 4000.0
+    assert layout.busbar_groups == [[0], [1]]
+    assert layout.n_busbars == 2
+
+
+def test_arrange_plant_manual_never_splits_into_more_than_one_busbar_group():
+    # A drawn diagram's busbars come from the diagram itself (validated at a
+    # higher layer, ticket 05); arrange_plant_manual's own layout is always
+    # one group, whatever it is handed — 13 circuits included.
+    stage1 = _stage1(p_inv_kw=13 * 1_200, q_inv_kvar=0.0)
+    tx = _tx_2500(rmu_rated_current_a=40.0)
+    circuits = [[tx] for _ in range(13)]
+    layout = arrange_plant_manual(stage1, circuits, v_mv_kv=20.0)
+    assert layout.busbar_groups == [list(range(13))]
+    assert layout.n_busbars == 1
+
+
 # --- arrange_plant_manual (drawn arrangement) -------------------------------------
 
 def _as_drawn(layout) -> list[list[Transformer]]:

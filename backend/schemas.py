@@ -91,6 +91,9 @@ class SeedRequest(BaseModel):
     spacing_m: float
     aux_p_kw: float = 0.0
     aux_q_kvar: float = 0.0
+    # How many circuits a Stage-1 busbar carries before another is opened
+    # (ADR-0007, ticket 06) — matches powertool.graph.DEFAULT_RULES's default.
+    feeders_per_busbar: int = Field(default=12, ge=1)
 
     @model_validator(mode="after")
     def _hv_needs_a_voltage(self) -> "SeedRequest":
@@ -342,6 +345,7 @@ class RulesDefaults(BaseModel):
     max_utilization: float
     collection_loss_pct: float
     export_loss_pct_per_km: float
+    feeders_per_busbar: int
 
 
 class CatalogueDefaults(BaseModel):

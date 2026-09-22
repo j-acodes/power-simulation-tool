@@ -28,7 +28,7 @@ from reportlab.platypus import (
     TableStyle,
 )
 
-from .architecture import PlantArchitecture
+from .architecture import DEFAULT_FEEDERS_PER_BUSBAR, PlantArchitecture
 from .components import (
     DEFAULT_AMBIENT_C,
     conversion_label,
@@ -126,7 +126,8 @@ def _fleet_kind(fleet: dict | None) -> str:
 
 
 def _summary(stage1s: list[SizingResult], arch: PlantArchitecture,
-             fleets: list[dict] | None, ambient_c: float) -> list:
+             fleets: list[dict] | None, ambient_c: float,
+             feeders_per_busbar: int = DEFAULT_FEEDERS_PER_BUSBAR) -> list:
     export = arch.export
     v_mv = arch.branches[0].layout.v_mv_kv
     if export is None:
@@ -141,6 +142,7 @@ def _summary(stage1s: list[SizingResult], arch: PlantArchitecture,
         ["POC active-power target", f"{_fmt(target / 1000)} MW" if target else "—"],
         ["Power-factor target (injected Q)", f"{stage1s[0].pf_target:.3f}"],
         ["Interconnection", interconn],
+        ["Feeders per busbar limit", str(feeders_per_busbar)],
         ["MV collection voltage", f"{v_mv:g} kV"],
     ]
     # One fleet: the plant IS the fleet, so its figures belong in this table
@@ -562,6 +564,7 @@ def report_story(
     plant_name: str = "Plant",
     when: str = "",
     ambient_c: float = DEFAULT_AMBIENT_C,
+    feeders_per_busbar: int = DEFAULT_FEEDERS_PER_BUSBAR,
 ) -> list:
     """The report as a list of ReportLab flowables, before it becomes a PDF.
 
@@ -577,6 +580,10 @@ def report_story(
     drifting apart, and keeps this module independent of the diagram layer.
     Omit it and the per-fleet sections are simply absent, which is what the
     engine-level callers want.
+
+    ``feeders_per_busbar`` is the design's own Stage-1 rule (ADR-0007, ticket
+    06), carried through purely for display, the same standing as
+    ``ambient_c`` for the figures it does not itself drive.
     """
     story: list = [
         Paragraph(f"{plant_name} — Sizing Report", _H1),
@@ -584,7 +591,7 @@ def report_story(
         HRFlowable(width="100%", thickness=2, color=_GREEN, spaceBefore=4,
                    spaceAfter=10),
     ]
-    story += _summary(stage1s, arch, fleets, ambient_c)
+    story += _summary(stage1s, arch, fleets, ambient_c, feeders_per_busbar)
     story += _methodology()
     for i, stage1 in enumerate(stage1s):
         story += _stage1(stage1, fleets[i] if fleets else None, len(stage1s))
@@ -609,6 +616,7 @@ def build_pdf_report(
     plant_name: str = "Plant",
     generated_at: datetime | None = None,
     ambient_c: float = DEFAULT_AMBIENT_C,
+    feeders_per_busbar: int = DEFAULT_FEEDERS_PER_BUSBAR,
 ) -> bytes:
     """Full PDF sizing report: methodology + detailed loss tables. Returns bytes."""
     when = (generated_at or datetime.now()).strftime("%Y-%m-%d %H:%M")
@@ -618,5 +626,5 @@ def build_pdf_report(
         leftMargin=_MARGIN, rightMargin=_MARGIN,
         topMargin=14 * mm, bottomMargin=14 * mm)
     doc.build(report_story(stage1s, arch, fleets=fleets, plant_name=plant_name, when=when,
-                           ambient_c=ambient_c))
+                           ambient_c=ambient_c, feeders_per_busbar=feeders_per_busbar))
     return buf.getvalue()

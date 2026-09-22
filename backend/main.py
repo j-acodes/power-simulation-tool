@@ -48,6 +48,7 @@ from .seed import seed_diagram
 from .solve import (
     COLLECTION_LOSS_PCT,
     EXPORT_LOSS_PCT_PER_KM,
+    FEEDERS_PER_BUSBAR,
     MAX_UTILIZATION,
     build_chain,
     report_pdf,
@@ -258,6 +259,7 @@ def get_catalogue() -> CatalogueResponse:
             max_utilization=MAX_UTILIZATION,
             collection_loss_pct=COLLECTION_LOSS_PCT,
             export_loss_pct_per_km=EXPORT_LOSS_PCT_PER_KM,
+            feeders_per_busbar=FEEDERS_PER_BUSBAR,
         ),
     )
 

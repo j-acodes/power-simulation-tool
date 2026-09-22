@@ -27,6 +27,7 @@ from dataclasses import dataclass, field, replace
 
 from .cable_sizing import CableSelection, select_cable
 from .components import (
+    BUSBAR_SWITCHGEAR_LADDER_A,
     DEFAULT_AMBIENT_C,
     DEFAULT_CABLE_ENTRY_CABLES_PER_PHASE,
     DEFAULT_CABLE_ENTRY_MAX_CROSS_SECTION_MM2,
@@ -35,6 +36,12 @@ from .components import (
     current_a,
 )
 from .sizing import SizingResult, format_cable_label
+
+# Stage-1 planning's default feeders-per-busbar limit (ADR-0007) — how many
+# circuits a busbar opened here may carry before another is opened. Mirrors
+# powertool.graph.DEFAULT_RULES["feeders_per_busbar"]; kept as a separate
+# constant because this module does not depend on the diagram layer.
+DEFAULT_FEEDERS_PER_BUSBAR = 12
 
 
 class StationOverloadError(ValueError):
@@ -81,6 +88,16 @@ class PlantLayout:
     Lengths apply to every circuit alike: ``trunk_length_km`` from the
     substation to the first station, ``spacing_km`` between consecutive
     stations (individual runs editable later via ``segment_lengths``).
+
+    ``busbar_groups`` (ADR-0007, ticket 06) partitions ``circuit_plans`` by
+    INDEX into the busbars Stage-1 planning would open: circuits fill a
+    busbar in the order ``circuit_plans`` already has them (heaviest first),
+    and another busbar opens when the next circuit would take the current
+    one's total past the top of ``BUSBAR_SWITCHGEAR_LADDER_A`` (4000 A) or
+    past ``feeders_per_busbar`` circuits already on it. :func:`arrange_plant`
+    computes this; :func:`arrange_plant_manual` never does — a drawn plant
+    keeps exactly the busbars it was drawn with, so its whole layout is one
+    group.
     """
 
     fleet: list[tuple[Transformer, int]]
@@ -95,6 +112,7 @@ class PlantLayout:
     # rather than read from a global constant.
     ambient_c: float = DEFAULT_AMBIENT_C
     max_loading: float = 1.0
+    busbar_groups: list[list[int]] = field(default_factory=list)
 
     @property
     def n_transformers(self) -> int:
@@ -116,6 +134,50 @@ class PlantLayout:
     def circuit_sizes_label(self) -> str:
         """e.g. ``"4 (5+5+4+4)"`` for quick display."""
         return f"{self.n_circuits} ({'+'.join(str(s) for s in self.circuit_sizes)})"
+
+    @property
+    def n_busbars(self) -> int:
+        return len(self.busbar_groups) if self.busbar_groups else 1
+
+
+def group_circuits_into_busbars(
+    circuit_plans: list[list[StationPlan]],
+    v_mv_kv: float,
+    feeders_per_busbar: int = DEFAULT_FEEDERS_PER_BUSBAR,
+) -> list[list[int]]:
+    """Partition ``circuit_plans`` (already grouped and ordered by
+    :func:`arrange_plant`) into the busbars Stage-1 planning would open
+    (ADR-0007, ticket 06).
+
+    Circuits fill a busbar in ``circuit_plans``'s own order — never
+    reordered — and another busbar opens when the next circuit would take
+    the current one's total (P and Q summed, then converted to current —
+    the same net figure :class:`BusbarSection.busbar_current_a` sizes the
+    busbar and export switchgear on) past the top of
+    ``BUSBAR_SWITCHGEAR_LADDER_A`` (4000 A), or when the current busbar
+    already carries ``feeders_per_busbar`` circuits.
+
+    Auxiliary load is not available at Stage-1 planning time (it is a
+    per-busbar figure only known once a diagram is drawn — see CONTEXT.md's
+    "Auxiliary load" entry) so this estimate is the stations' own MV-side
+    output only, exactly what already drives circuit grouping above.
+    """
+    groups: list[list[int]] = [[]]
+    p_kw = q_kvar = 0.0
+    cap_a = BUSBAR_SWITCHGEAR_LADDER_A[-1]
+    for idx, circuit in enumerate(circuit_plans):
+        c_p = sum(p.p_mv_kw for p in circuit)
+        c_q = sum(p.q_mv_kvar for p in circuit)
+        group = groups[-1]
+        if group:
+            trial_a = current_a(math.hypot(p_kw + c_p, q_kvar + c_q), v_mv_kv)
+            if trial_a > cap_a + 1e-9 or len(group) >= feeders_per_busbar:
+                groups.append([])
+                p_kw = q_kvar = 0.0
+        groups[-1].append(idx)
+        p_kw += c_p
+        q_kvar += c_q
+    return groups
 
 
 def _cable_entry_ceiling_a(
@@ -244,6 +306,7 @@ def arrange_plant(
     ambient_c: float = DEFAULT_AMBIENT_C,
     cable_candidates: list[Cable] | None = None,
     max_utilization: float = 0.80,
+    feeders_per_busbar: int = DEFAULT_FEEDERS_PER_BUSBAR,
 ) -> PlantLayout:
     """Arrange the Stage-1 station fleet into MV circuits.
 
@@ -270,6 +333,12 @@ def arrange_plant(
     circuit no cable could serve. Omitted, or an empty list (no MV cable
     catalogue available for this voltage yet), skips this entirely — grouping
     considers switchgear only.
+
+    ``feeders_per_busbar`` additionally partitions the resulting circuits
+    into the busbars Stage-1 planning would open (see
+    :func:`group_circuits_into_busbars` and ``PlantLayout.busbar_groups``):
+    another busbar opens when the next circuit would take the current one's
+    total past 4000 A or past this many circuits.
     """
     if trunk_length_km < 0 or spacing_km < 0:
         raise ValueError("Lengths must be non-negative")
@@ -353,6 +422,9 @@ def arrange_plant(
         loading_ok=loading <= max_loading + 1e-9,
         ambient_c=ambient_c,
         max_loading=max_loading,
+        busbar_groups=group_circuits_into_busbars(
+            circuit_plans, v_mv_kv, feeders_per_busbar
+        ),
     )
 
 
@@ -494,6 +566,11 @@ def arrange_plant_manual(
         ),
         ambient_c=ambient_c,
         max_loading=max_loading,
+        # A drawn plant keeps exactly the busbars it was drawn with — see
+        # PlantLayout.busbar_groups. This layout's own busbar partitioning
+        # comes from the diagram itself (BusbarSection.circuit_indices, built
+        # by the caller), never from this function.
+        busbar_groups=[list(range(len(circuit_plans)))],
     )
 
 
