@@ -13,7 +13,9 @@ presentation:
 
 ``build_sld_pdf`` assembles one A3-landscape page per sheet.
 
-One sheet per busbar, for every topology the tool solves: several busbars
+One sheet per busbar (shrunk to fit A3, or split onto continuation sheets
+once text would drop below 5 pt — see ``_busbar_sheets``), for every
+topology the tool solves: several busbars
 per fleet, PV and BESS fleets (a hybrid's shared POC and HV transformer repeat
 on each sheet), and HV or MV interconnection. Each sheet draws the grid-side
 chain, the busbar, and every circuit as a column of stations in chain order,
@@ -215,17 +217,21 @@ _MV_CHAIN_KINDS = ["poc", "metering", "mv_breaker", "export_cable"]
 # Kept tight (vs. ticket 01's 70/55) so the fixed A3 sheet spends more of its
 # vertical budget on station rows, where ticket 02's figure labels now live —
 # the grid-side chain is 7 fixed steps regardless of plant size, while a
-# circuit's station count is not.
-_CHAIN_STEP = 42.0
+# circuit's station count is not. With _STATION_DY, sized so the chain plus a
+# circuit of eight stations (a 630 A feeder of 2.5 MVA stations at 20 kV)
+# still fits A3 at the MIN_TEXT_PT floor.
+_CHAIN_STEP = 34.0
 # Wide enough that a station's transformer+inverter branch (see _BRANCH_DX,
 # reaching ~50 units to the right at scale 1) and its figure labels never
 # reach the next circuit's trunk line.
 _CIRCUIT_DX = 170.0
 _FEEDER_GAP = 38.0
-_STATION_DY = 60.0
+_STATION_DY = 55.0
 # Room each column's symbols and labels take either side of its own x: cable
-# labels to the left, the station branch and its figures to the right.
-_COLUMN_PAD = _CIRCUIT_DX / 2.0
+# labels to the left, the station branch and its figures (up to a long
+# "× N inverter-model" line) to the right.
+_PAD_LEFT = 80.0
+_PAD_RIGHT = 115.0
 
 # Diagram text sizes at scale 1, in points; they shrink with the sheet scale.
 # _LABEL_PT is the smallest, so it is the one held at the MIN_TEXT_PT floor.
@@ -515,7 +521,7 @@ def _fit_scale(elements: list[SldElement]) -> float:
     included."""
     xs = [e.x for e in elements]
     ys = [e.y for e in elements]
-    width = max(xs) - min(xs) + 2 * _COLUMN_PAD
+    width = max(xs) - min(xs) + _PAD_LEFT + _PAD_RIGHT
     height = max(ys) - min(ys) + _STATION_DY
     return min(1.0, _AREA_W / width, _AREA_H / height)
 
@@ -822,8 +828,8 @@ def sheet_to_drawing(
     # bounding box horizontally and hang it from the top of the area.
     scale = sheet.scale
     xs = [e.x for e in sheet.elements]
-    left_x = min(xs) - _COLUMN_PAD
-    x0 = _CONTENT_LEFT + (_AREA_W - (max(xs) + _COLUMN_PAD - left_x) * scale) / 2.0
+    left_x = min(xs) - _PAD_LEFT
+    x0 = _CONTENT_LEFT + (_AREA_W - (max(xs) + _PAD_RIGHT - left_x) * scale) / 2.0
     top_y = max(e.y for e in sheet.elements)
 
     def to_page(x: float, y: float) -> tuple[float, float]:

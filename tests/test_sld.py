@@ -644,6 +644,20 @@ def test_medium_plant_shrinks_to_fit_one_sheet_above_the_text_floor():
     assert sheets[0].text_pt >= MIN_TEXT_PT
 
 
+def test_eight_station_circuits_fit_one_sheet_above_the_text_floor():
+    # 630 A feeders of 2.5 MVA stations at 20 kV: eight stations per circuit.
+    stage1 = _stage1(p_inv_kw=38_000, q_inv_kvar=6_000)
+    layout = arrange_plant(
+        stage1, [(_tx_2500(rmu_rated_current_a=630.0), 16)],
+        trunk_length_km=0.8, spacing_km=0.35, v_mv_kv=20.0,
+    )
+    arch = size_architecture(layout, stage1, _catalogue(), hv_transformer=_hv_tx())
+    assert max(len(c.stations) for c in arch.branches[0].circuits) == 8
+    sheets = sld_sheets(arch)
+    assert len(sheets) == 1
+    assert sheets[0].text_pt >= MIN_TEXT_PT
+
+
 def test_large_plant_splits_onto_continuation_sheets():
     arch = _large_pv_arch()
     sheets = sld_sheets(arch)
