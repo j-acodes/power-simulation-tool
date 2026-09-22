@@ -1675,6 +1675,36 @@ def branches_summary(inputs, arch, stage1s) -> list[dict]:
     return out
 
 
+def sld_fleets(inputs: GraphInputs) -> list[dict]:
+    """One entry per branch, the SLD builder's own diagram-layer enrichment:
+    the PV inverter product/count :func:`powertool.sld.sld_sheets` needs but
+    ``PlantArchitecture`` never carries (Stage 1 only knows aggregate
+    inverter power — see that function's docstring).
+
+    Kept SEPARATE from :func:`branches_summary` on purpose: that function's
+    dict shape is baked into the canvas summary the golden snapshot pins
+    (``map_results``' ``summary.branches``), so it cannot grow new keys for a
+    feature the snapshot never renders. This is the same "records passed to
+    the builder" idea the PDF report uses, just for a payload of its own.
+
+    The aggregate diagram draws one PV station block per fleet (the SLD
+    spec's Problem Statement), so one inverter product/count covers every
+    station the architecture expands that branch into — read off whichever
+    installation is on record, not positionally matched to any one station.
+    ``None`` for a BESS branch, or a PV branch that somehow carries none.
+    """
+    out: list[dict] = []
+    for branch_inputs in inputs.branches:
+        installation = next(iter(branch_inputs.pv_inverters_by_station.values()), None)
+        out.append({
+            # Catalogue key, never the display label — powertool.sld draws
+            # only catalogue keys.
+            "pv_inverter_model": installation.inverter.name if installation else None,
+            "pv_inverter_count": installation.count if installation else None,
+        })
+    return out
+
+
 def fallback_notices(arch: PlantArchitecture) -> list[GraphIssue]:
     """The design-wide notices for every engine fallback a station used in
     place of a published figure — shared by :func:`map_results` and the PDF

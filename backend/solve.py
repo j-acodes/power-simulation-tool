@@ -37,6 +37,7 @@ from powertool.graph import (
     fallback_notices,
     graph_to_inputs,
     map_results,
+    sld_fleets,
     validate_graph,
 )
 
@@ -478,6 +479,15 @@ def sld_pdf(diagram: dict, db: ComponentDatabase, plant_name: str,
     if issues:
         raise ValueError(issues[0].message)
     inputs = graph_to_inputs(diagram, db)
-    _stage1s, _layouts, arch = solve_architecture(inputs, db)
-    sheets = sld_sheets(arch)
+    stage1s, _layouts, arch = solve_architecture(inputs, db)
+    # The same per-branch records the report reads (busbar/feeder pins
+    # included, so a pinned feeder rating draws exactly what the report
+    # shows), plus the SLD's own inverter model/count merged in on top — a
+    # local copy, never mutating what branches_summary() itself is pinned to
+    # return (the golden snapshot embeds it verbatim for a multi-branch
+    # design's canvas summary).
+    fleets = branches_summary(inputs, arch, stage1s)
+    for fleet, pv in zip(fleets, sld_fleets(inputs)):
+        fleet.update(pv)
+    sheets = sld_sheets(arch, fleets=fleets)
     return build_sld_pdf(sheets, project_name=project_name, design_name=plant_name)

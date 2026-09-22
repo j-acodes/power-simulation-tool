@@ -11,10 +11,15 @@ protection devices are indicative. No losses, loading or DC capacity on the draw
 
 **Blocked by:** 01
 
-**Status:** ready-for-agent
+**Status:** done
 
-- [ ] Layout-model tests assert the label text on tagged elements: POC, HV transformer, busbar, feeders, a tapered circuit's per-segment cables, a parallel-run segment, station transformer, inverter count and model key
-- [ ] A design using the 630 A switchgear fallback shows † on that feeder/station and lists it in the sheet notes; a design with no fallback has no † and no fallback note
-- [ ] Legend and indicative-devices note present on every sheet
-- [ ] Browser check: downloaded SLD opened and screenshot reported
-- [ ] `tests/golden_baseline.json` byte-identical; full pytest, Vitest, build and lint pass
+- [x] Layout-model tests assert the label text on tagged elements: POC, HV transformer, busbar, feeders, a tapered circuit's per-segment cables, a parallel-run segment, station transformer, inverter count and model key
+- [x] A design using the 630 A switchgear fallback shows † on that feeder/station and lists it in the sheet notes; a design with no fallback has no † and no fallback note
+- [x] Legend and indicative-devices note present on every sheet
+- [x] Browser check: downloaded SLD opened and screenshot reported
+- [x] `tests/golden_baseline.json` byte-identical; full pytest, Vitest, build and lint pass
+
+## Comments
+
+- Feeder ratings honour pins via `busbar_switchgear_rating(i_trunk_a, pin)`; the pin lookup currently reads the first fleet's first busbar only — ticket 03 must index by fleet and busbar.
+- The station-switchgear fallback † sits on the station tag, never the feeder (the feeder is sized from the ladder).
