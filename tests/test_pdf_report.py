@@ -52,7 +52,8 @@ def _story_text(diagram) -> str:
     story = report_story(stage1s, arch, fleets=fleets, plant_name="Test plant",
                          when="2026-09-04 12:00",
                          feeders_per_busbar=inputs.feeders_per_busbar,
-                         notices=[n.message for n in fallback_notices(arch)])
+                         notices=[n.message for n in fallback_notices(arch)],
+                         pf_target=inputs.pf_target)
     out = []
 
     def walk(flowables):
@@ -261,3 +262,40 @@ def test_build_pdf_report_needs_the_fleet_figures_to_report_them():
     # inventing them.
     stage1s, arch = _render_args(_bess_only(duration=4.0))
     assert build_pdf_report(stage1s, arch, plant_name="No fleets")[:4] == b"%PDF"
+
+
+# --- the summary's power factors: the POC target, not a derived figure -------
+
+def _summary_rows(diagram) -> dict[str, str]:
+    """The Plant summary table as {item: value}."""
+    inputs = graph_to_inputs(diagram, db)
+    stage1s, _layouts, arch = solve_architecture(inputs, db)
+    story = report_story(stage1s, arch, fleets=branches_summary(inputs, arch, stage1s),
+                         pf_target=inputs.pf_target)
+    i = next(i for i, f in enumerate(story) if str(getattr(f, "text", "")) == "Plant summary")
+    return {str(k.text): str(v.text) for k, v in story[i + 1]._cellvalues[1:]}
+
+
+def _hv_plant() -> dict:
+    """The seeded 45 MW plant at 0.95 behind an HV transformer — the one whose
+    busbar needs 0.910 because the transformer consumes reactive power."""
+    from test_api import _example_diagram
+    return _example_diagram()
+
+
+def test_the_summary_states_the_pf_target_at_the_poc_not_at_the_busbar():
+    rows = _summary_rows(_hv_plant())
+    assert rows["Power-factor target at POC"] == "0.950"
+
+
+def test_the_summary_states_the_power_factor_at_the_inverter():
+    inputs = graph_to_inputs(_hv_plant(), db)
+    stage1s, _layouts, _arch = solve_architecture(inputs, db)
+    rows = _summary_rows(_hv_plant())
+    assert rows["Power factor at inverter"] == f"{stage1s[0].pf_inv:.3f}"
+
+
+def test_a_hybrid_summary_states_each_fleets_power_factor_at_its_device():
+    rows = _summary_rows(_hybrid_with_drawn_bess(p_target_bess_mw=2.0))
+    assert any(k.endswith("Power factor at inverter") for k in rows)
+    assert any(k.endswith("Power factor at PCS") for k in rows)

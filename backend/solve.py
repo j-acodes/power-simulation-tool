@@ -458,4 +458,5 @@ def report_pdf(diagram: dict, db: ComponentDatabase, plant_name: str) -> bytes:
     return build_pdf_report(stage1s, arch, fleets=fleets, plant_name=plant_name,
                             ambient_c=inputs.ambient_c,
                             feeders_per_busbar=inputs.feeders_per_busbar,
-                            notices=[n.message for n in fallback_notices(arch)])
+                            notices=[n.message for n in fallback_notices(arch)],
+                            pf_target=inputs.pf_target)
