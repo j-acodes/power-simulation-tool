@@ -41,6 +41,7 @@ from .components import (
     busbar_switchgear_rating,
 )
 from .sizing import SizingResult
+from .sld import Sheet, sheet_to_drawing
 
 # RP Global "Colour Codes" brand sheet.
 _NAVY = colors.HexColor("#011d3f")   # Business Blue
@@ -608,6 +609,27 @@ def arch_total(arch: PlantArchitecture, what: str) -> float:
     return total
 
 
+def _sld_section(sheets: list[Sheet], plant_name: str) -> list:
+    """Each SLD sheet as a vector drawing scaled to the A4 text width, with a
+    caption pointing at the standalone download (too small to read here)."""
+    if not sheets:
+        return []
+    width = A4[0] - 2 * _MARGIN
+    out: list = [Paragraph("Single-line diagram", _H2)]
+    for sheet in sheets:
+        drawing = sheet_to_drawing(sheet, design_name=plant_name)
+        s = width / drawing.width
+        drawing.scale(s, s)
+        drawing.width, drawing.height = drawing.width * s, drawing.height * s
+        cont = (f", continued from sheet {sheet.continued_from}"
+                if sheet.continued_from is not None else "")
+        out += [drawing, Paragraph(
+            f"Sheet {sheet.number} — busbar {sheet.busbar_tag}{cont}. Reduced from "
+            "A3; the legible version is the standalone Download SLD file.", _NOTE),
+            Spacer(1, 8)]
+    return out
+
+
 def report_story(
     stage1s: list[SizingResult],
     arch: PlantArchitecture,
@@ -618,6 +640,7 @@ def report_story(
     ambient_c: float = DEFAULT_AMBIENT_C,
     feeders_per_busbar: int = DEFAULT_FEEDERS_PER_BUSBAR,
     notices: list[str] | None = None,
+    sld_sheets: list[Sheet] | None = None,
 ) -> list:
     """The report as a list of ReportLab flowables, before it becomes a PDF.
 
@@ -642,6 +665,11 @@ def report_story(
     :func:`powertool.graph.fallback_notices`), passed as plain text so this
     module stays independent of the diagram layer. Listed right after the
     summary: a reviewer reads them before trusting any figure below.
+
+    ``sld_sheets`` are the same :class:`powertool.sld.Sheet` list the
+    standalone SLD download renders, so the two cannot differ; each is drawn
+    after the notices, scaled to the page width. Omit it and the section is
+    absent.
     """
     story: list = [
         Paragraph(f"{plant_name} — Sizing Report", _H1),
@@ -653,6 +681,7 @@ def report_story(
     if notices:
         story.append(Paragraph("Notices", _H2))
         story += [Paragraph(n, _BODY) for n in notices]
+    story += _sld_section(sld_sheets or [], plant_name)
     story += _methodology()
     for i, stage1 in enumerate(stage1s):
         story += _stage1(stage1, fleets[i] if fleets else None, len(stage1s))
@@ -679,6 +708,7 @@ def build_pdf_report(
     ambient_c: float = DEFAULT_AMBIENT_C,
     feeders_per_busbar: int = DEFAULT_FEEDERS_PER_BUSBAR,
     notices: list[str] | None = None,
+    sld_sheets: list[Sheet] | None = None,
 ) -> bytes:
     """Full PDF sizing report: methodology + detailed loss tables. Returns bytes."""
     when = (generated_at or datetime.now()).strftime("%Y-%m-%d %H:%M")
@@ -689,5 +719,5 @@ def build_pdf_report(
         topMargin=14 * mm, bottomMargin=14 * mm)
     doc.build(report_story(stage1s, arch, fleets=fleets, plant_name=plant_name, when=when,
                            ambient_c=ambient_c, feeders_per_busbar=feeders_per_busbar,
-                           notices=notices))
+                           notices=notices, sld_sheets=sld_sheets))
     return buf.getvalue()

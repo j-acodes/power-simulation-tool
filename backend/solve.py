@@ -461,7 +461,21 @@ def report_pdf(diagram: dict, db: ComponentDatabase, plant_name: str) -> bytes:
     return build_pdf_report(stage1s, arch, fleets=fleets, plant_name=plant_name,
                             ambient_c=inputs.ambient_c,
                             feeders_per_busbar=inputs.feeders_per_busbar,
-                            notices=[n.message for n in fallback_notices(arch)])
+                            notices=[n.message for n in fallback_notices(arch)],
+                            sld_sheets=design_sld_sheets(inputs, arch, fleets))
+
+
+def design_sld_sheets(inputs, arch, fleets: list[dict]) -> list:
+    """The SLD sheets for a solved design — the one builder both the
+    standalone download and the report's embedded sheets go through.
+
+    ``fleets`` is :func:`branches_summary`'s output (busbar/feeder pins
+    included, so a pinned feeder rating draws exactly what the report shows);
+    the SLD's own inverter model/count is merged in on COPIES, never mutating
+    what the report itself reads or what the golden snapshot pins.
+    """
+    merged = [{**fleet, **pv} for fleet, pv in zip(fleets, sld_fleets(inputs))]
+    return sld_sheets(arch, fleets=merged)
 
 
 def sld_pdf(diagram: dict, db: ComponentDatabase, plant_name: str,
@@ -477,14 +491,5 @@ def sld_pdf(diagram: dict, db: ComponentDatabase, plant_name: str,
         raise ValueError(issues[0].message)
     inputs = graph_to_inputs(diagram, db)
     stage1s, _layouts, arch = solve_architecture(inputs, db)
-    # The same per-branch records the report reads (busbar/feeder pins
-    # included, so a pinned feeder rating draws exactly what the report
-    # shows), plus the SLD's own inverter model/count merged in on top — a
-    # local copy, never mutating what branches_summary() itself is pinned to
-    # return (the golden snapshot embeds it verbatim for a multi-branch
-    # design's canvas summary).
-    fleets = branches_summary(inputs, arch, stage1s)
-    for fleet, pv in zip(fleets, sld_fleets(inputs)):
-        fleet.update(pv)
-    sheets = sld_sheets(arch, fleets=fleets)
+    sheets = design_sld_sheets(inputs, arch, branches_summary(inputs, arch, stage1s))
     return build_sld_pdf(sheets, project_name=project_name, design_name=plant_name)
