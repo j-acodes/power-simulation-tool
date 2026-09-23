@@ -1670,6 +1670,7 @@ def branches_summary(inputs, arch, stage1s) -> list[dict]:
             "s_fleet_kva": branch_arch.layout.s_fleet_kva,
             "fleet_loading": branch_arch.layout.fleet_loading,
             "loading_ok": branch_arch.layout.loading_ok,
+            "max_station_loading": branch_arch.layout.max_station_loading,
             "max_loading": branch_inputs.max_loading,
             # The container auxiliaries this fleet needs supplied. Reported, not
             # sized against: it is fed separately, never by the PCS.
@@ -2176,20 +2177,13 @@ def map_results(inputs: GraphInputs, stage1s: list[SizingResult],
                         edge_id=busbar_inputs.export_edge_id))
 
         if not layout.loading_ok:
-            if branch_inputs.kind == "pv":
-                overload_message = (
-                    "One or more drawn transformer stations exceed the fleet's "
-                    f"{branch_inputs.max_loading * 100:.0f} % transformer loading "
-                    f"limit (aggregate loading is {layout.fleet_loading * 100:.0f} %). "
-                    "Add stations or pick bigger units."
-                )
-            else:
-                # BESS allocation remains proportional to transformer rating.
-                overload_message = (
-                    f"The drawn stations carry {layout.fleet_loading * 100:.0f} % of "
-                    "their combined rating — the required inverter power exceeds "
-                    "the installed station capacity. Add stations or pick bigger units."
-                )
+            fleet_label = "PV" if branch_inputs.kind == "pv" else "BESS"
+            overload_message = (
+                f"The {fleet_label} fleet is overloaded — its most loaded station "
+                f"is at {layout.max_station_loading * 100:.0f} % against a "
+                f"{branch_inputs.max_loading * 100:.0f} % maximum (fleet average "
+                f"{layout.fleet_loading * 100:.0f} %). Add stations or pick bigger units."
+            )
             warnings.append(GraphIssue(
                 "fleet_overloaded",
                 overload_message,

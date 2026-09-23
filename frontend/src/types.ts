@@ -71,6 +71,7 @@ export interface BranchSummary {
   s_fleet_kva: number
   fleet_loading: number
   loading_ok: boolean
+  max_station_loading: number
   max_loading: number
   /** Container auxiliaries this fleet needs supplied. Reported, never sized
    *  against: they are fed separately, never by the PCS. */

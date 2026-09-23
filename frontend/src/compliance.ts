@@ -18,8 +18,10 @@ function fleetReasons(branch: BranchSummary): string[] {
 
   if (!branch.loading_ok) {
     reasons.push(
-      `The ${label} fleet is overloaded — ${(branch.fleet_loading * 100).toFixed(0)}% of its ` +
-        `combined rating, against a ${(branch.max_loading * 100).toFixed(0)}% maximum.`,
+      `The ${label} fleet is overloaded — its most loaded station is at ` +
+        `${(branch.max_station_loading * 100).toFixed(0)}% against a ` +
+        `${(branch.max_loading * 100).toFixed(0)}% maximum (fleet average ` +
+        `${(branch.fleet_loading * 100).toFixed(0)}%).`,
     )
   }
 

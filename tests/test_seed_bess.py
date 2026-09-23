@@ -169,6 +169,39 @@ def test_max_loading_bess_bounds_the_station_count():
     assert branch["energy_ok"] is True
 
 
+@pytest.mark.parametrize("p_poc_bess_mw", [20.0, 25.0, 30.0, 35.0, 40.0, 45.0, 50.0, 60.0])
+def test_max_loading_bess_bounds_every_station_not_just_the_average(p_poc_bess_mw):
+    # Ticket 06: BESS duty is shared across installed PCS (ADR-0008), so when
+    # the last station holds fewer containers, every FULL station carries
+    # more than the fleet average. Sizing the container count from energy
+    # alone (ticket 02) can leave loading_ok False even though fleet_loading
+    # reads within the limit — the fix must size containers from a
+    # loading-driven floor too, not just add stations.
+    params = dict(BASE_PARAMS)
+    params.update({
+        "interconnection": "HV",
+        "v_hv_kv": 132.0,
+        "pf_target": 0.95,
+        "bess_station_model": "SUNGROW_MVS7400_LS",
+        "p_poc_bess_mw": p_poc_bess_mw,
+        "max_loading_bess": 0.8,
+        "trunk_bess_m": 800.0,
+        "spacing_bess_m": 350.0,
+        "aux_p_kw": 120.0,
+        "aux_q_kvar": 40.0,
+    })
+    diagram = seed_diagram(params, db)
+    result = solve_diagram(diagram, db)
+    assert result["issues"] == []
+
+    summary = result["results"]["summary"]
+    assert summary["loading_ok"] is True
+
+    branch = summary["branches"][0]
+    assert branch["kind"] == "bess"
+    assert branch["energy_ok"] is True
+
+
 def test_seeding_bess_is_deterministic():
     first = seed_diagram(BASE_PARAMS, db)
     second = seed_diagram(BASE_PARAMS, db)

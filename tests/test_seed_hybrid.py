@@ -140,6 +140,21 @@ def test_seeded_hybrid_solves_hv_with_both_fleets_within_limits_and_energy_met()
     assert branches["bess"]["energy_ok"] is True
 
 
+@pytest.mark.parametrize("p_poc_bess_mw", [20.0, 25.0, 30.0, 35.0, 40.0, 45.0, 50.0, 60.0])
+def test_max_loading_bess_bounds_every_station_in_a_hybrid_seed(p_poc_bess_mw):
+    # Ticket 06: _seed_hybrid reuses _size_bess_fleet, so the same
+    # loading-driven floor on the container count must hold here too.
+    params = dict(BASE_PARAMS)
+    params["p_poc_bess_mw"] = p_poc_bess_mw
+    diagram = seed_diagram(params, db)
+    result = solve_diagram(diagram, db)
+    assert result["issues"] == []
+
+    branches = {b["kind"]: b for b in result["results"]["summary"]["branches"]}
+    assert branches["bess"]["loading_ok"] is True
+    assert branches["bess"]["energy_ok"] is True
+
+
 def test_seeding_hybrid_is_deterministic():
     first = seed_diagram(BASE_PARAMS, db)
     second = seed_diagram(BASE_PARAMS, db)

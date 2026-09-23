@@ -123,6 +123,18 @@ class PlantLayout:
         return sum(tx.rating_at(self.ambient_c) * n for tx, n in self.fleet)
 
     @property
+    def max_station_loading(self) -> float:
+        """The worst per-station loading in the fleet (ticket 06).
+
+        ``fleet_loading`` is the fleet average; a partial last station means
+        every full station can sit above that average even when the average
+        itself reads within the limit. Used by warning/summary callers that
+        need to name the actual failing station, not just the average.
+        """
+        loadings = [plan.loading for circuit in self.circuit_plans for plan in circuit]
+        return max(loadings, default=0.0)
+
+    @property
     def circuit_sizes(self) -> list[int]:
         return [len(c) for c in self.circuit_plans]
 

@@ -127,6 +127,7 @@
             "kind": "bess",
             "loading_ok": false,
             "max_loading": 1.0,
+            "max_station_loading": 3.842376292159707,
             "n_circuits": 1,
             "n_stations": 1,
             "p_inv_kw": 12792.273308527483,
@@ -187,7 +188,7 @@
         {
           "code": "fleet_overloaded",
           "edge_id": null,
-          "message": "The drawn stations carry 384 % of their combined rating \u2014 the required inverter power exceeds the installed station capacity. Add stations or pick bigger units.",
+          "message": "The BESS fleet is overloaded \u2014 its most loaded station is at 384 % against a 100 % maximum (fleet average 384 %). Add stations or pick bigger units.",
           "node_id": "bus"
         },
         {
@@ -339,6 +340,7 @@
             "kind": "bess",
             "loading_ok": true,
             "max_loading": 1.0,
+            "max_station_loading": 0.8303130007157762,
             "n_circuits": 1,
             "n_stations": 1,
             "p_inv_kw": 3158.7483821686233,
@@ -545,6 +547,7 @@
             "kind": "bess",
             "loading_ok": false,
             "max_loading": 1.0,
+            "max_station_loading": 1.2271356645257567,
             "n_circuits": 1,
             "n_stations": 1,
             "p_inv_kw": 3169.426283154361,
@@ -605,7 +608,7 @@
         {
           "code": "fleet_overloaded",
           "edge_id": null,
-          "message": "The drawn stations carry 123 % of their combined rating \u2014 the required inverter power exceeds the installed station capacity. Add stations or pick bigger units.",
+          "message": "The BESS fleet is overloaded \u2014 its most loaded station is at 123 % against a 100 % maximum (fleet average 123 %). Add stations or pick bigger units.",
           "node_id": "bus"
         },
         {
@@ -757,6 +760,7 @@
             "kind": "bess",
             "loading_ok": true,
             "max_loading": 1.0,
+            "max_station_loading": 0.8303130007157762,
             "n_circuits": 1,
             "n_stations": 1,
             "p_inv_kw": 3158.7483821686233,
@@ -950,6 +954,7 @@
             "kind": "bess",
             "loading_ok": false,
             "max_loading": 1.0,
+            "max_station_loading": 1.2271356645257567,
             "n_circuits": 1,
             "n_stations": 1,
             "p_inv_kw": 3169.426283154361,
@@ -1010,7 +1015,7 @@
         {
           "code": "fleet_overloaded",
           "edge_id": null,
-          "message": "The drawn stations carry 123 % of their combined rating \u2014 the required inverter power exceeds the installed station capacity. Add stations or pick bigger units.",
+          "message": "The BESS fleet is overloaded \u2014 its most loaded station is at 123 % against a 100 % maximum (fleet average 123 %). Add stations or pick bigger units.",
           "node_id": "bus"
         },
         {
@@ -1248,6 +1253,7 @@
             "kind": "pv",
             "loading_ok": false,
             "max_loading": 1.0,
+            "max_station_loading": 1.0137034205940367,
             "n_circuits": 1,
             "n_stations": 1,
             "p_inv_kw": 3163.6293199563147,
@@ -1287,6 +1293,7 @@
             "kind": "bess",
             "loading_ok": false,
             "max_loading": 1.0,
+            "max_station_loading": 1.2221994621185222,
             "n_circuits": 1,
             "n_stations": 1,
             "p_inv_kw": 3159.4437839475777,
@@ -1334,7 +1341,7 @@
         {
           "code": "fleet_overloaded",
           "edge_id": null,
-          "message": "One or more drawn transformer stations exceed the fleet's 100 % transformer loading limit (aggregate loading is 101 %). Add stations or pick bigger units.",
+          "message": "The PV fleet is overloaded \u2014 its most loaded station is at 101 % against a 100 % maximum (fleet average 101 %). Add stations or pick bigger units.",
           "node_id": "bus"
         },
         {
@@ -1352,7 +1359,7 @@
         {
           "code": "fleet_overloaded",
           "edge_id": null,
-          "message": "The drawn stations carry 122 % of their combined rating \u2014 the required inverter power exceeds the installed station capacity. Add stations or pick bigger units.",
+          "message": "The BESS fleet is overloaded \u2014 its most loaded station is at 122 % against a 100 % maximum (fleet average 122 %). Add stations or pick bigger units.",
           "node_id": "bus_b"
         },
         {
@@ -1517,6 +1524,7 @@
             "kind": "pv",
             "loading_ok": false,
             "max_loading": 1.0,
+            "max_station_loading": 1.0137034175755788,
             "n_circuits": 1,
             "n_stations": 1,
             "p_inv_kw": 3163.6147359619677,
@@ -1571,7 +1579,7 @@
         {
           "code": "fleet_overloaded",
           "edge_id": null,
-          "message": "One or more drawn transformer stations exceed the fleet's 100 % transformer loading limit (aggregate loading is 101 %). Add stations or pick bigger units.",
+          "message": "The PV fleet is overloaded \u2014 its most loaded station is at 101 % against a 100 % maximum (fleet average 101 %). Add stations or pick bigger units.",
           "node_id": "bus"
         },
         {
@@ -1719,6 +1727,7 @@
             "kind": "pv",
             "loading_ok": true,
             "max_loading": 1.0,
+            "max_station_loading": 0.9392860684042877,
             "n_circuits": 1,
             "n_stations": 1,
             "p_inv_kw": 3160.5274882860413,
@@ -1904,6 +1913,7 @@
             "kind": "pv",
             "loading_ok": true,
             "max_loading": 1.0,
+            "max_station_loading": 0.9971399635440533,
             "n_circuits": 1,
             "n_stations": 1,
             "p_inv_kw": 3113.6147359619677,
@@ -2223,6 +2233,7 @@
               "kind": "pv",
               "loading_ok": true,
               "max_loading": 0.9,
+              "max_station_loading": 0.8750117534721877,
               "n_circuits": 1,
               "n_stations": 3,
               "p_inv_kw": 10525.613253242222,
@@ -4159,6 +4170,7 @@
               "kind": "pv",
               "loading_ok": true,
               "max_loading": 0.9,
+              "max_station_loading": 0.8793199003303668,
               "n_circuits": 7,
               "n_stations": 35,
               "p_inv_kw": 123568.68218924828,
@@ -5040,6 +5052,7 @@
               "kind": "pv",
               "loading_ok": true,
               "max_loading": 0.9,
+              "max_station_loading": 0.8340959776262505,
               "n_circuits": 3,
               "n_stations": 14,
               "p_inv_kw": 46499.2497938449,
@@ -5839,6 +5852,7 @@
               "kind": "pv",
               "loading_ok": true,
               "max_loading": 0.9,
+              "max_station_loading": 0.8472223416871959,
               "n_circuits": 3,
               "n_stations": 13,
               "p_inv_kw": 46899.27446677646,

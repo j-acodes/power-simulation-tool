@@ -14,6 +14,7 @@ function fleet(overrides: Partial<BranchSummary> = {}): BranchSummary {
     p_poc_refined_delivered_kw: 45000,
     fleet_loading: 0.83,
     loading_ok: true,
+    max_station_loading: 0.83,
     max_loading: 1.0,
     bess_aux_p_kw: 0,
     bess_aux_q_kvar: 0,
@@ -93,11 +94,15 @@ describe('evaluateCompliance', () => {
   it('fails on an overloaded fleet', () => {
     // Loading is a per-fleet fact now: the gate is judged against that fleet's
     // own maximum, so the figure lives on the branch, not on the plant summary.
+    // The message names the worst station, with the fleet average as context.
     const verdict = evaluateCompliance(
-      results({ branches: [fleet({ loading_ok: false, fleet_loading: 1.14 })] }),
+      results({
+        branches: [fleet({ loading_ok: false, fleet_loading: 1.14, max_station_loading: 1.2 })],
+      }),
       [],
     )
     expect(verdict.compliant).toBe(false)
+    expect(verdict.reasons[0]).toContain('120%')
     expect(verdict.reasons[0]).toContain('114%')
   })
 
@@ -140,15 +145,25 @@ describe('evaluateCompliance — per-fleet gates', () => {
     const verdict = evaluateCompliance(
       results({
         loading_ok: false,
-        branches: [fleet(), fleet({ kind: 'bess', loading_ok: false, fleet_loading: 1.4, max_loading: 0.9 })],
+        branches: [
+          fleet(),
+          fleet({
+            kind: 'bess',
+            loading_ok: false,
+            fleet_loading: 1.4,
+            max_station_loading: 1.5,
+            max_loading: 0.9,
+          }),
+        ],
       }),
       [],
     )
     expect(verdict.compliant).toBe(false)
     const reason = verdict.reasons.find((r) => r.includes('BESS'))
     expect(reason).toBeDefined()
-    expect(reason).toContain('140')
+    expect(reason).toContain('150')
     expect(reason).toContain('90')
+    expect(reason).toContain('140')
     // The compliant PV fleet must not be blamed alongside it.
     expect(verdict.reasons.some((r) => r.includes('PV'))).toBe(false)
   })

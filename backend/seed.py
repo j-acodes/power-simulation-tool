@@ -444,7 +444,16 @@ def _size_bess_fleet(params: dict, db: ComponentDatabase, v_export_kv: float, *,
             break
         n = next_n
 
-    required = math.ceil((p_poc_kw * discharge_hours) / solution.e_nominal_kwh)
+    # BESS duty is shared across installed PCS (ADR-0008): once the last
+    # station holds fewer containers, every FULL station still carries more
+    # than the fleet average, so an energy-only container count can leave a
+    # full station's own loading over max_loading_bess even though
+    # fleet_loading reads within it. A full station's duty is
+    # S_fleet x maximum / C_total, so the container total must also satisfy
+    # this loading-driven floor (ticket 06).
+    required_energy = math.ceil((p_poc_kw * discharge_hours) / solution.e_nominal_kwh)
+    required_loading = math.ceil((stage1.s_inv_kva * maximum) / station_limit)
+    required = max(required_energy, required_loading)
     if required > n * maximum:
         n = math.ceil(required / maximum)
     containers = _bess_containers(required, maximum, n)
