@@ -8,6 +8,29 @@ one shared HV transformer or point of connection, iterating a fleet's count if t
 multi-branch solve shows it undersized. The substation auxiliary load goes on the first PV busbar.
 Layout: point of connection and HV transformer centred, PV busbars and circuits left, BESS right.
 
+**Key interfaces:**
+- `seed_diagram(params, db)` dispatches on `technology` to `_seed_pv` / `_seed_bess`; `"hybrid"`
+  currently raises `ValueError`. Both fleet paths size a count (PV on inverter capacity; BESS on
+  installed PCS, station rating at ambient × `max_loading_bess`, and energy), call
+  `arrange_plant(...)`, then render with `_layout_to_diagram` / `_layout_to_diagram_bess`. Reuse
+  the sizing parts of both; `_seed_pv` and `_seed_bess` output must stay unchanged for PV-only and
+  BESS-only requests.
+- `SeedRequest` already carries both blocks and requires each when the technology permits it
+  (hybrid requires both). Per-fleet fields: PV `p_poc_mw`, `max_loading`, `trunk_m`, `spacing_m`;
+  BESS `p_poc_bess_mw`, `max_loading_bess`, `trunk_bess_m`, `spacing_bess_m`.
+- Hybrid POC semantics (engine, `graph_to_inputs`): `p_target_mw` is the PV figure and
+  `p_target_bess_mw` the BESS figure when both fleet kinds are drawn. Rules: `max_loading_pv`,
+  `max_loading_bess`, `discharge_hours`. Drawn hybrid shape: `_hybrid_with_drawn_bess()` in
+  `tests/test_hybrid.py`.
+- "Iterate if the real solve shows a fleet undersized": after building the diagram, run the real
+  diagram solve (as the seed tests do) and, while a fleet's loading/PCS/inverter check fails,
+  add one station to that fleet and rebuild; cap the iterations and raise if still failing.
+- Tests must use loading limits below 1.0 (e.g. 0.8 BESS / the PV default); ticket 02's tests
+  hid an overload by using 1.0.
+- Frontend: `SeedWizard.tsx` renders the PV block or the BESS block depending on
+  `designMeta.technology`; hybrid renders both, with shared fields once. `EditorView.tsx` already
+  shows the seed button whenever PV or BESS is permitted.
+
 **Blocked by:** 02: Seed a BESS plant.
 
 **Status:** ready-for-agent
