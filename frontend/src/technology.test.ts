@@ -60,7 +60,12 @@ function pvDiagram(): Diagram {
 function bessDiagram(): Diagram {
   return diagram(
     [
-      node('poc', 'poc', { p_target_bess_mw: 10, pf: 0.95 }),
+      // A BESS-only design carries its target on `p_target_mw` — the
+      // single-fleet reading (see backend.seed._layout_to_diagram_bess and
+      // tests/test_hybrid.py's `_bess_only` fixture) — not
+      // `p_target_bess_mw`, which only exists once a design draws a second
+      // fleet.
+      node('poc', 'poc', { p_target_mw: 10, pf: 0.95 }),
       node('bus_b', 'busbar', { fleet_kind: 'bess' }),
       node('s_b', 'station', { fleet_kind: 'bess' }),
     ],
@@ -126,7 +131,7 @@ describe('convertDiagramTechnology', () => {
       expect(pvDiagram()).toEqual(original)
     })
 
-    it('bess -> hybrid changes no nodes or edges and zeroes the arriving PV target', () => {
+    it('bess -> hybrid changes no nodes or edges, moves the BESS target off p_target_mw, and zeroes the arriving PV target', () => {
       const original = bessDiagram()
       const result = convertDiagramTechnology(original, 'bess', 'hybrid')
 
@@ -134,7 +139,10 @@ describe('convertDiagramTechnology', () => {
       expect(result.edges).toEqual(original.edges)
       const poc = result.nodes.find((n) => n.id === 'poc')!
       expect(poc.props.p_target_mw).toBe(0)
-      expect(poc.props.p_target_bess_mw).toBe(10) // untouched
+      expect(poc.props.p_target_bess_mw).toBe(10) // moved from p_target_mw, not zeroed or lost
+
+      // original is unmodified
+      expect(bessDiagram()).toEqual(original)
     })
   })
 
@@ -183,7 +191,7 @@ describe('convertDiagramTechnology', () => {
       expect(result.settings.rules.max_loading).toBe(0.9) // plant-wide, untouched
     })
 
-    it('hybrid -> bess drops the PV busbar and both PV stations, keeps discharge_hours', () => {
+    it('hybrid -> bess drops the PV busbar and both PV stations, moves the surviving target onto p_target_mw, keeps discharge_hours', () => {
       const original = hybridDiagram()
       const result = convertDiagramTechnology(original, 'hybrid', 'bess')
 
@@ -192,8 +200,12 @@ describe('convertDiagramTechnology', () => {
       expect(result.nodes.some((n) => n.props.fleet_kind === 'pv')).toBe(false)
 
       const poc = result.nodes.find((n) => n.id === 'poc')!
-      expect(poc.props.p_target_mw).toBeUndefined()
-      expect(poc.props.p_target_bess_mw).toBe(10) // surviving fleet's target is untouched
+      // The result is BESS-only, which reads its target off `p_target_mw`
+      // (see the widening test above) — the surviving hybrid figure moves
+      // there rather than being stranded on the now-meaningless
+      // `p_target_bess_mw`.
+      expect(poc.props.p_target_mw).toBe(10)
+      expect(poc.props.p_target_bess_mw).toBeUndefined()
       expect(result.settings.rules.max_loading_pv).toBeUndefined()
       expect(result.settings.rules.discharge_hours).toBe(4) // BESS survives, duration kept
 

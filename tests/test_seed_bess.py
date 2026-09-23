@@ -234,16 +234,24 @@ def test_bess_fields_are_required_only_when_technology_permits_bess():
         SeedRequest(technology="bess", pf_target=0.95, interconnection="MV", v_mv_kv=20.0)
 
 
-def test_api_rejects_a_technology_other_than_pv_or_bess():
-    # Ticket 03 (hybrid seed) is out of scope here — seed_diagram itself
-    # rejects it explicitly rather than silently mis-seeding one fleet.
+def test_api_now_seeds_hybrid_instead_of_rejecting_it():
+    # This test used to pin "technology=hybrid is a 400" (ticket 03 was out
+    # of scope when it was written — see git history for the original
+    # assertion). Ticket 03 lifted that refusal, so the premise this test
+    # guards has flipped: hybrid is a supported technology now, seeded and
+    # solved like PV or BESS. Full hybrid seed behaviour lives in
+    # tests/test_seed_hybrid.py; this one only guards against the 400
+    # regressing.
     params = dict(BASE_PARAMS)
     params.update({
         "technology": "hybrid",
         "p_poc_mw": 10.0, "station_model": "SUNGROW_MVS3200",
         "pv_inverter": "sungrow-sg350hx-20", "inverter_count": 5,
         "trunk_m": 100.0, "spacing_m": 50.0,
+        "max_loading": 0.85,
+        "max_loading_bess": 0.8,
     })
     resp = client.post("/api/seed", json=params)
-    assert resp.status_code == 400
-    assert "hybrid" in resp.json()["detail"]
+    assert resp.status_code == 200
+    solve_resp = client.post("/api/solve", json=resp.json())
+    assert solve_resp.json()["issues"] == []

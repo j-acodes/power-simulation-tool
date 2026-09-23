@@ -129,3 +129,65 @@ describe('SeedWizard on a BESS design', () => {
     })
   })
 })
+
+describe('SeedWizard on a hybrid design', () => {
+  beforeEach(() => {
+    seedDiagram.mockReset()
+    seedDiagram.mockResolvedValue(EMPTY_DIAGRAM)
+    useStore.setState({
+      diagram: EMPTY_DIAGRAM,
+      selection: null,
+      designMeta: { id: 1, name: 'Hybrid design', technology: 'hybrid', version: 1 },
+    })
+  })
+
+  it('shows both the PV and BESS sections, each with its own loading and lengths', async () => {
+    render(<SeedWizard onClose={vi.fn()} />)
+
+    await waitFor(() => expect(screen.getByLabelText('PV Transformer Station')).toBeTruthy())
+    expect(screen.getByLabelText('PV inverter')).toBeTruthy()
+    expect(screen.getByLabelText('Inverters per station')).toBeTruthy()
+    expect(screen.getByLabelText('Discharge duration')).toBeTruthy()
+    expect(screen.getByLabelText('BESS solution')).toBeTruthy()
+    expect(screen.getByLabelText('BESS station')).toBeTruthy()
+
+    // Both target fields show at once (shared fields — pf, interconnection,
+    // voltages, export length, aux — render only once, checked below).
+    expect(screen.getByLabelText('Target PV Active power P (MW)')).toBeTruthy()
+    expect(screen.getByLabelText('Target BESS Active power P (MW)')).toBeTruthy()
+
+    // Per-fleet loading/trunk/spacing are disambiguated so they're each
+    // reachable by their own label, not the single-fleet wizard's bare text.
+    expect(screen.getByLabelText('PV max loading')).toBeTruthy()
+    expect(screen.getByLabelText('BESS max loading')).toBeTruthy()
+    expect(screen.getAllByText(/PV trunk|BESS trunk/)).toHaveLength(2)
+    expect(screen.getAllByText(/PV spacing|BESS spacing/)).toHaveLength(2)
+
+    // Shared fields render exactly once.
+    expect(screen.getAllByLabelText('Interconnection')).toHaveLength(1)
+    expect(screen.getAllByText(/Aux Active power P \(kW\)/)).toHaveLength(1)
+  })
+
+  it('submits both blocks together under technology: hybrid', async () => {
+    render(<SeedWizard onClose={vi.fn()} />)
+
+    await waitFor(() => expect(screen.getByLabelText('PV Transformer Station')).toHaveProperty('value', 'SUNGROW_MVS3200'))
+    await waitFor(() => expect(screen.getByLabelText('BESS station')).toHaveProperty('value', 'tx-2h'))
+
+    fireEvent.change(screen.getByLabelText('Target PV Active power P (MW)'), { target: { value: '10' } })
+    fireEvent.change(screen.getByLabelText('Target BESS Active power P (MW)'), { target: { value: '5' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Seed diagram' }))
+
+    await waitFor(() => expect(seedDiagram).toHaveBeenCalled())
+    expect(seedDiagram.mock.calls[0][0]).toMatchObject({
+      technology: 'hybrid',
+      p_poc_mw: 10,
+      station_model: 'SUNGROW_MVS3200',
+      pv_inverter: 'sungrow-sg350hx-20',
+      p_poc_bess_mw: 5,
+      discharge_hours: 2,
+      bess_solution: 'sol-2h',
+      bess_station_model: 'tx-2h',
+    })
+  })
+})

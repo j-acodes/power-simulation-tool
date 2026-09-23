@@ -33,10 +33,15 @@ export function SeedWizard({ onClose }: SeedWizardProps) {
   const diagram = useStore((s) => s.diagram)
   const loadDiagram = useStore((s) => s.loadDiagram)
   const technology = useStore((s) => s.designMeta?.technology)
-  // A hybrid design's own section (ticket 03) isn't built yet — until then a
-  // design that isn't declared BESS gets the PV wizard unchanged, same as a
-  // design that hasn't loaded (designMeta null: see permitsFleetKind).
   const isBess = technology === 'bess'
+  const isHybrid = technology === 'hybrid'
+  // Which section(s) to render: PV shows for pv, hybrid, or a design that
+  // hasn't loaded yet (permitsFleetKind's fail-open default); BESS shows for
+  // bess or hybrid. A hybrid design shows both, each with its own fields,
+  // the shared fields (interconnection, voltages, pf target, export length,
+  // aux, feeders-per-busbar) rendered once outside either section.
+  const showPv = !isBess
+  const showBess = isBess || isHybrid
   const { confirm, dialog: confirmDialog } = useConfirmDialog()
 
   const [pPocMw, setPPocMw] = useState(REFERENCE.p_poc_mw)
@@ -120,50 +125,47 @@ export function SeedWizard({ onClose }: SeedWizardProps) {
     setMaxLoadingBess((v) => v || catalogue.defaults.rules.max_utilization)
   }, [catalogue])
 
-  const canSubmit = isBess
-    ? Boolean(effectiveBessStationModel) && Boolean(effectiveBessSolution) && effectiveDischargeHours != null
-    : Boolean(effectiveStationModel) && Boolean(effectivePvInverter) && Boolean(selectedPairing)
+  const pvReady = Boolean(effectiveStationModel) && Boolean(effectivePvInverter) && Boolean(selectedPairing)
+  const bessReady = Boolean(effectiveBessStationModel) && Boolean(effectiveBessSolution) && effectiveDischargeHours != null
+  const canSubmit = isHybrid ? pvReady && bessReady : isBess ? bessReady : pvReady
 
   const submit = async (e: FormEvent) => {
     e.preventDefault()
     setError(null)
     setSubmitting(true)
     try {
-      const params: SeedParams = isBess
-        ? {
-            technology: 'bess',
-            pf_target: pfTarget,
-            interconnection,
-            v_hv_kv: interconnection === 'HV' ? vHvKv : null,
-            export_m: exportM,
-            v_mv_kv: vMvKv,
-            aux_p_kw: auxPKw,
-            aux_q_kvar: auxQKvar,
-            p_poc_bess_mw: pPocBessMw,
-            discharge_hours: effectiveDischargeHours ?? 0,
-            bess_solution: effectiveBessSolution,
-            bess_station_model: effectiveBessStationModel,
-            max_loading_bess: maxLoadingBess,
-            trunk_bess_m: trunkBessM,
-            spacing_bess_m: spacingBessM,
-          }
-        : {
-            technology: 'pv',
-            p_poc_mw: pPocMw,
-            pf_target: pfTarget,
-            interconnection,
-            v_hv_kv: interconnection === 'HV' ? vHvKv : null,
-            export_m: exportM,
-            v_mv_kv: vMvKv,
-            station_model: effectiveStationModel,
-            pv_inverter: effectivePvInverter,
-            inverter_count: effectiveInverterCount,
-            max_loading: maxLoading,
-            trunk_m: trunkM,
-            spacing_m: spacingM,
-            aux_p_kw: auxPKw,
-            aux_q_kvar: auxQKvar,
-          }
+      const shared = {
+        pf_target: pfTarget,
+        interconnection,
+        v_hv_kv: interconnection === 'HV' ? vHvKv : null,
+        export_m: exportM,
+        v_mv_kv: vMvKv,
+        aux_p_kw: auxPKw,
+        aux_q_kvar: auxQKvar,
+      }
+      const pvBlock = {
+        p_poc_mw: pPocMw,
+        station_model: effectiveStationModel,
+        pv_inverter: effectivePvInverter,
+        inverter_count: effectiveInverterCount,
+        max_loading: maxLoading,
+        trunk_m: trunkM,
+        spacing_m: spacingM,
+      }
+      const bessBlock = {
+        p_poc_bess_mw: pPocBessMw,
+        discharge_hours: effectiveDischargeHours ?? 0,
+        bess_solution: effectiveBessSolution,
+        bess_station_model: effectiveBessStationModel,
+        max_loading_bess: maxLoadingBess,
+        trunk_bess_m: trunkBessM,
+        spacing_bess_m: spacingBessM,
+      }
+      const params: SeedParams = isHybrid
+        ? { technology: 'hybrid', ...shared, ...pvBlock, ...bessBlock }
+        : isBess
+          ? { technology: 'bess', ...shared, ...bessBlock }
+          : { technology: 'pv', ...shared, ...pvBlock }
       const proposed = (await seedDiagram(params)) as Diagram
       const isEmpty = diagram.nodes.length === 0
       const proceed =
@@ -194,13 +196,13 @@ export function SeedWizard({ onClose }: SeedWizardProps) {
           </p>
 
           <div className="seed-wizard-grid">
-            {!isBess && (
+            {showPv && (
               <label className="field">
-                <span>{`Target ${LABEL.activePowerMw}`}</span>
+                <span>{`Target ${isHybrid ? 'PV ' : ''}${LABEL.activePowerMw}`}</span>
                 <input type="number" step={0.1} min={0} value={pPocMw} onChange={(e) => setPPocMw(e.target.valueAsNumber)} required />
               </label>
             )}
-            {isBess && (
+            {showBess && (
               <label className="field">
                 <span>{`Target BESS ${LABEL.activePowerMw}`}</span>
                 <input type="number" step={0.1} min={0} value={pPocBessMw} onChange={(e) => setPPocBessMw(e.target.valueAsNumber)} required />
@@ -233,7 +235,7 @@ export function SeedWizard({ onClose }: SeedWizardProps) {
               <span>{LABEL.mvKv}</span>
               <input type="number" step={0.1} min={0} value={vMvKv} onChange={(e) => setVMvKv(e.target.valueAsNumber)} required />
             </label>
-            {!isBess && (
+            {showPv && (
               <>
                 <label className="field">
                   <span>PV Transformer Station</span>
@@ -295,21 +297,21 @@ export function SeedWizard({ onClose }: SeedWizardProps) {
                 </label>
 
                 <label className="field">
-                  <span>Max loading</span>
+                  <span>{isHybrid ? 'PV max loading' : 'Max loading'}</span>
                   <input type="number" step={0.01} min={0} max={1} value={maxLoading} onChange={(e) => setMaxLoading(e.target.valueAsNumber)} required />
                 </label>
                 <label className="field">
-                  <span>Trunk {LABEL.lengthM}</span>
+                  <span>{isHybrid ? 'PV trunk' : 'Trunk'} {LABEL.lengthM}</span>
                   <input type="number" step={10} min={0} value={trunkM} onChange={(e) => setTrunkM(e.target.valueAsNumber)} required />
                 </label>
                 <label className="field">
-                  <span>Spacing {LABEL.lengthM}</span>
+                  <span>{isHybrid ? 'PV spacing' : 'Spacing'} {LABEL.lengthM}</span>
                   <input type="number" step={10} min={0} value={spacingM} onChange={(e) => setSpacingM(e.target.valueAsNumber)} required />
                 </label>
               </>
             )}
 
-            {isBess && (
+            {showBess && (
               <>
                 <label className="field">
                   <span>Discharge duration</span>
@@ -361,15 +363,15 @@ export function SeedWizard({ onClose }: SeedWizardProps) {
                 </label>
 
                 <label className="field">
-                  <span>Max loading</span>
+                  <span>{isHybrid ? 'BESS max loading' : 'Max loading'}</span>
                   <input type="number" step={0.01} min={0} max={1} value={maxLoadingBess} onChange={(e) => setMaxLoadingBess(e.target.valueAsNumber)} required />
                 </label>
                 <label className="field">
-                  <span>Trunk {LABEL.lengthM}</span>
+                  <span>{isHybrid ? 'BESS trunk' : 'Trunk'} {LABEL.lengthM}</span>
                   <input type="number" step={10} min={0} value={trunkBessM} onChange={(e) => setTrunkBessM(e.target.valueAsNumber)} required />
                 </label>
                 <label className="field">
-                  <span>Spacing {LABEL.lengthM}</span>
+                  <span>{isHybrid ? 'BESS spacing' : 'Spacing'} {LABEL.lengthM}</span>
                   <input type="number" step={10} min={0} value={spacingBessM} onChange={(e) => setSpacingBessM(e.target.valueAsNumber)} required />
                 </label>
               </>

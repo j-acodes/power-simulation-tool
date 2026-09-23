@@ -1,5 +1,5 @@
 import { busbarSlot } from './canvas/connect'
-import type { Diagram, DiagramNode, FleetKind, Technology } from './types'
+import type { Diagram, DiagramNode, FleetKind, NodeProps, Technology } from './types'
 
 /** Legal clone targets for a design's current technology (ticket 04 / ADR-0002).
  *  `pv` <-> `bess` is never offered in either direction: it would delete the
@@ -106,7 +106,20 @@ export function convertDiagramTechnology(diagram: Diagram, from: Technology, to:
   if (from !== 'hybrid') {
     // Widening: the arriving fleet is whichever of pv/bess `from` isn't.
     const arriving: FleetKind = from === 'pv' ? 'bess' : 'pv'
-    const nodes = diagram.nodes.map((n) => (n.kind === 'poc' ? setPocTargetZero(n, arriving) : n))
+    const nodes = diagram.nodes.map((n) => {
+      if (n.kind !== 'poc') return n
+      if (from === 'bess') {
+        // A BESS-only design carries its target on `p_target_mw` — the
+        // single-fleet reading (see powertool.graph.graph_to_inputs and
+        // backend.seed._layout_to_diagram_bess) — not `p_target_bess_mw`,
+        // which only exists once a second fleet is drawn. The figure moves
+        // onto the field a hybrid actually reads it from before the
+        // arriving PV slot (also `p_target_mw`, for a pv-only design) is
+        // zeroed, or the BESS figure would simply be overwritten.
+        return { ...n, props: { ...n.props, p_target_bess_mw: n.props.p_target_mw, p_target_mw: 0 } }
+      }
+      return setPocTargetZero(n, arriving)
+    })
     return { ...diagram, nodes }
   }
 
@@ -124,7 +137,18 @@ export function convertDiagramTechnology(diagram: Diagram, from: Technology, to:
 
   const nodes = diagram.nodes
     .filter((n) => !removed.has(n.id))
-    .map((n) => (n.kind === 'poc' ? clearPocTarget(n, departing) : n))
+    .map((n) => {
+      if (n.kind !== 'poc') return n
+      if (to === 'bess') {
+        // The survivor is BESS-only, which reads its target off
+        // `p_target_mw` (see the widening branch above) — move the
+        // surviving figure there and drop the hybrid-only field.
+        const props: NodeProps = { ...n.props, p_target_mw: n.props.p_target_bess_mw }
+        delete props.p_target_bess_mw
+        return { ...n, props }
+      }
+      return clearPocTarget(n, departing)
+    })
   const edges = diagram.edges.filter((e) => !removed.has(e.source) && !removed.has(e.target))
 
   const rules = { ...diagram.settings.rules }

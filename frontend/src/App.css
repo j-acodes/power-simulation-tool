@@ -161,6 +161,10 @@ a:focus-visible {
   border-radius: 8px;
   box-shadow: var(--shadow);
   padding: 1.25rem;
+  /* Tall forms (the hybrid seed wizard) scroll inside the dialog rather
+     than pushing the title and actions off-screen. */
+  max-height: calc(100vh - 2rem);
+  overflow-y: auto;
 }
 
 .modal h2 {

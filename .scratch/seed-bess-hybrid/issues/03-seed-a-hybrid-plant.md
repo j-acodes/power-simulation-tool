@@ -33,16 +33,16 @@ Layout: point of connection and HV transformer centred, PV busbars and circuits 
 
 **Blocked by:** 02: Seed a BESS plant.
 
-**Status:** ready-for-agent
+**Status:** done
 
-- [ ] Seeded hybrid carries both fleet power figures on the point of connection and per-kind maximum-loading rules
-- [ ] Seeded hybrid validates and solves with both fleets within their loading limits and energy met
-- [ ] Both HV and MV interconnection variants seed and solve
-- [ ] Auxiliary load hangs off the first PV busbar
-- [ ] PV nodes sit left of BESS nodes; point of connection is centred over both
-- [ ] Wizard on a hybrid design shows both sections with per-fleet lengths and loading
-- [ ] PV-only and BESS-only seeding unchanged
-- [ ] Focused seed tests, wizard test and type checks pass
+- [x] Seeded hybrid carries both fleet power figures on the point of connection and per-kind maximum-loading rules
+- [x] Seeded hybrid validates and solves with both fleets within their loading limits and energy met
+- [x] Both HV and MV interconnection variants seed and solve
+- [x] Auxiliary load hangs off the first PV busbar
+- [x] PV nodes sit left of BESS nodes; point of connection is centred over both
+- [x] Wizard on a hybrid design shows both sections with per-fleet lengths and loading
+- [x] PV-only and BESS-only seeding unchanged
+- [x] Focused seed tests, wizard test and type checks pass
 
 ## Comments
 
