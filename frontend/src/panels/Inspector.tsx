@@ -401,7 +401,13 @@ function NodeProperties({ node }: { node: DiagramNode }) {
               <NumberField
                 label="Containers"
                 value={Number(props.containers_override ?? pairedContainers ?? 0)}
-                onChange={(v) => patch({ containers_override: v })}
+                min={1}
+                max={pairedContainers}
+                onChange={(value) => patch({
+                  containers_override: pairedContainers !== undefined && Number.isFinite(value)
+                    ? Math.min(pairedContainers, Math.max(1, Math.round(value)))
+                    : value,
+                })}
               />
               {props.containers_override === undefined && (
                 <p className="panel-hint">

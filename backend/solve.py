@@ -302,6 +302,36 @@ def _split_reactive(branches: list[BranchInputs], q_total: float) -> list[float]
     return _split_active(branches, q_total)
 
 
+def _allocation_capacities_kw(branch: BranchInputs) -> list[list[float | None]] | None:
+    """Installed conversion capacity per station, positionally matching
+    ``branch.station_ids`` — passed to :func:`~powertool.architecture.
+    arrange_plant_manual` so a station's LV share of duty is proportional to
+    its own conversion equipment rather than its transformer-station rating.
+
+    PV: installed inverter power (ADR-0005). BESS: installed PCS apparent
+    power — containers x PCS units per container x PCS kVA, kVA read as kW at
+    PF-1 the same way ADR-0005 reads inverter power (ADR-0008). ``None`` at a
+    station position when nothing resolves (unknown solution, or a container
+    count that cannot be read) — the same fallback PV already uses, which
+    reverts that one station to transformer-rating allocation. Any other
+    branch kind allocates by transformer-station rating throughout.
+    """
+    if branch.kind == "pv":
+        return [
+            [branch.pv_inverters_by_station[sid].installed_power_kw for sid in ids]
+            for ids in branch.station_ids
+        ]
+    if branch.kind == "bess":
+        def capacity_kw(sid: str) -> float | None:
+            solution, containers = branch.bess_by_station.get(sid, (None, None))
+            if solution is None or containers is None:
+                return None
+            return containers * solution.pcs_count * solution.pcs_s_kva
+
+        return [[capacity_kw(sid) for sid in ids] for ids in branch.station_ids]
+    return None
+
+
 def solve_architecture(inputs: GraphInputs, db: ComponentDatabase):
     """Run the full pipeline for a drawing.
 
@@ -340,13 +370,7 @@ def solve_architecture(inputs: GraphInputs, db: ComponentDatabase):
             max_loading=branch.max_loading,
             kind=branch.kind,
             ambient_c=inputs.ambient_c,
-            allocation_capacities_kw=(
-                [
-                    [branch.pv_inverters_by_station[sid].installed_power_kw for sid in ids]
-                    for ids in branch.station_ids
-                ]
-                if branch.kind == "pv" else None
-            ),
+            allocation_capacities_kw=_allocation_capacities_kw(branch),
         )
         branch_arch = size_branch(
             layout, db.cables_for_voltage(inputs.v_mv_kv),

@@ -473,3 +473,85 @@ def test_container_count_is_reported_on_each_station():
     # read as "none needed".
     pv = client.post("/api/solve", json=_minimal()).json()
     assert "containers" not in pv["results"]["nodes"]["s1"]
+
+
+# --- PCS governs BESS allocation (ADR-0008, ticket 01) ----------------------
+
+def test_bess_station_duty_is_shared_by_installed_pcs_capacity():
+    # s1: GENERIC_BESS_TX_2750_LV069, 1 container -> 1 x 4 x 450 = 1800 kVA
+    # s2: GENERIC_BESS_TX_4000_LV069, 2 containers -> 2 x 4 x 450 = 3600 kVA
+    # Twice the installed PCS must mean exactly twice the LV duty share.
+    diagram = _bess_only(p_target_mw=3.0)
+    diagram["nodes"].append(_node(
+        "s2", "station", mode="catalogue", model="GENERIC_BESS_TX_4000_LV069",
+        fleet_kind="bess", bess_solution="sungrow-st6900ux-4h"))
+    diagram["edges"].append(_edge("e_t2", "s1", "s2", length_m=400.0))
+
+    result = client.post("/api/solve", json=diagram).json()
+
+    assert result["issues"] == []
+    stations = result["results"]["nodes"]
+    assert stations["s1"]["pcs_capacity_kw"] == pytest.approx(1800.0)
+    assert stations["s2"]["pcs_capacity_kw"] == pytest.approx(3600.0)
+    assert stations["s2"]["p_lv_kw"] == pytest.approx(2 * stations["s1"]["p_lv_kw"])
+    assert stations["s2"]["q_lv_kvar"] == pytest.approx(2 * stations["s1"]["q_lv_kvar"])
+
+
+def test_full_mvs7400_station_is_allocated_on_pcs_not_transformer_rating():
+    """A full MVS7400-LS (7400 kVA transformer) paired with 4 containers of
+    ST6900UX-4H installs 4 x 4 x 450 = 7200 kVA of PCS, not the transformer's
+    own 7400 kVA (ADR-0008). Driving LV duty into that 200 kVA gap must trip
+    the PCS check while the transformer-station loading stays compliant —
+    proof the two are checked against different figures, not the same one.
+    """
+    diagram = _bess_only(duration=4.0, model="SUNGROW_MVS7400_LS", p_target_mw=7.2)
+    diagram["nodes"][0]["props"]["pf"] = 1.0
+
+    result = client.post("/api/solve", json=diagram).json()
+
+    assert result["issues"] == []
+    station = result["results"]["nodes"]["s1"]
+    assert station["containers"] == 4
+    assert station["s_rated_kva"] == 7400
+    assert station["pcs_capacity_kw"] == pytest.approx(7200.0)
+    assert station["p_lv_kw"] > 7200.0  # inside the transformer's rating...
+    assert station["p_lv_kw"] < 7400.0  # ...but above the installed PCS
+    assert station["pcs_active_ok"] is False
+    assert station["pcs_apparent_ok"] is False
+    fleet = result["results"]["summary"]["branches"][0]
+    assert fleet["loading_ok"] is True  # the transformer station is unaffected
+    codes = {w["code"] for w in result["results"]["warnings"]}
+    assert "pcs_active_capacity_exceeded" in codes
+    assert "pcs_apparent_capacity_exceeded" in codes
+
+
+def test_pcs_capacity_violations_warn_but_return_results():
+    diagram = _bess_only(duration=4.0)  # 3 MW target against 1800 kVA of PCS
+
+    result = client.post("/api/solve", json=diagram).json()
+
+    assert result["issues"] == []
+    assert result["results"] is not None
+    station = result["results"]["nodes"]["s1"]
+    assert station["pcs_capacity_kw"] == pytest.approx(1800.0)
+    assert station["pcs_active_ok"] is False
+    assert station["pcs_apparent_ok"] is False
+    codes = {w["code"] for w in result["results"]["warnings"]}
+    assert "pcs_active_capacity_exceeded" in codes
+    assert "pcs_apparent_capacity_exceeded" in codes
+
+
+def test_container_override_above_the_pairing_is_an_error_equal_to_it_validates():
+    # GENERIC_BESS_TX_2750_LV069 pairs sungrow-st6900ux-4h at 1 container.
+    at_maximum = _bess_only(duration=4.0)
+    at_maximum["nodes"][2]["props"]["containers_override"] = 1
+    assert validate_graph(at_maximum, db) == []
+
+    above_maximum = _bess_only(duration=4.0)
+    above_maximum["nodes"][2]["props"]["containers_override"] = 2
+    codes = {i.code for i in validate_graph(above_maximum, db)}
+    assert "containers_above_pairing" in codes
+
+    resp = client.post("/api/solve", json=above_maximum).json()
+    assert resp["results"] is None
+    assert "containers_above_pairing" in {i["code"] for i in resp["issues"]}

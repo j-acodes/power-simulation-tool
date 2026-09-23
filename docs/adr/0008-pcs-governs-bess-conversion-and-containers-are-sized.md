@@ -30,6 +30,7 @@ to solve. The PCS publishes no ambient dependence, so there is no ambient lookup
 
 ## Consequences
 
-Every BESS and hybrid result shifts, full stations included, because allocation now reads PCS
-(4 × 1800 = 7200 kVA) rather than transformer rating (7400 kVA). Saved designs whose container
-override exceeds the pairing stop solving until corrected.
+A fleet of identically populated stations splits exactly as before, because allocation is
+proportional; only fleets whose stations hold different container counts shift. Every BESS
+station now also reports its PCS loading, and one whose PCS is smaller than its duty warns.
+Saved designs whose container override exceeds the pairing stop solving until corrected.

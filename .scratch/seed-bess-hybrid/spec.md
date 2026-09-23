@@ -116,6 +116,6 @@ BESS maximum-loading limit. A container count above the pairing maximum is a val
 
 ## Further Notes
 
-Existing BESS and hybrid results shift (a full MVS7400-LS station is allocated as 7200 kVA of PCS,
-not 7400 kVA of transformer). Saved designs with an override above the pairing stop solving.
+Existing BESS results shift only where stations in one fleet hold different container counts;
+every BESS station gains a PCS loading check. Saved designs with an override above the pairing stop solving.
 The database is reset only with the owner's explicit authorization.

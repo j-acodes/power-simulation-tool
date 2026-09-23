@@ -266,6 +266,36 @@ describe('Inspector — expand control for a placed station (ticket 06)', () => 
     expect(screen.getByText('DC input')).toBeTruthy()
   })
 
+  it('bounds the container count input at the pairing maximum', () => {
+    // bessTransformer pairs sungrow-st6900ux-4h at 1 container (see the
+    // catalogue fixture above) — the same "canvas input capped at the
+    // pairing" rule ticket 01 applies to the PV inverter count.
+    withNode({
+      id: 'n1', kind: 'station', x: 0, y: 0,
+      props: { fleet_kind: 'bess', mode: 'catalogue', model: bessTransformer.key, bess_solution: bessSolution.key },
+    })
+    render(<Inspector />)
+
+    const containers = screen.getByLabelText('Containers')
+    expect(containers.getAttribute('min')).toBe('1')
+    expect(containers.getAttribute('max')).toBe('1')
+    fireEvent.change(containers, { target: { value: '2' } })
+    expect(useStore.getState().diagram.nodes[0].props.containers_override).toBe(1)
+  })
+
+  it('leaves the container count input unbounded with no pairing default', () => {
+    withNode({
+      id: 'n1', kind: 'station', x: 0, y: 0,
+      props: { fleet_kind: 'bess', mode: 'catalogue', model: bessTransformer.key, bess_solution: 'unknown-solution' },
+    })
+    render(<Inspector />)
+
+    const containers = screen.getByLabelText('Containers')
+    expect(containers.getAttribute('max')).toBeNull()
+    fireEvent.change(containers, { target: { value: '9' } })
+    expect(useStore.getState().diagram.nodes[0].props.containers_override).toBe(9)
+  })
+
   it('edits one generated station without changing its peers', () => {
     const first: DiagramNode = {
       id: 'n1', kind: 'station', x: 0, y: 0,

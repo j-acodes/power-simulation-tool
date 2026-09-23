@@ -900,6 +900,19 @@ def _check_props(nodes, tree, db, diagram, issues) -> None:
                             f"Station '{nid}' has containers_override "
                             f"{override!r}; it must be a positive whole number.",
                             node_id=nid))
+                    elif mode == "catalogue" and isinstance(solution_name, str):
+                        # Re-reads the model/pairing rather than reusing the
+                        # locals above: those only exist once a solution
+                        # resolves, and an override can be checked even when
+                        # the solution itself is unknown or unpaired.
+                        maximum = (_pairings_for(props, db) or {}).get(solution_name)
+                        if maximum is not None and override > maximum:
+                            issues.append(GraphIssue(
+                                "containers_above_pairing",
+                                f"Station '{nid}' has containers_override "
+                                f"{override} above the {maximum} containers "
+                                f"{props.get('model')!r} is paired to sell "
+                                f"for {solution_name!r}.", node_id=nid))
             elif fleet_kind == "pv":
                 if mode == "custom":
                     if _custom_pv_inverter(props) is None:
@@ -1967,6 +1980,45 @@ def map_results(inputs: GraphInputs, stage1s: list[SizingResult],
                             f"power for station '{node_id}'.",
                             node_id=node_id,
                         ))
+                if branch_inputs.kind == "bess":
+                    solution, containers = branch_inputs.bess_by_station.get(
+                        node_id, (None, None))
+                    if solution is not None and containers is not None:
+                        # ADR-0008: the PCS reading is PF-1 (one figure is
+                        # both the active kW limit and apparent kVA limit),
+                        # checked independently at 100% of installed PCS,
+                        # exactly as ADR-0005 reads installed inverter power.
+                        # The PCS publishes no ambient dependence, so there is
+                        # no ambient lookup or fallback notice to mirror here.
+                        capacity = containers * solution.pcs_count * solution.pcs_s_kva
+                        active_ok = station.p_lv_kw <= capacity + 1e-9
+                        apparent_ok = station.s_lv_kva <= capacity + 1e-9
+                        station_payload.update({
+                            "pcs_model": solution.display_name,
+                            "pcs_unit_count": containers * solution.pcs_count,
+                            "pcs_unit_power_kva": solution.pcs_s_kva,
+                            "pcs_capacity_kw": capacity,
+                            "pcs_active_loading": station.p_lv_kw / capacity,
+                            "pcs_apparent_loading": station.s_lv_kva / capacity,
+                            "pcs_active_ok": active_ok,
+                            "pcs_apparent_ok": apparent_ok,
+                        })
+                        if not active_ok:
+                            warnings.append(GraphIssue(
+                                "pcs_active_capacity_exceeded",
+                                f"Station '{node_id}' needs {station.p_lv_kw:,.0f} kW "
+                                f"from its PCS, above the installed {capacity:,.0f} "
+                                f"kW active-power limit.",
+                                node_id=node_id,
+                            ))
+                        if not apparent_ok:
+                            warnings.append(GraphIssue(
+                                "pcs_apparent_capacity_exceeded",
+                                f"Station '{node_id}' needs {station.s_lv_kva:,.0f} kVA "
+                                f"from its PCS, above the installed {capacity:,.0f} "
+                                f"kVA apparent-power limit.",
+                                node_id=node_id,
+                            ))
                 nodes[node_id] = station_payload
                 # A circuit that is collectively too heavy for a station's
                 # switchgear still solves and reports every current — the
