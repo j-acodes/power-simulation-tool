@@ -26,15 +26,15 @@ maximum.
 
 **Blocked by:** None (can start immediately).
 
-**Status:** ready-for-agent
+**Status:** done
 
-- [ ] Two BESS stations with different container counts receive P/Q shares proportional to installed PCS
-- [ ] A full MVS7400-LS + ST6900UX-4H station is allocated on 4 × PCS kVA × PCS units, not 7400 kVA
-- [ ] PCS active and apparent over-limit each produce a warning; results are still returned
-- [ ] Transformer-station loading still uses allocated duty and the BESS maximum-loading limit
-- [ ] A container override above the pairing count is an error on that station; equal to it validates
-- [ ] A hybrid with zero BESS power still reproduces PV-only exactly
-- [ ] PV behaviour is unchanged
-- [ ] The canvas container-count input cannot exceed the pairing maximum
-- [ ] Focused tests pass at the diagram-solve seam; Python and TypeScript type checks pass
-- [ ] Golden baseline differences are limited to BESS/hybrid cases and listed in the report (baseline refresh itself is ticket 04)
+- [x] Two BESS stations with different container counts receive P/Q shares proportional to installed PCS
+- [x] A full MVS7400-LS + ST6900UX-4H station is allocated on 4 × PCS kVA × PCS units, not 7400 kVA
+- [x] PCS active and apparent over-limit each produce a warning; results are still returned
+- [x] Transformer-station loading still uses allocated duty and the BESS maximum-loading limit
+- [x] A container override above the pairing count is an error on that station; equal to it validates
+- [x] A hybrid with zero BESS power still reproduces PV-only exactly
+- [x] PV behaviour is unchanged
+- [x] The canvas container-count input cannot exceed the pairing maximum
+- [x] Focused tests pass at the diagram-solve seam; Python and TypeScript type checks pass
+- [x] Golden baseline differences are limited to BESS/hybrid cases and listed in the report (baseline refresh itself is ticket 04)
