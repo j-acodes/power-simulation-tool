@@ -9,6 +9,21 @@ maximum-loading limit. A container override above the pairing count for the stat
 solution is an error-severity validation issue; the canvas container input is capped at that
 maximum.
 
+**Key interfaces:**
+- `arrange_plant_manual(..., allocation_capacities_kw: list[list[float | None]] | None)` already
+  shares duty by per-station capacity. The diagram solve passes installed inverter power for PV
+  branches and `None` for BESS; pass installed PCS for BESS:
+  `containers * solution.pcs_count * solution.pcs_s_kva` (kVA used as kW, PF-1 reading per ADR-0005).
+- Container count comes from `_bess_container_count(props, db, solution)`; the pairing maximum is
+  `db.bess_pairings[transformer_key][solution_key]`.
+- PV warnings to mirror: `inverter_active_capacity_exceeded` / `inverter_apparent_capacity_exceeded`
+  in result mapping (`station.p_lv_kw` / `station.s_lv_kva` vs capacity, 1e-9 tolerance). Add
+  `pcs_active_capacity_exceeded` / `pcs_apparent_capacity_exceeded` with the same severity.
+- Validation: `_check_props` already rejects a non-positive `containers_override` as `bad_props`;
+  add an error-severity issue `containers_above_pairing` when it exceeds the pairing maximum.
+- Frontend: the station inspector caps the PV inverter count at `selectedPvPairing.maximum_count`
+  with `Math.min`; cap `containers_override` at the paired container count the same way.
+
 **Blocked by:** None (can start immediately).
 
 **Status:** ready-for-agent
