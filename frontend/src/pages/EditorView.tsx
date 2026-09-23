@@ -44,6 +44,10 @@ export function EditorView({ title, headerLeft, headerRight }: EditorViewProps) 
   // share one check rather than each growing a bess-specific special case.
   // See docs/adr/0002-technology-declared-not-derived.md.
   const canDrawPv = permitsFleetKind(technology, 'pv')
+  // The wizard itself picks PV vs. BESS inputs off the same technology
+  // (ticket 02); the button only needs to know whether either fleet kind is
+  // seedable — a "Load example plant" (PV-only) exception below.
+  const canSeed = canDrawPv || permitsFleetKind(technology, 'bess')
   return (
     <div className="app">
       <header className="app-header">
@@ -52,7 +56,7 @@ export function EditorView({ title, headerLeft, headerRight }: EditorViewProps) 
           <h1>{title}</h1>
         </div>
         <div className="app-header-actions">
-          {canDrawPv && (
+          {canSeed && (
             <button type="button" onClick={() => setShowSeedWizard(true)}>
               Seed from POC target…
             </button>

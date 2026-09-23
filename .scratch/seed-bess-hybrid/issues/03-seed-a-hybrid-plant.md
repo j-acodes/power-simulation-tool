@@ -20,3 +20,10 @@ Layout: point of connection and HV transformer centred, PV busbars and circuits 
 - [ ] Wizard on a hybrid design shows both sections with per-fleet lengths and loading
 - [ ] PV-only and BESS-only seeding unchanged
 - [ ] Focused seed tests, wizard test and type checks pass
+
+## Comments
+
+- 2026-09-23 (ticket 02 implementer): `frontend/src/technology.ts` `convertDiagramTechnology`
+  zeroes/reads `p_target_bess_mw` when cloning a BESS-only design to/from hybrid. A BESS-only
+  design carries its target on `p_target_mw`, so the BESS figure may not carry over on a clone.
+  Check while touching hybrid POC fields.

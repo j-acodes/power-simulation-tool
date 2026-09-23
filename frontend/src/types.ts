@@ -593,23 +593,37 @@ export interface DesignFull {
 // (see backend/seed.py), not a wrapped shape.
 
 export interface SeedParams {
-  p_poc_mw: number
+  /** Which section(s) the wizard must fill — mirrors SeedRequest.technology.
+   *  Defaults to 'pv' server-side; the wizard always sends it explicitly. */
+  technology: Technology
   pf_target: number
   interconnection: 'HV' | 'MV'
   v_hv_kv?: number | null
   export_m: number
   v_mv_kv: number
-  station_model: string
-  pv_inverter: string
-  inverter_count: number
-  max_loading: number
-  trunk_m: number
-  spacing_m: number
   aux_p_kw?: number
   aux_q_kvar?: number
   /** How many circuits a Stage-1 busbar carries before another opens
    *  (ADR-0007, ticket 06). Unset means the backend's default of 12. */
   feeders_per_busbar?: number
+
+  // --- PV block: required only when `technology` permits PV --------------
+  p_poc_mw?: number
+  station_model?: string
+  pv_inverter?: string
+  inverter_count?: number
+  max_loading?: number
+  trunk_m?: number
+  spacing_m?: number
+
+  // --- BESS block: required only when `technology` permits BESS ----------
+  p_poc_bess_mw?: number
+  discharge_hours?: number
+  bess_solution?: string
+  bess_station_model?: string
+  max_loading_bess?: number
+  trunk_bess_m?: number
+  spacing_bess_m?: number
 }
 
 // --- Stage-1 conceptual sizing (POST /api/stage1) ---------------------------

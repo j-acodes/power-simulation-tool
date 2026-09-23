@@ -32,6 +32,11 @@ export function SeedWizard({ onClose }: SeedWizardProps) {
   const catalogue = useCatalogue()
   const diagram = useStore((s) => s.diagram)
   const loadDiagram = useStore((s) => s.loadDiagram)
+  const technology = useStore((s) => s.designMeta?.technology)
+  // A hybrid design's own section (ticket 03) isn't built yet — until then a
+  // design that isn't declared BESS gets the PV wizard unchanged, same as a
+  // design that hasn't loaded (designMeta null: see permitsFleetKind).
+  const isBess = technology === 'bess'
   const { confirm, dialog: confirmDialog } = useConfirmDialog()
 
   const [pPocMw, setPPocMw] = useState(REFERENCE.p_poc_mw)
@@ -48,6 +53,15 @@ export function SeedWizard({ onClose }: SeedWizardProps) {
   const [spacingM, setSpacingM] = useState(REFERENCE.spacing_m)
   const [auxPKw, setAuxPKw] = useState(REFERENCE.aux_p_kw)
   const [auxQKvar, setAuxQKvar] = useState(REFERENCE.aux_q_kvar)
+
+  // --- BESS section (ticket 02): duration -> solution -> station cascade ---
+  const [pPocBessMw, setPPocBessMw] = useState(0)
+  const [dischargeHours, setDischargeHours] = useState<number | null>(null)
+  const [bessSolution, setBessSolution] = useState('')
+  const [bessStationModel, setBessStationModel] = useState('')
+  const [maxLoadingBess, setMaxLoadingBess] = useState(0)
+  const [trunkBessM, setTrunkBessM] = useState(REFERENCE.trunk_m)
+  const [spacingBessM, setSpacingBessM] = useState(REFERENCE.spacing_m)
 
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -70,6 +84,29 @@ export function SeedWizard({ onClose }: SeedWizardProps) {
   const selectedPairing = pairings[effectivePvInverter]
   const effectiveInverterCount = inverterCount ?? selectedPairing?.maximum_count ?? 0
 
+  // Change PRODUCT, not duration (see powertool.graph.supported_durations):
+  // the duration select offers every duration on offer across the BESS
+  // catalogue; picking one narrows the solution select to solutions that
+  // sell it, and picking a solution narrows the station select to stations
+  // paired with it.
+  const durations = useMemo(
+    () => [...new Set((catalogue?.bess_solutions ?? []).map((s) => s.duration_h))].sort((a, b) => a - b),
+    [catalogue],
+  )
+  const effectiveDischargeHours = dischargeHours ?? durations[0] ?? null
+  const solutionsForDuration = (catalogue?.bess_solutions ?? []).filter(
+    (s) => s.duration_h === effectiveDischargeHours,
+  )
+  const effectiveBessSolution = solutionsForDuration.some((s) => s.key === bessSolution)
+    ? bessSolution
+    : solutionsForDuration[0]?.key ?? ''
+  const eligibleBessStations = (catalogue?.bess_transformers ?? []).filter(
+    (station) => effectiveBessSolution in station.paired_solutions,
+  )
+  const effectiveBessStationModel = eligibleBessStations.some((s) => s.key === bessStationModel)
+    ? bessStationModel
+    : eligibleBessStations[0]?.key ?? ''
+
   // Fill catalogue-derived defaults once they arrive, without clobbering
   // anything the user has already changed.
   useEffect(() => {
@@ -79,29 +116,54 @@ export function SeedWizard({ onClose }: SeedWizardProps) {
     // oxlint-disable-next-line react/set-state-in-effect
     setVMvKv((v) => v || catalogue.defaults.tiers.mv_kv)
     setMaxLoading((v) => v || catalogue.defaults.rules.max_utilization)
+    // oxlint-disable-next-line react/set-state-in-effect
+    setMaxLoadingBess((v) => v || catalogue.defaults.rules.max_utilization)
   }, [catalogue])
+
+  const canSubmit = isBess
+    ? Boolean(effectiveBessStationModel) && Boolean(effectiveBessSolution) && effectiveDischargeHours != null
+    : Boolean(effectiveStationModel) && Boolean(effectivePvInverter) && Boolean(selectedPairing)
 
   const submit = async (e: FormEvent) => {
     e.preventDefault()
     setError(null)
     setSubmitting(true)
     try {
-      const params: SeedParams = {
-        p_poc_mw: pPocMw,
-        pf_target: pfTarget,
-        interconnection,
-        v_hv_kv: interconnection === 'HV' ? vHvKv : null,
-        export_m: exportM,
-        v_mv_kv: vMvKv,
-        station_model: effectiveStationModel,
-        pv_inverter: effectivePvInverter,
-        inverter_count: effectiveInverterCount,
-        max_loading: maxLoading,
-        trunk_m: trunkM,
-        spacing_m: spacingM,
-        aux_p_kw: auxPKw,
-        aux_q_kvar: auxQKvar,
-      }
+      const params: SeedParams = isBess
+        ? {
+            technology: 'bess',
+            pf_target: pfTarget,
+            interconnection,
+            v_hv_kv: interconnection === 'HV' ? vHvKv : null,
+            export_m: exportM,
+            v_mv_kv: vMvKv,
+            aux_p_kw: auxPKw,
+            aux_q_kvar: auxQKvar,
+            p_poc_bess_mw: pPocBessMw,
+            discharge_hours: effectiveDischargeHours ?? 0,
+            bess_solution: effectiveBessSolution,
+            bess_station_model: effectiveBessStationModel,
+            max_loading_bess: maxLoadingBess,
+            trunk_bess_m: trunkBessM,
+            spacing_bess_m: spacingBessM,
+          }
+        : {
+            technology: 'pv',
+            p_poc_mw: pPocMw,
+            pf_target: pfTarget,
+            interconnection,
+            v_hv_kv: interconnection === 'HV' ? vHvKv : null,
+            export_m: exportM,
+            v_mv_kv: vMvKv,
+            station_model: effectiveStationModel,
+            pv_inverter: effectivePvInverter,
+            inverter_count: effectiveInverterCount,
+            max_loading: maxLoading,
+            trunk_m: trunkM,
+            spacing_m: spacingM,
+            aux_p_kw: auxPKw,
+            aux_q_kvar: auxQKvar,
+          }
       const proposed = (await seedDiagram(params)) as Diagram
       const isEmpty = diagram.nodes.length === 0
       const proceed =
@@ -132,10 +194,18 @@ export function SeedWizard({ onClose }: SeedWizardProps) {
           </p>
 
           <div className="seed-wizard-grid">
-            <label className="field">
-              <span>{`Target ${LABEL.activePowerMw}`}</span>
-              <input type="number" step={0.1} min={0} value={pPocMw} onChange={(e) => setPPocMw(e.target.valueAsNumber)} required />
-            </label>
+            {!isBess && (
+              <label className="field">
+                <span>{`Target ${LABEL.activePowerMw}`}</span>
+                <input type="number" step={0.1} min={0} value={pPocMw} onChange={(e) => setPPocMw(e.target.valueAsNumber)} required />
+              </label>
+            )}
+            {isBess && (
+              <label className="field">
+                <span>{`Target BESS ${LABEL.activePowerMw}`}</span>
+                <input type="number" step={0.1} min={0} value={pPocBessMw} onChange={(e) => setPPocBessMw(e.target.valueAsNumber)} required />
+              </label>
+            )}
             <label className="field">
               <span>{LABEL.powerFactor}</span>
               <input type="number" step={0.01} min={0} max={1} value={pfTarget} onChange={(e) => setPfTarget(e.target.valueAsNumber)} required />
@@ -163,77 +233,147 @@ export function SeedWizard({ onClose }: SeedWizardProps) {
               <span>{LABEL.mvKv}</span>
               <input type="number" step={0.1} min={0} value={vMvKv} onChange={(e) => setVMvKv(e.target.valueAsNumber)} required />
             </label>
-            <label className="field">
-              <span>PV Transformer Station</span>
-              <select
-                value={effectiveStationModel}
-                onChange={(e) => {
-                  const key = e.target.value
-                  const station = eligibleStations.find((candidate) => candidate.key === key)
-                  const deployed = defaultInverterSelection(station)
-                  setStationModel(key)
-                  setPvInverter(deployed.pv_inverter)
-                  setInverterCount(deployed.inverter_count ?? null)
-                }}
-                required
-              >
-                <option value="">— select —</option>
-                {eligibleStations.map((tx) => (
-                  <option key={tx.key} value={tx.key}>
-                    {tx.display_name}
-                  </option>
-                ))}
-              </select>
-            </label>
+            {!isBess && (
+              <>
+                <label className="field">
+                  <span>PV Transformer Station</span>
+                  <select
+                    value={effectiveStationModel}
+                    onChange={(e) => {
+                      const key = e.target.value
+                      const station = eligibleStations.find((candidate) => candidate.key === key)
+                      const deployed = defaultInverterSelection(station)
+                      setStationModel(key)
+                      setPvInverter(deployed.pv_inverter)
+                      setInverterCount(deployed.inverter_count ?? null)
+                    }}
+                    required
+                  >
+                    <option value="">— select —</option>
+                    {eligibleStations.map((tx) => (
+                      <option key={tx.key} value={tx.key}>
+                        {tx.display_name}
+                      </option>
+                    ))}
+                  </select>
+                </label>
 
-            <label className="field">
-              <span>PV inverter</span>
-              <select
-                value={effectivePvInverter}
-                onChange={(e) => {
-                  const key = e.target.value
-                  setPvInverter(key)
-                  setInverterCount(pairings[key]?.maximum_count ?? null)
-                }}
-                required
-              >
-                <option value="">— select —</option>
-                {inverterOptions.map((inverter) => (
-                  <option key={inverter.key} value={inverter.key}>{inverter.display_name}</option>
-                ))}
-              </select>
-            </label>
+                <label className="field">
+                  <span>PV inverter</span>
+                  <select
+                    value={effectivePvInverter}
+                    onChange={(e) => {
+                      const key = e.target.value
+                      setPvInverter(key)
+                      setInverterCount(pairings[key]?.maximum_count ?? null)
+                    }}
+                    required
+                  >
+                    <option value="">— select —</option>
+                    {inverterOptions.map((inverter) => (
+                      <option key={inverter.key} value={inverter.key}>{inverter.display_name}</option>
+                    ))}
+                  </select>
+                </label>
 
-            <label className="field">
-              <span>Inverters per station</span>
-              <input
-                type="number"
-                step={1}
-                min={1}
-                max={selectedPairing?.maximum_count}
-                value={effectiveInverterCount || ''}
-                onChange={(e) => {
-                  const value = e.target.valueAsNumber
-                  setInverterCount(selectedPairing && Number.isFinite(value)
-                    ? Math.min(selectedPairing.maximum_count, Math.max(1, Math.round(value)))
-                    : selectedPairing?.maximum_count ?? null)
-                }}
-                required
-              />
-            </label>
+                <label className="field">
+                  <span>Inverters per station</span>
+                  <input
+                    type="number"
+                    step={1}
+                    min={1}
+                    max={selectedPairing?.maximum_count}
+                    value={effectiveInverterCount || ''}
+                    onChange={(e) => {
+                      const value = e.target.valueAsNumber
+                      setInverterCount(selectedPairing && Number.isFinite(value)
+                        ? Math.min(selectedPairing.maximum_count, Math.max(1, Math.round(value)))
+                        : selectedPairing?.maximum_count ?? null)
+                    }}
+                    required
+                  />
+                </label>
 
-            <label className="field">
-              <span>Max loading</span>
-              <input type="number" step={0.01} min={0} max={1} value={maxLoading} onChange={(e) => setMaxLoading(e.target.valueAsNumber)} required />
-            </label>
-            <label className="field">
-              <span>Trunk {LABEL.lengthM}</span>
-              <input type="number" step={10} min={0} value={trunkM} onChange={(e) => setTrunkM(e.target.valueAsNumber)} required />
-            </label>
-            <label className="field">
-              <span>Spacing {LABEL.lengthM}</span>
-              <input type="number" step={10} min={0} value={spacingM} onChange={(e) => setSpacingM(e.target.valueAsNumber)} required />
-            </label>
+                <label className="field">
+                  <span>Max loading</span>
+                  <input type="number" step={0.01} min={0} max={1} value={maxLoading} onChange={(e) => setMaxLoading(e.target.valueAsNumber)} required />
+                </label>
+                <label className="field">
+                  <span>Trunk {LABEL.lengthM}</span>
+                  <input type="number" step={10} min={0} value={trunkM} onChange={(e) => setTrunkM(e.target.valueAsNumber)} required />
+                </label>
+                <label className="field">
+                  <span>Spacing {LABEL.lengthM}</span>
+                  <input type="number" step={10} min={0} value={spacingM} onChange={(e) => setSpacingM(e.target.valueAsNumber)} required />
+                </label>
+              </>
+            )}
+
+            {isBess && (
+              <>
+                <label className="field">
+                  <span>Discharge duration</span>
+                  <select
+                    value={effectiveDischargeHours ?? ''}
+                    onChange={(e) => {
+                      setDischargeHours(Number(e.target.value))
+                      setBessSolution('')
+                      setBessStationModel('')
+                    }}
+                    required
+                  >
+                    <option value="">— select —</option>
+                    {durations.map((hours) => (
+                      <option key={hours} value={hours}>{`${hours} h`}</option>
+                    ))}
+                  </select>
+                </label>
+
+                <label className="field">
+                  <span>BESS solution</span>
+                  <select
+                    value={effectiveBessSolution}
+                    onChange={(e) => {
+                      setBessSolution(e.target.value)
+                      setBessStationModel('')
+                    }}
+                    required
+                  >
+                    <option value="">— select —</option>
+                    {solutionsForDuration.map((solution) => (
+                      <option key={solution.key} value={solution.key}>{solution.display_name}</option>
+                    ))}
+                  </select>
+                </label>
+
+                <label className="field">
+                  <span>BESS station</span>
+                  <select
+                    value={effectiveBessStationModel}
+                    onChange={(e) => setBessStationModel(e.target.value)}
+                    required
+                  >
+                    <option value="">— select —</option>
+                    {eligibleBessStations.map((station) => (
+                      <option key={station.key} value={station.key}>{station.display_name}</option>
+                    ))}
+                  </select>
+                </label>
+
+                <label className="field">
+                  <span>Max loading</span>
+                  <input type="number" step={0.01} min={0} max={1} value={maxLoadingBess} onChange={(e) => setMaxLoadingBess(e.target.valueAsNumber)} required />
+                </label>
+                <label className="field">
+                  <span>Trunk {LABEL.lengthM}</span>
+                  <input type="number" step={10} min={0} value={trunkBessM} onChange={(e) => setTrunkBessM(e.target.valueAsNumber)} required />
+                </label>
+                <label className="field">
+                  <span>Spacing {LABEL.lengthM}</span>
+                  <input type="number" step={10} min={0} value={spacingBessM} onChange={(e) => setSpacingBessM(e.target.valueAsNumber)} required />
+                </label>
+              </>
+            )}
 
             <label className="field">
               <span>Aux {LABEL.activePowerKw} (optional)</span>
@@ -250,7 +390,7 @@ export function SeedWizard({ onClose }: SeedWizardProps) {
             <button type="button" onClick={onClose}>
               Cancel
             </button>
-            <button type="submit" disabled={submitting || !effectiveStationModel || !effectivePvInverter || !selectedPairing}>
+            <button type="submit" disabled={submitting || !canSubmit}>
               {submitting ? 'Seeding…' : 'Seed diagram'}
             </button>
           </div>

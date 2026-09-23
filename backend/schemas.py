@@ -74,26 +74,47 @@ class SeedRequest(BaseModel):
     """Wizard params for ``POST /api/seed`` — see backend.seed.seed_diagram.
 
     A response is the diagram dict it produces (no response_model: the diagram
-    schema lives in ``powertool.graph``, not here).
+    schema lives in ``powertool.graph``, not here). ``technology`` decides which
+    block below is required: the PV block only when the design permits PV
+    ("pv" or "hybrid"), the BESS block only when it permits BESS ("bess" or
+    "hybrid") — mirroring ADR-0002's declared-technology stance. Interconnection,
+    voltages, power-factor target, export length, auxiliary load and
+    feeders-per-busbar are shared by every technology; a solution/station
+    pairing mismatch (wrong duration, unpaired station) is rejected by
+    ``backend.seed.seed_diagram`` itself, which has the catalogue in scope —
+    not here.
     """
 
-    p_poc_mw: float
+    technology: Technology = "pv"
+
     pf_target: float
     interconnection: Literal["HV", "MV"]
     v_hv_kv: float | None = None
     export_m: float = 0.0
     v_mv_kv: float
-    station_model: str
-    pv_inverter: str
-    inverter_count: int = Field(ge=1)
-    max_loading: float = 1.0
-    trunk_m: float
-    spacing_m: float
     aux_p_kw: float = 0.0
     aux_q_kvar: float = 0.0
     # How many circuits a Stage-1 busbar carries before another is opened
     # (ADR-0007, ticket 06) — matches powertool.graph.DEFAULT_RULES's default.
     feeders_per_busbar: int = Field(default=12, ge=1)
+
+    # --- PV block: required only when `technology` permits PV -------------
+    p_poc_mw: float | None = None
+    station_model: str | None = None
+    pv_inverter: str | None = None
+    inverter_count: int | None = Field(default=None, ge=1)
+    max_loading: float = 1.0
+    trunk_m: float | None = None
+    spacing_m: float | None = None
+
+    # --- BESS block: required only when `technology` permits BESS ---------
+    p_poc_bess_mw: float | None = None
+    discharge_hours: float | None = Field(default=None, gt=0)
+    bess_solution: str | None = None
+    bess_station_model: str | None = None
+    max_loading_bess: float | None = None
+    trunk_bess_m: float | None = None
+    spacing_bess_m: float | None = None
 
     @model_validator(mode="after")
     def _hv_needs_a_voltage(self) -> "SeedRequest":
@@ -101,6 +122,27 @@ class SeedRequest(BaseModel):
             raise ValueError(
                 "v_hv_kv is required (and must be positive) for an HV interconnection."
             )
+        return self
+
+    @model_validator(mode="after")
+    def _fields_required_for_the_permitted_technology(self) -> "SeedRequest":
+        if self.technology in ("pv", "hybrid"):
+            missing = [name for name in
+                      ("p_poc_mw", "station_model", "pv_inverter", "inverter_count",
+                       "trunk_m", "spacing_m") if getattr(self, name) is None]
+            if missing:
+                raise ValueError(
+                    f"technology {self.technology!r} requires: {', '.join(missing)}."
+                )
+        if self.technology in ("bess", "hybrid"):
+            missing = [name for name in
+                      ("p_poc_bess_mw", "discharge_hours", "bess_solution",
+                       "bess_station_model", "max_loading_bess", "trunk_bess_m",
+                       "spacing_bess_m") if getattr(self, name) is None]
+            if missing:
+                raise ValueError(
+                    f"technology {self.technology!r} requires: {', '.join(missing)}."
+                )
         return self
 
 

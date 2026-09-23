@@ -28,7 +28,8 @@ rule, a BESS busbar with the auxiliary load, and `bess` stations. PV-design seed
   `per_station_capacity`.
 - Containers: required = `ceil(p_bess_kw × discharge_hours / e_nominal_kwh)`; the engine's
   energy check is exactly `Σ containers × e_nominal_kwh ≥ p_target_bess_kw × discharge_hours`.
-- Diagram output: POC `p_target_bess_mw` (and no PV target); rules `discharge_hours`,
+- Diagram output: POC `p_target_mw` carries the BESS power (a single-fleet design reads its
+  target there; `p_target_bess_mw` is only the second fleet's figure in a hybrid); rules `discharge_hours`,
   `max_loading_bess`; busbar and stations `fleet_kind: "bess"`; station props `model` (BESS
   transformer key), `bess_solution`, `containers_override` only where below the maximum. Read how
   drawn BESS stations are shaped in the hybrid tests' `_hybrid_with_drawn_bess()` helper.
@@ -38,14 +39,14 @@ rule, a BESS busbar with the auxiliary load, and `bess` stations. PV-design seed
 
 **Blocked by:** 01: PCS governs BESS allocation; container count capped at the pairing.
 
-**Status:** ready-for-agent
+**Status:** done
 
-- [ ] Seed request accepts a technology and a BESS block; PV fields are required only when PV is permitted
-- [ ] Request rejects a solution that does not sell the duration and a station not paired with the solution
-- [ ] Container fill: stations at the maximum in order, remainder on the last, override written only where below the maximum
-- [ ] Energy shortfall at the maximum adds stations until energy is met
-- [ ] Seeded BESS diagram validates and solves with energy met and loading within the limit
-- [ ] Seeding is deterministic
-- [ ] Wizard on a BESS design shows only BESS inputs; selectors cascade duration → solution → station
-- [ ] Wizard on a PV design is unchanged; existing PV seed tests pass untouched
-- [ ] Focused seed tests, wizard test and type checks pass
+- [x] Seed request accepts a technology and a BESS block; PV fields are required only when PV is permitted
+- [x] Request rejects a solution that does not sell the duration and a station not paired with the solution
+- [x] Container fill: stations at the maximum in order, remainder on the last, override written only where below the maximum
+- [x] Energy shortfall at the maximum adds stations until energy is met
+- [x] Seeded BESS diagram validates and solves with energy met and loading within the limit
+- [x] Seeding is deterministic
+- [x] Wizard on a BESS design shows only BESS inputs; selectors cascade duration → solution → station
+- [x] Wizard on a PV design is unchanged; existing PV seed tests pass untouched
+- [x] Focused seed tests, wizard test and type checks pass

@@ -16,6 +16,7 @@ from powertool import (
     ChainElement,
     ComponentDatabase,
     Sheet,
+    Transformer,
     TransformerGroup,
     arrange_plant_manual,
     auto_hv_transformer,
@@ -133,7 +134,13 @@ def build_chain(
                 run.append(raw[j])
                 j += 1
             if len(run) == 1:
-                comp = db.transformer(e["component"])
+                # ``component`` is a catalogue key for every caller with a
+                # request schema behind it (Stage1Request); the BESS seed
+                # (backend.seed._seed_bess) has no PV-catalogue key for its
+                # station and passes the already-resolved Transformer
+                # (db.bess_transformer(...)) straight through instead.
+                component = e["component"]
+                comp = component if isinstance(component, Transformer) else db.transformer(component)
                 chain_elements.append(ChainElement(comp, v_kv=e["v_kv"],
                                              n_parallel=e["n_parallel"],
                                              label=e["label"]))
