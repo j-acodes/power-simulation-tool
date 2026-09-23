@@ -157,8 +157,9 @@ A station's or a fleet's power drawn as a fraction of the applicable equipment r
 duty is shared among stations in proportion to installed inverter power, then each transformer
 station is checked separately against its own AC power at ambient and the PV maximum-loading
 limit. Inverter active and apparent loading are independent checks against 100% of installed
-inverter power; the transformer loading setting never derates the inverter. BESS allocation
-remains proportional to transformer-station rating. PV and BESS fleets can carry different
+inverter power; the transformer loading setting never derates the inverter. BESS duty is shared the same way in
+proportion to installed PCS apparent power, with the PCS checked at 100% and the transformer
+station checked separately. PV and BESS fleets can carry different
 transformer maximum-loading limits, reflecting their different duty cycles.
 _Avoid_: utilization (utilization is used for a different, cable-current-based check),
 load factor
@@ -184,15 +185,17 @@ _Avoid_: BESS product, battery model
 
 **Container**:
 One physical enclosure of battery cells and its share of conversion equipment, as offered by
-a BESS solution. The number of containers behind a station comes from the pairing between that
-station's transformer and its solution — read, never computed, interpolated or rounded. It can
-be overridden on a station that is only partially populated, which is the one place a
-container count is a judgement rather than a supplier's figure.
+a BESS solution. The pairing between a station's transformer and its solution sets the most
+containers that station can serve; a station drawn by hand is full, at that maximum. When the
+seed proposes a BESS fleet it sizes the container count to the fleet's energy — point-of-connection
+power times discharge duration — filling stations to the maximum in order and leaving the
+remainder on the last one. After that the count is the engineer's: solving checks it, never
+recomputes it, and it may be reduced on any station but never raised past the pairing.
 _Avoid_: battery unit, pack
 
 **Pairing**:
 The product-composition record carried by a transformer station. For BESS it names the solutions
-the station is sold with and how many containers it serves. For PV it names the allowed inverter
+the station is sold with and the most containers it serves. For PV it names the allowed inverter
 products plus each pairing's maximum inverter count. Pairing is authoritative: the
 tool does not infer compatibility by comparing nominal voltages, and products not named by the
 station cannot be combined. A station is deployed full — with its paired inverter at the maximum
@@ -205,7 +208,9 @@ _Avoid_: compatibility, match, association
 The battery-fleet name for the conversion equipment at a station — the point where DC storage
 meets the AC collection network. It is the same position in the diagram that a PV fleet calls
 the inverter: one physical role, two names, chosen by fleet kind so the result speaks the
-language of the asset it describes.
+language of the asset it describes. Installed PCS is the PCS rating times the PCS units in
+each of the station's containers; like an inverter's, it governs how BESS duty is allocated
+among stations and is checked independently of the transformer station.
 _Avoid_: inverter, when the fleet kind is BESS
 
 **Inverter**:

@@ -36,5 +36,5 @@ Transformer losses and loading are then calculated from each station's allocated
 transformer loading percentage never derates inverter capacity: inverter checks always use 100%
 of the resolved ambient power.
 
-BESS allocation and compliance are unchanged. An inverter remains contained by a station and is
+BESS allocation and compliance were unchanged by this record; ADR-0008 later applies the same rule to the PCS. An inverter remains contained by a station and is
 not a separately connected diagram node.
