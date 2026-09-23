@@ -116,6 +116,34 @@ def test_seed_reference_plant_solves_within_target_and_loading():
     assert summary["fleet_loading"] <= REFERENCE_PARAMS["max_loading"] + 1e-6
 
 
+def test_max_loading_bounds_the_pv_station_count():
+    # Ticket 05 repro (also reproduces on main, predates this feature):
+    # sizing the PV station count from installed inverter capacity alone
+    # gives 15 SUNGROW_MVS3200 stations here (per_station_capacity 3200 kW,
+    # ceil((45000/0.95)/3200) = 15) — 97 % fleet loading, NOT COMPLIANT
+    # against the 80 % max_loading limit. The transformer's AC power at
+    # ambient x max_loading must also bound the count, the same way
+    # _size_bess_fleet's station_limit already bounds the BESS count.
+    params = dict(REFERENCE_PARAMS)
+    params.update({
+        "station_model": "SUNGROW_MVS3200",
+        "inverter_count": 10,
+        "max_loading": 0.8,
+        "trunk_m": 800.0,
+        "spacing_m": 350.0,
+        "aux_p_kw": 120.0,
+        "aux_q_kvar": 40.0,
+    })
+    diagram = seed_diagram(params, db)
+    assert validate_graph(diagram, db) == []
+
+    result = solve_diagram(diagram, db)
+    assert result["issues"] == []
+    summary = result["results"]["summary"]
+    assert summary["loading_ok"] is True
+    assert summary["fleet_loading"] <= params["max_loading"] + 1e-6
+
+
 def test_seed_via_api_matches_direct_call():
     payload = {
         "p_poc_mw": REFERENCE_PARAMS["p_poc_mw"],

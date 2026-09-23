@@ -142,11 +142,17 @@ def _size_pv_fleet(params: dict, db: ComponentDatabase, v_export_kv: float, *,
     if p_poc_kw is None:
         p_poc_kw = params["p_poc_mw"] * 1000.0
     pf_target = params["pf_target"]
+    # The transformer's own AC power at ambient x max_loading, one station —
+    # the fleet-loading bound the engine actually checks (hypot(p_inv, q_inv)
+    # / (n * rating_at(ambient))), independent of installed inverter capacity.
+    # Mirrors _size_bess_fleet's station_limit.
+    station_limit = station.rating_at(DEFAULT_AMBIENT_C) * max_loading
 
     n = max(
         1,
         math.ceil(p_poc_kw / per_station_capacity),
         math.ceil((p_poc_kw / pf_target) / per_station_capacity),
+        math.ceil((p_poc_kw / pf_target) / station_limit),
         min_count,
     )
     stage1 = None
@@ -156,6 +162,7 @@ def _size_pv_fleet(params: dict, db: ComponentDatabase, v_export_kv: float, *,
             1,
             math.ceil(stage1.p_inv_kw / per_station_capacity),
             math.ceil(stage1.s_inv_kva / per_station_capacity),
+            math.ceil(stage1.s_inv_kva / station_limit),
             min_count,
         )
         if next_n == n:
