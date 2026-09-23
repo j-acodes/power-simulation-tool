@@ -137,6 +137,38 @@ def test_seeded_bess_plant_solves_with_energy_met_and_loading_within_limit():
     assert branch["energy_ok"] is True
 
 
+def test_max_loading_bess_bounds_the_station_count():
+    # Browser repro (ticket 02 fix round): sizing the station count from
+    # installed PCS alone gives 7 SUNGROW_MVS7400_LS stations here — 89 %
+    # fleet loading, NOT COMPLIANT against the 80 % max_loading_bess limit.
+    # The transformer's AC power at ambient x max_loading must also bound
+    # the count, the same way _seed_pv already bounds PV station count.
+    params = dict(BASE_PARAMS)
+    params.update({
+        "interconnection": "HV",
+        "v_hv_kv": 132.0,
+        "pf_target": 0.95,
+        "bess_station_model": "SUNGROW_MVS7400_LS",
+        "p_poc_bess_mw": 40.0,
+        "max_loading_bess": 0.8,
+        "trunk_bess_m": 800.0,
+        "spacing_bess_m": 350.0,
+        "aux_p_kw": 120.0,
+        "aux_q_kvar": 40.0,
+    })
+    diagram = seed_diagram(params, db)
+    result = solve_diagram(diagram, db)
+    assert result["issues"] == []
+
+    summary = result["results"]["summary"]
+    assert summary["loading_ok"] is True
+    assert summary["fleet_loading"] <= params["max_loading_bess"] + 1e-6
+
+    branch = summary["branches"][0]
+    assert branch["kind"] == "bess"
+    assert branch["energy_ok"] is True
+
+
 def test_seeding_bess_is_deterministic():
     first = seed_diagram(BASE_PARAMS, db)
     second = seed_diagram(BASE_PARAMS, db)

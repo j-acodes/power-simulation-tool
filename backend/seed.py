@@ -384,11 +384,16 @@ def _seed_bess(params: dict, db: ComponentDatabase) -> dict:
     # BESS analogue of PV's per_station_capacity (ADR-0008: PCS kVA read as
     # kW, one figure for both the active and apparent limit).
     per_station_capacity = maximum * solution.pcs_count * solution.pcs_s_kva
+    # The transformer's own AC power at ambient x max_loading, one station —
+    # the fleet-loading bound the engine actually checks (hypot(p_inv, q_inv)
+    # / (n * rating_at(ambient))), independent of installed PCS.
+    station_limit = station.rating_at(DEFAULT_AMBIENT_C) * max_loading
 
     n = max(
         1,
         math.ceil(p_poc_kw / per_station_capacity),
         math.ceil((p_poc_kw / pf_target) / per_station_capacity),
+        math.ceil((p_poc_kw / pf_target) / station_limit),
     )
     stage1 = None
     for _ in range(_MAX_ITERATIONS):
@@ -398,6 +403,7 @@ def _seed_bess(params: dict, db: ComponentDatabase) -> dict:
             1,
             math.ceil(stage1.p_inv_kw / per_station_capacity),
             math.ceil(stage1.s_inv_kva / per_station_capacity),
+            math.ceil(stage1.s_inv_kva / station_limit),
         )
         if next_n == n:
             break

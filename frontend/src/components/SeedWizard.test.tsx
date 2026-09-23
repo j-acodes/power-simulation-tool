@@ -112,6 +112,10 @@ describe('SeedWizard on a BESS design', () => {
     await waitFor(() => expect(screen.getByLabelText('BESS solution')).toHaveProperty('value', 'sol-4h'))
     await waitFor(() => expect(screen.getByLabelText('BESS station')).toHaveProperty('value', 'tx-4h'))
 
+    // Starts at the same reference value the PV power field uses, not 0 —
+    // submitting the defaults used to 400 with no field-level indication.
+    expect(screen.getByLabelText('Target BESS Active power P (MW)')).toHaveProperty('value', '45')
+
     fireEvent.change(screen.getByLabelText('Target BESS Active power P (MW)'), { target: { value: '5' } })
     fireEvent.click(screen.getByRole('button', { name: 'Seed diagram' }))
 

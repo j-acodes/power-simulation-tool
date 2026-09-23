@@ -55,7 +55,7 @@ export function SeedWizard({ onClose }: SeedWizardProps) {
   const [auxQKvar, setAuxQKvar] = useState(REFERENCE.aux_q_kvar)
 
   // --- BESS section (ticket 02): duration -> solution -> station cascade ---
-  const [pPocBessMw, setPPocBessMw] = useState(0)
+  const [pPocBessMw, setPPocBessMw] = useState(REFERENCE.p_poc_mw)
   const [dischargeHours, setDischargeHours] = useState<number | null>(null)
   const [bessSolution, setBessSolution] = useState('')
   const [bessStationModel, setBessStationModel] = useState('')
