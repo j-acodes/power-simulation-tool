@@ -81,6 +81,14 @@
           "model": "4000 kVA - Generic",
           "p_lv_kw": 12697.093271781923,
           "p_mv_kw": 12102.539048959885,
+          "pcs_active_loading": 3.5269703532727563,
+          "pcs_active_ok": false,
+          "pcs_apparent_loading": 4.269306991288563,
+          "pcs_apparent_ok": false,
+          "pcs_capacity_kw": 3600.0,
+          "pcs_model": "PowerTitan 3.0 \u2014 ST6900UX-4H",
+          "pcs_unit_count": 8,
+          "pcs_unit_power_kva": 450.0,
           "position": 1,
           "q_lv_kvar": 8660.57224301523,
           "q_mv_kvar": 3973.1934151568084,
@@ -164,6 +172,18 @@
         "worst_trunk_current_a": 367.71560268075416
       },
       "warnings": [
+        {
+          "code": "pcs_active_capacity_exceeded",
+          "edge_id": null,
+          "message": "Station 's1' needs 12,697 kW from its PCS, above the installed 3,600 kW active-power limit.",
+          "node_id": "s1"
+        },
+        {
+          "code": "pcs_apparent_capacity_exceeded",
+          "edge_id": null,
+          "message": "Station 's1' needs 15,370 kVA from its PCS, above the installed 3,600 kVA apparent-power limit.",
+          "node_id": "s1"
+        },
         {
           "code": "fleet_overloaded",
           "edge_id": null,
@@ -273,6 +293,14 @@
           "model": "4000 kVA - Generic",
           "p_lv_kw": 3090.056735361821,
           "p_mv_kw": 3058.4799481955156,
+          "pcs_active_loading": 1.716698186312123,
+          "pcs_active_ok": false,
+          "pcs_apparent_loading": 1.8451400015906136,
+          "pcs_apparent_ok": false,
+          "pcs_capacity_kw": 1800.0,
+          "pcs_model": "PowerTitan 3.0 \u2014 ST6900UX-4H",
+          "pcs_unit_count": 4,
+          "pcs_unit_power_kva": 450.0,
           "position": 1,
           "q_lv_kvar": 1217.4827468047451,
           "q_mv_kvar": 998.5987844041396,
@@ -356,6 +384,18 @@
         "worst_trunk_current_a": 92.87760371284112
       },
       "warnings": [
+        {
+          "code": "pcs_active_capacity_exceeded",
+          "edge_id": null,
+          "message": "Station 's1' needs 3,090 kW from its PCS, above the installed 1,800 kW active-power limit.",
+          "node_id": "s1"
+        },
+        {
+          "code": "pcs_apparent_capacity_exceeded",
+          "edge_id": null,
+          "message": "Station 's1' needs 3,321 kVA from its PCS, above the installed 1,800 kVA apparent-power limit.",
+          "node_id": "s1"
+        },
         {
           "code": "bess_aux_not_published",
           "edge_id": null,
@@ -459,6 +499,14 @@
           "model": "2750 kVA - Generic",
           "p_lv_kw": 3102.641151541793,
           "p_mv_kw": 3058.479948215139,
+          "pcs_active_loading": 1.7236895286343294,
+          "pcs_active_ok": false,
+          "pcs_apparent_loading": 1.8747905985810174,
+          "pcs_apparent_ok": false,
+          "pcs_capacity_kw": 1800.0,
+          "pcs_model": "PowerTitan 3.0 \u2014 ST6900UX-4H",
+          "pcs_unit_count": 4,
+          "pcs_unit_power_kva": 450.0,
           "position": 1,
           "q_lv_kvar": 1327.2900209032643,
           "q_mv_kvar": 998.5987844204893,
@@ -542,6 +590,18 @@
         "worst_trunk_current_a": 92.87760371352611
       },
       "warnings": [
+        {
+          "code": "pcs_active_capacity_exceeded",
+          "edge_id": null,
+          "message": "Station 's1' needs 3,103 kW from its PCS, above the installed 1,800 kW active-power limit.",
+          "node_id": "s1"
+        },
+        {
+          "code": "pcs_apparent_capacity_exceeded",
+          "edge_id": null,
+          "message": "Station 's1' needs 3,375 kVA from its PCS, above the installed 1,800 kVA apparent-power limit.",
+          "node_id": "s1"
+        },
         {
           "code": "fleet_overloaded",
           "edge_id": null,
@@ -651,6 +711,14 @@
           "model": "4000 kVA - Generic",
           "p_lv_kw": 3090.056735361821,
           "p_mv_kw": 3058.4799481955156,
+          "pcs_active_loading": 0.8583490931560614,
+          "pcs_active_ok": true,
+          "pcs_apparent_loading": 0.9225700007953068,
+          "pcs_apparent_ok": true,
+          "pcs_capacity_kw": 3600.0,
+          "pcs_model": "PowerTitan 3.0 \u2014 ST6900UX-4H",
+          "pcs_unit_count": 8,
+          "pcs_unit_power_kva": 450.0,
           "position": 1,
           "q_lv_kvar": 1217.4827468047451,
           "q_mv_kvar": 998.5987844041396,
@@ -836,6 +904,14 @@
           "model": "2750 kVA - Generic",
           "p_lv_kw": 3102.641151541793,
           "p_mv_kw": 3058.479948215139,
+          "pcs_active_loading": 1.7236895286343294,
+          "pcs_active_ok": false,
+          "pcs_apparent_loading": 1.8747905985810174,
+          "pcs_apparent_ok": false,
+          "pcs_capacity_kw": 1800.0,
+          "pcs_model": "PowerTitan 3.0 \u2014 ST6900UX-4H",
+          "pcs_unit_count": 4,
+          "pcs_unit_power_kva": 450.0,
           "position": 1,
           "q_lv_kvar": 1327.2900209032643,
           "q_mv_kvar": 998.5987844204893,
@@ -919,6 +995,18 @@
         "worst_trunk_current_a": 92.87760371352611
       },
       "warnings": [
+        {
+          "code": "pcs_active_capacity_exceeded",
+          "edge_id": null,
+          "message": "Station 's1' needs 3,103 kW from its PCS, above the installed 1,800 kW active-power limit.",
+          "node_id": "s1"
+        },
+        {
+          "code": "pcs_apparent_capacity_exceeded",
+          "edge_id": null,
+          "message": "Station 's1' needs 3,375 kVA from its PCS, above the installed 1,800 kVA apparent-power limit.",
+          "node_id": "s1"
+        },
         {
           "code": "fleet_overloaded",
           "edge_id": null,
@@ -1114,6 +1202,14 @@
           "model": "2750 kVA - Generic",
           "p_lv_kw": 3090.139795146409,
           "p_mv_kw": 3046.311078203332,
+          "pcs_active_loading": 1.716744330636894,
+          "pcs_active_ok": false,
+          "pcs_apparent_loading": 1.867249178236631,
+          "pcs_apparent_ok": false,
+          "pcs_capacity_kw": 1800.0,
+          "pcs_model": "PowerTitan 3.0 \u2014 ST6900UX-4H",
+          "pcs_unit_count": 4,
+          "pcs_unit_power_kva": 450.0,
           "position": 1,
           "q_lv_kvar": 1321.9996996212662,
           "q_mv_kvar": 995.9474919942736,
@@ -1240,6 +1336,18 @@
           "edge_id": null,
           "message": "One or more drawn transformer stations exceed the fleet's 100 % transformer loading limit (aggregate loading is 101 %). Add stations or pick bigger units.",
           "node_id": "bus"
+        },
+        {
+          "code": "pcs_active_capacity_exceeded",
+          "edge_id": null,
+          "message": "Station 's_b1' needs 3,090 kW from its PCS, above the installed 1,800 kW active-power limit.",
+          "node_id": "s_b1"
+        },
+        {
+          "code": "pcs_apparent_capacity_exceeded",
+          "edge_id": null,
+          "message": "Station 's_b1' needs 3,361 kVA from its PCS, above the installed 1,800 kVA apparent-power limit.",
+          "node_id": "s_b1"
         },
         {
           "code": "fleet_overloaded",

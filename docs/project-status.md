@@ -32,6 +32,20 @@ not a second source of requirements.
   Transformer-station loading remains a separate check. Ambient lookup and provenance follow
   [ADR-0004](adr/0004-ac-power-per-ambient-temperature.md) and
   [ADR-0005](adr/0005-inverter-power-governs-pv-conversion.md).
+- The seed wizard proposes a BESS or hybrid plant from the design's declared technology, not
+  only PV. A BESS design sizes station count to point-of-connection BESS power at the pairing
+  maximum, then sizes container counts to power × discharge duration — filling stations to the
+  maximum in circuit order, remainder on the last, adding stations if the maximum still falls
+  short on energy — and writes the chosen duration into the design. A hybrid design seeds both
+  fleets from one wizard, PV left and BESS right of a centred point of connection, each with its
+  own trunk length, spacing, and maximum-loading limit. BESS duty is allocated between stations
+  by installed PCS apparent power rather than transformer-station rating, mirroring ADR-0005's
+  PV rule; PCS active- and apparent-power limits are checked independently as warnings (not
+  errors) at 100% of installed PCS, with no ambient lookup, while the transformer station is
+  still checked separately against its own AC power at ambient and the BESS maximum-loading
+  limit. A station's container count above its solution's pairing maximum is a validation error,
+  and the canvas container-count input is capped at that maximum. See
+  [ADR-0008](adr/0008-pcs-governs-bess-conversion-and-containers-are-sized.md).
 - Catalogue, setup, and station-inspector views expose separate full specifications for PV
   transformer stations and inverters, with simulated parameters, typed supplier facts,
   pairings, missing-data notices, and source provenance. Inverters remain contained products,
