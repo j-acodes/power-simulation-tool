@@ -40,21 +40,18 @@ and writes, per timestamp, the **operating** round-trip efficiency of an efficie
 
 <!-- one line per resolved ticket: [title](issues/NN-slug.md): gist -->
 
+- [Collect the manufacturer curves](issues/01-collect-manufacturer-curves.md): Sungrow PT3 (ST6900UX-4H) aux consumption per container at 1 and 2 cycles/day and per MVS (banded), operating and standby, plus a −30…50 °C active-power derating curve; no efficiency figures.
 - [Does ambient temperature change a containerised battery's DC efficiency?](issues/02-dc-efficiency-vs-ambient.md): barely while cells are in band; model DC RTE as one ambient-independent value per BESS solution and put all ambient dependence in auxiliary consumption.
 
 ## Not yet specified
 
-- **How curves live in the catalogue**: schema and units for ambient- and state-dependent
-  curves on a BESS solution, and lookup between published points (interpolate or step,
-  against the ADR-0004 precedent). Becomes specifiable once the curves are in hand.
 - **Energy accounting inside the run**: which power is "rated" (PCS AC output or POC), how the
   charge leg tops up the energy the discharge leg delivers, and how DC and PCS efficiencies
-  combine with the loss chain. Firms up after the DC-efficiency research and the loss-chain
-  decision.
+  combine with the loss chain. Firms up after the loss-chain decision and Sungrow's reference
+  efficiency figures.
 - **Idle details**: which transformers count as energised when idle, and whether PCS standby
   draw is separate from auxiliary consumption.
-- **Time-series edge cases**: resolution detection, gaps, timezone/DST, ambients outside the
-  curves' range.
+- **Time-series edge cases**: resolution detection, gaps, timezone/DST (out-of-range ambients are in ticket 06).
 - **Spec assembly**: write `spec.md` from the decisions, with acceptance criteria and a worked
   example.
 
