@@ -175,6 +175,24 @@ then understated by that solution's real draw, and the design says so in a warni
 inventing a number or refusing to solve.
 _Avoid_: parasitic load, house load
 
+**Auxiliary consumption**:
+The realistic draw of a BESS solution's auxiliaries (cooling, BMS, controls), which varies
+with ambient temperature and with whether the battery is operating or idle. It is fed from the
+MV busbar and is used only to model efficiency, never to size equipment: sizing for the grid
+code uses the worst-case auxiliary load, and the two figures are never substituted for each
+other.
+_Avoid_: auxiliary load (that is the fixed worst-case sizing figure), parasitic load
+
+**Efficiency run**:
+The reference cycle an efficiency is evaluated over at one timestamp: a full charge then a
+full discharge at rated power, for the declared discharge duration, with the whole cycle held
+at that timestamp's ambient temperature. Its result is the **operating** round-trip efficiency
+at the point of connection, a percentage. Alongside it, each timestamp carries an **idle**
+standby loss: auxiliary consumption plus energised-transformer no-load losses, as a percentage
+of nameplate energy per hour. Each interval of a battery's dispatch is charging, discharging or
+idle, so the downstream model, not the efficiency run, decides which of the two figures applies.
+_Avoid_: hourly RTE (an interval has no round trip of its own), cycle efficiency
+
 **BESS solution**:
 A named battery product, selected from a catalogue and identified the way a supplier quote
 identifies it: brand, series and model number. It fixes the nominal energy of one container,
