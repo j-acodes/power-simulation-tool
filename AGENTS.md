@@ -41,3 +41,17 @@ authorization before running it. Do not use it as routine test setup.
 Run the README checks appropriate to the affected behaviour; for docs-only work run link and
 whitespace checks. Check failures are part of the report. Keep documentation aligned with
 current code and accepted decisions; use repository sources rather than personal plans.
+
+## Agent skills
+
+### Issue tracker
+
+Issues and specs are local markdown files under `.scratch/<feature>/`. See `docs/agents/issue-tracker.md`.
+
+### Triage labels
+
+The five default triage roles, each label equal to its role name. See `docs/agents/triage-labels.md`.
+
+### Domain docs
+
+Single-context: root `CONTEXT.md` plus `docs/adr/`. See `docs/agents/domain.md`.
