@@ -18,10 +18,12 @@ and writes, per timestamp, the **operating** round-trip efficiency of an efficie
 - Every session consults the `grilling` and `domain-modeling` skills.
 - Settled framing (charting session, 2026-10-09):
   - Input: `timestamp, ambient °C`; everything else is static configuration. Output CSV:
-    `timestamp, operating RTE %, idle loss %`. First interface is a Python function / CLI.
+    `timestamp, operating RTE %, idle loss %, PCS power % of rated`. First interface is a
+    Python function / CLI.
   - Efficiency run: full charge then full discharge at rated power for the declared discharge
     duration, the whole cycle at that timestamp's ambient; unity power factor at the POC.
-    Electrical losses are evaluated at full power only (the battery always runs at full power).
+    Electrical losses are evaluated at the full power available at that ambient (rated, or
+    derated when PCS derating applies).
   - Idle figure: auxiliary consumption plus energised-transformer no-load losses, as % of
     nameplate energy per hour.
   - Auxiliary consumption is fed from the MV busbar and counts on both legs at the POC (adds to
@@ -29,8 +31,8 @@ and writes, per timestamp, the **operating** round-trip efficiency of an efficie
     design's losses.
   - Transformer and cable losses come from an actual design when one is given, otherwise from
     typed-in fixed loss percentages.
-  - Hot-ambient PCS derating: the run uses the derated power for that ambient (which stretches
-    the cycle).
+  - Hot-ambient PCS derating: the run uses the derated power for that ambient, cycling the same
+    energy over a longer time.
   - Battery data is tied to a catalogue BESS solution; its manufacturer curves attach to that
     entry.
 - Engine boundary from `AGENTS.md`: the module lives in `powertool/`, with no web or UI
@@ -43,6 +45,7 @@ and writes, per timestamp, the **operating** round-trip efficiency of an efficie
 - [Collect the manufacturer curves](issues/01-collect-manufacturer-curves.md): Sungrow PT3 (ST6900UX-4H) aux consumption per container at 1 and 2 cycles/day and per MVS (banded), operating and standby, plus a −30…50 °C active-power derating curve; no efficiency figures.
 - [Does ambient temperature change a containerised battery's DC efficiency?](issues/02-dc-efficiency-vs-ambient.md): barely while cells are in band; model DC RTE as one ambient-independent value per BESS solution and put all ambient dependence in auxiliary consumption.
 - [Which losses sit between the battery and the POC, from a design and without one?](issues/03-loss-chain.md): existing engine losses, symmetric in direction, PV at zero; discharge anchored at DC output, charge at a POC-capacity import; aux on the MV busbar; without a design, typed-in load %, no-load % and POC capacity.
+- [How does PCS derating reshape an efficiency run?](issues/04-derated-efficiency-run.md): energy fixed, cycle stretches; legs run at derated power (charge imports the lesser of POC capacity and what the derated PCS takes); aux as published; derating is never a loss but a fourth output column, `PCS power % of rated`.
 
 ## Not yet specified
 
