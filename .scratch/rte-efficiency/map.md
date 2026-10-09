@@ -51,7 +51,7 @@ and writes, per timestamp, the **operating** round-trip efficiency of an efficie
   efficiency figures.
 - **Idle details**: which transformers count as energised when idle, and whether PCS standby
   draw is separate from auxiliary consumption.
-- **Time-series edge cases**: resolution detection, gaps, timezone/DST (out-of-range ambients are in ticket 06).
+- **Time-series edge cases**: resolution detection, gaps, timezone/DST (out-of-range ambients belong to [How do auxiliary-consumption tables and the derating curve attach to the catalogue and get looked up?](issues/06-curve-storage-and-lookup.md)).
 - **Spec assembly**: write `spec.md` from the decisions, with acceptance criteria and a worked
   example.
 
