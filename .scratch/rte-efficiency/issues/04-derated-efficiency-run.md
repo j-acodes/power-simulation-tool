@@ -11,3 +11,7 @@ derated power. Decide what stays fixed and what stretches: is the energy cycled 
 declared-duration energy (longer cycle), or the duration fixed (less energy)? How do auxiliary
 consumption over the longer cycle and the loss chain at reduced power enter? Does the output
 flag derated timestamps? Depends on the actual shape of the derating curves.
+
+From the loss-chain decision: the charge leg imports the POC capacity, which assumes PCS power
+is above it. Derating can take PCS power below the POC capacity (0.6 Pn at 50 °C); decide what
+the charge leg imports then.

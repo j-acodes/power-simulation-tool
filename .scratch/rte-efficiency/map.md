@@ -42,13 +42,14 @@ and writes, per timestamp, the **operating** round-trip efficiency of an efficie
 
 - [Collect the manufacturer curves](issues/01-collect-manufacturer-curves.md): Sungrow PT3 (ST6900UX-4H) aux consumption per container at 1 and 2 cycles/day and per MVS (banded), operating and standby, plus a −30…50 °C active-power derating curve; no efficiency figures.
 - [Does ambient temperature change a containerised battery's DC efficiency?](issues/02-dc-efficiency-vs-ambient.md): barely while cells are in band; model DC RTE as one ambient-independent value per BESS solution and put all ambient dependence in auxiliary consumption.
+- [Which losses sit between the battery and the POC, from a design and without one?](issues/03-loss-chain.md): existing engine losses, symmetric in direction, PV at zero; discharge anchored at DC output, charge at a POC-capacity import; aux on the MV busbar; without a design, typed-in load %, no-load % and POC capacity.
 
 ## Not yet specified
 
-- **Energy accounting inside the run**: which power is "rated" (PCS AC output or POC), how the
-  charge leg tops up the energy the discharge leg delivers, and how DC and PCS efficiencies
-  combine with the loss chain. Firms up after the loss-chain decision and Sungrow's reference
-  efficiency figures.
+- **Energy accounting inside the run**: the legs' anchors are settled (discharge at DC output,
+  charge at a POC-capacity import); still open: how the charge leg tops up the energy the
+  discharge leg delivers, and how DC and PCS efficiencies combine with the loss chain. Firms up
+  after Sungrow's reference efficiency figures.
 - **Idle details**: which transformers count as energised when idle, and whether PCS standby
   draw is separate from auxiliary consumption.
 - **Time-series edge cases**: resolution detection, gaps, timezone/DST (out-of-range ambients belong to [How do auxiliary-consumption tables and the derating curve attach to the catalogue and get looked up?](issues/06-curve-storage-and-lookup.md)).

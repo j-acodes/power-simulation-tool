@@ -12,6 +12,12 @@ from a power figure set here. A design has exactly one POC, regardless of how ma
 generation or storage sit behind it.
 _Avoid_: PCC, grid connection point, interconnection point
 
+**POC capacity**:
+The active power the plant may export to, or import from, the grid at the point of connection.
+A design's sizing target, or a typed-in figure when no design is given. A PCS fleet's power is
+always above it.
+_Avoid_: grid capacity, export limit (names one direction only)
+
 **MV interconnection / HV interconnection**:
 The two ways a plant can meet the grid. An MV interconnection has no dedicated HV
 transformer: the point of connection sits directly at MV, one level above the stations. An
@@ -192,6 +198,16 @@ standby loss: auxiliary consumption plus energised-transformer no-load losses, a
 of nameplate energy per hour. Each interval of a battery's dispatch is charging, discharging or
 idle, so the downstream model, not the efficiency run, decides which of the two figures applies.
 _Avoid_: hourly RTE (an interval has no round trip of its own), cycle efficiency
+
+**Loss chain**:
+The electrical losses between the PCS and the point of connection that an efficiency run
+applies: station transformers (load and no-load), collection cables, the HV transformer and
+the export cable, with auxiliary consumption drawn at the MV busbar. It comes from a design's
+own equipment, or from typed-in load and no-load loss percentages when no design is given. The
+losses are the same in either direction for the same power; a charge leg and a discharge leg
+still lose different percentages because each is measured against the power at the end it
+starts from: the POC import when charging, the DC output when discharging.
+_Avoid_: system losses, BOP losses
 
 **BESS solution**:
 A named battery product, selected from a catalogue and identified the way a supplier quote
