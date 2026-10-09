@@ -40,6 +40,8 @@ and writes, per timestamp, the **operating** round-trip efficiency of an efficie
 
 <!-- one line per resolved ticket: [title](issues/NN-slug.md): gist -->
 
+- [Does ambient temperature change a containerised battery's DC efficiency?](issues/02-dc-efficiency-vs-ambient.md): barely while cells are in band; model DC RTE as one ambient-independent value per BESS solution and put all ambient dependence in auxiliary consumption.
+
 ## Not yet specified
 
 - **How curves live in the catalogue**: schema and units for ambient- and state-dependent
