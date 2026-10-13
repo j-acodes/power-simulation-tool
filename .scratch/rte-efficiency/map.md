@@ -46,6 +46,7 @@ and writes, per timestamp, the **operating** round-trip efficiency of an efficie
 - [Does ambient temperature change a containerised battery's DC efficiency?](issues/02-dc-efficiency-vs-ambient.md): barely while cells are in band; model DC RTE as one ambient-independent value per BESS solution and put all ambient dependence in auxiliary consumption.
 - [Which losses sit between the battery and the POC, from a design and without one?](issues/03-loss-chain.md): existing engine losses, symmetric in direction, PV at zero; discharge anchored at DC output, charge at a POC-capacity import; aux on the MV busbar; without a design, typed-in load %, no-load % and POC capacity.
 - [How does PCS derating reshape an efficiency run?](issues/04-derated-efficiency-run.md): energy fixed, cycle stretches; legs run at derated power (charge imports the lesser of POC capacity and what the derated PCS takes); aux as published; derating is never a loss but a fourth output column, `PCS power % of rated`.
+- [How does cycles per day enter the efficiency run?](issues/05-cycles-per-day.md): one required static parameter selecting the container aux table; linear between published references, nearest table outside (and for single-reference solutions) with a warning; operating/standby are average draw per unit in that state; CSV unchanged.
 
 ## Not yet specified
 

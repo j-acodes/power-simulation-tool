@@ -14,3 +14,10 @@ derating curve, steps for the banded MVS table, and how that sits against ADR-00
 interpolate" stance for AC power at ambient (likely an ADR of its own). Decide behaviour
 outside the published range (−30…50 °C): clamp, refuse, or warn. Whether these are simulated
 parameters (the engine reads them) is implied, but say so.
+
+## Comments
+
+- 2026-10-13, from [How does cycles per day enter the efficiency run?](05-cycles-per-day.md):
+  container tables are also interpolated linearly between cycles-per-day references (clamped
+  outside, with a warning). The ADR-0004 decision here must cover that axis too, and the
+  catalogue shape must hold one container table per published reference.

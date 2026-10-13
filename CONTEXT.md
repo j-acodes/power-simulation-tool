@@ -189,6 +189,14 @@ code uses the worst-case auxiliary load, and the two figures are never substitut
 other.
 _Avoid_: auxiliary load (that is the fixed worst-case sizing figure), parasitic load
 
+**Cycles per day**:
+The daily cycling a supplier's auxiliary-consumption table assumes as its reference. The
+efficiency run takes it as one fixed value for the whole run, never per timestamp; it chooses
+which battery auxiliary-consumption table applies, interpolating between published references
+and falling back to the nearest one outside them. It is the caller's assumption about daily
+cycling; the run itself never models dispatch.
+_Avoid_: cycle count (that counts cycles over life), throughput
+
 **Efficiency run**:
 The reference cycle an efficiency is evaluated over at one timestamp: a full charge then a
 full discharge of the declared energy (rated power times the declared discharge duration),
