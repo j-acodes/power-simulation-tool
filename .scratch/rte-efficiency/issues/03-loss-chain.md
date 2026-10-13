@@ -61,3 +61,10 @@ Resolved by grilling, 2026-10-09.
 9. **PCS power is always above the POC capacity.** A typed-in POC capacity that breaks this is
    an input error. Hot-ambient derating can break it; that case belongs to
    [How does PCS derating reshape an efficiency run?](04-derated-efficiency-run.md).
+
+## Comments
+
+- 2026-10-13, from [How do auxiliary-consumption tables and the derating curve attach to the catalogue and get looked up?](06-curve-storage-and-lookup.md):
+  without a design the caller also types the BESS solution, a paired station transformer, the
+  station count and the container count (at most stations × pairing maximum), since auxiliary
+  consumption is per container and per MVS.

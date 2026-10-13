@@ -47,6 +47,7 @@ and writes, per timestamp, the **operating** round-trip efficiency of an efficie
 - [Which losses sit between the battery and the POC, from a design and without one?](issues/03-loss-chain.md): existing engine losses, symmetric in direction, PV at zero; discharge anchored at DC output, charge at a POC-capacity import; aux on the MV busbar; without a design, typed-in load %, no-load % and POC capacity.
 - [How does PCS derating reshape an efficiency run?](issues/04-derated-efficiency-run.md): energy fixed, cycle stretches; legs run at derated power (charge imports the lesser of POC capacity and what the derated PCS takes); aux as published; derating is never a loss but a fourth output column, `PCS power % of rated`.
 - [How does cycles per day enter the efficiency run?](issues/05-cycles-per-day.md): one required static parameter selecting the container aux table; linear between published references, nearest table outside (and for single-reference solutions) with a warning; operating/standby are average draw per unit in that state; CSV unchanged.
+- [How do auxiliary-consumption tables and the derating curve attach to the catalogue and get looked up?](issues/06-curve-storage-and-lookup.md): inline simulated parameters on the BESS solution and station transformer; efficiency curves interpolate (ADR-0009), bands step, ratings stay lookup-only; clamp out-of-range ambient with a warning; missing container aux is an error; without a design the caller types solution, station transformer, station and container counts.
 
 ## Not yet specified
 
@@ -56,7 +57,7 @@ and writes, per timestamp, the **operating** round-trip efficiency of an efficie
   after Sungrow's reference efficiency figures.
 - **Idle details**: which transformers count as energised when idle, and whether PCS standby
   draw is separate from auxiliary consumption.
-- **Time-series edge cases**: resolution detection, gaps, timezone/DST (out-of-range ambients belong to [How do auxiliary-consumption tables and the derating curve attach to the catalogue and get looked up?](issues/06-curve-storage-and-lookup.md)).
+- **Time-series edge cases**: resolution detection, gaps, timezone/DST (out-of-range ambients are settled: clamp and warn).
 - **Spec assembly**: write `spec.md` from the decisions, with acceptance criteria and a worked
   example.
 
