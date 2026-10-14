@@ -199,19 +199,29 @@ _Avoid_: cycle count (that counts cycles over life), throughput
 
 **Efficiency run**:
 The reference cycle an efficiency is evaluated over at one timestamp: a full charge then a
-full discharge of the declared energy (rated power times the declared discharge duration),
-with the whole cycle held at that timestamp's ambient temperature. It runs at the full power
-available at that ambient: rated power, or the derated power when PCS derating applies, which
-stretches the cycle. Its result is the **operating** round-trip efficiency at the point of
+full discharge of the nominal energy at the battery's DC terminals, with the whole cycle held
+at that timestamp's ambient temperature. It runs at the full power available at that ambient:
+the rated active power at the container's AC terminals, or the derated power when PCS derating
+applies, which stretches the cycle. The cycle closes: the charge leg puts back what the
+discharge leg took out divided by the cell round-trip efficiency. Its result is the **operating** round-trip efficiency at the point of
 connection, a percentage, reported with the PCS power available, as a percentage of rated. Alongside it, each timestamp carries an **idle**
 standby loss: auxiliary consumption plus energised-transformer no-load losses, as a percentage
 of nameplate energy per hour. Each interval of a battery's dispatch is charging, discharging or
 idle, so the downstream model, not the efficiency run, decides which of the two figures applies.
 _Avoid_: hourly RTE (an interval has no round trip of its own), cycle efficiency
 
+**Rated active power**:
+A BESS container's maximum active power at its AC terminals (the station transformer's LV
+side), Pn in the supplier's system curves: 1724 kW for the ST6900UX-4H, against 1800 kVA of
+apparent power. The declared discharge duration is nominal energy over this figure, which is
+why a "4H" product discharging at it through real conversion losses runs slightly short of
+4 hours. The efficiency run and PCS derating use it; sizing still treats the PCS kVA as both
+limits (ADR-0008).
+_Avoid_: rated power (ambiguous between kW and kVA), PCS rating
+
 **PCS derating**:
 The cap a hot ambient puts on a BESS solution's active power, in charge and discharge alike,
-as a fraction of rated power. It limits how fast energy moves, never how much: a derated
+as a fraction of rated active power. It limits how fast energy moves, never how much: a derated
 efficiency run cycles the same energy over a longer time, and derating is never counted as a
 loss in the round-trip efficiency.
 _Avoid_: derating loss, curtailment (curtailment is a dispatch or grid decision)

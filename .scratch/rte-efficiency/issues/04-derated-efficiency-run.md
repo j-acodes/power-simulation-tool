@@ -40,3 +40,10 @@ Resolved by grilling, 2026-10-09. The Sungrow PT3 curve derates only from 45 to 
 6. **Output:** a fourth column, `PCS power % of rated` (100 when not derated), one figure for
    both directions since the curve is symmetric. The downstream model reads it as a
    per-timestamp power cap. The idle figure is unaffected.
+
+## Comments
+
+- 2026-10-14, from [How do cell efficiency, conversion efficiency and the loss chain combine into one RTE?](08-energy-accounting.md):
+  the discharge leg is anchored at the container's AC terminals at rated active power Pn
+  (× derating factor), not at the DC output; the run cycles the nominal energy at the DC
+  terminals.

@@ -49,13 +49,10 @@ and writes, per timestamp, the **operating** round-trip efficiency of an efficie
 - [How does cycles per day enter the efficiency run?](issues/05-cycles-per-day.md): one required static parameter selecting the container aux table; linear between published references, nearest table outside (and for single-reference solutions) with a warning; operating/standby are average draw per unit in that state; CSV unchanged.
 - [How do auxiliary-consumption tables and the derating curve attach to the catalogue and get looked up?](issues/06-curve-storage-and-lookup.md): inline simulated parameters on the BESS solution and station transformer; efficiency curves interpolate (ADR-0009), bands step, ratings stay lookup-only; clamp out-of-range ambient with a warning; missing container aux is an error; without a design the caller types solution, station transformer, station and container counts.
 - [Get Sungrow's reference efficiency figures for ST6900UX-4H](issues/07-reference-rte-figure.md): one-way conversion efficiency DC terminals → MVS LV 98.4 % per leg (four published items), excluding cells and aux; cell DC RTE unpublished, default 95 % (project assumption, overridable); MVS aux adds to transformer losses; table definitions not obtained.
+- [How do cell efficiency, conversion efficiency and the loss chain combine into one RTE?](issues/08-energy-accounting.md): rated active power Pn (1724 kW) at the AC terminals; cycle the nominal energy at DC, discharging at Pn × derating at AC (~3.94 h); cell RTE applied once on the charge leg so the cycle closes; constant 98.4 % each way; RTE = POC export ÷ POC import, no time stepping. Pn in sizing split out to [Should sizing use rated active power?](issues/09-rated-active-power-in-sizing.md).
 
 ## Not yet specified
 
-- **Energy accounting inside the run**: the legs' anchors are settled (discharge at DC output,
-  charge at a POC-capacity import); still open: how the charge leg tops up the energy the
-  discharge leg delivers, and how the cell DC RTE and the one-way conversion efficiency combine
-  with the loss chain. Unblocked: Sungrow's figures are in.
 - **Idle details**: which transformers count as energised when idle, and whether PCS standby
   draw is separate from auxiliary consumption (Sungrow did not say; assume it is inside
   standby auxiliary consumption unless decided otherwise).

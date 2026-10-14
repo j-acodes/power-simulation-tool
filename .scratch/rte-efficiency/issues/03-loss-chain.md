@@ -68,3 +68,7 @@ Resolved by grilling, 2026-10-09.
   without a design the caller also types the BESS solution, a paired station transformer, the
   station count and the container count (at most stations × pairing maximum), since auxiliary
   consumption is per container and per MVS.
+- 2026-10-14, from [How do cell efficiency, conversion efficiency and the loss chain combine into one RTE?](08-energy-accounting.md):
+  the discharge leg is anchored at the container's AC terminals at rated active power Pn
+  (× derating factor), not at the DC output; the run cycles the nominal energy at the DC
+  terminals.
