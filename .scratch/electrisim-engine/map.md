@@ -33,6 +33,8 @@ first capability on the roadmap.
     it for method and behaviour, then write this tool's own code against pandapower.
   - **Grid-code markets:** Spain, Portugal, Poland, France, Croatia, Italy, Germany.
   - **Calculation and logic only.** The React Flow canvas stays; no Electrisim UI is ported.
+  - **On demand** (user decision, 2026-10-22): the network check runs only when the user
+    asks for it, never on the automatic re-solve after an edit.
 - Scouting facts (2026-10-22) any ticket may lean on:
   - This tool's engine is stdlib + YAML; there is no nodal solve, voltage, short-circuit or
     Q-capability calculation anywhere in `powertool/`.
@@ -69,9 +71,8 @@ first capability on the roadmap.
   study models both together, so there is no reference behaviour to copy.
 - **Transformer taps**: the catalogue has no tap data; P-Q/U-Q sweeps depend on tap
   position.
-- **Where results surface**: issue vs warning vs a compliance verdict, how a check reaches
-  the API, results tables and PDF report, and whether checks run on every auto-solve or on
-  demand (sweeps run hundreds of load flows).
+- **Where results surface**: issue vs warning vs a compliance verdict, and how a check reaches
+  the API, results tables and PDF report.
 - **Grid-code envelope data**: where envelopes live (a `data/` catalogue like the others?),
   how a P-Q, a U-Q and a charging-mode envelope are represented, how a design selects its
   market, type (B/C/D) and voltage variant, and how each envelope carries its source.
