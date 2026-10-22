@@ -1,7 +1,7 @@
 # How does a sized design become a pandapower net?
 
 **Type:** grilling
-**Status:** open
+**Status:** claimed
 **Blocked by:** None
 
 ## Question
