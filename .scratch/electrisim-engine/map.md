@@ -28,6 +28,9 @@ first capability on the roadmap.
     and U-Q capability at the POC; the BESS operating-case checks (export/import ×
     capacitive/inductive at Umin/Unom/Umax).
   - **IEC only, 50 Hz.**
+  - **Electrisim is a reference only** (user decision, 2026-10-22, after the licence answer):
+    no Electrisim code is copied, vendored or run as a service by this tool. Sessions read
+    it for method and behaviour, then write this tool's own code against pandapower.
   - **Grid-code markets:** Spain, Portugal, Poland, France, Croatia, Italy, Germany.
   - **Calculation and logic only.** The React Flow canvas stays; no Electrisim UI is ported.
 - Scouting facts (2026-10-22) any ticket may lean on:

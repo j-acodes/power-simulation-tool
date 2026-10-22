@@ -2,19 +2,20 @@
 
 **Type:** grilling
 **Status:** open
-**Blocked by:** 01, 02
+**Blocked by:** 01
 
 ## Question
 
-Choose how load flow and short-circuit reach `powertool/` while keeping its boundary (no
+Electrisim is a reference only (map Notes), so the network solve is this tool's own code on
+pandapower. Decide how that dependency enters `powertool/` while keeping its boundary (no
 web/UI dependency) and its tests:
 
-- (a) depend on pandapower directly, writing this tool's own diagram-to-network builder and
-  checks, with Electrisim as a worked reference only;
-- (b) as (a), but vendor Electrisim's standalone modules (`storage_q_capability`,
-  `converter_sc_electrisim`, a de-coupled grid-code P-Q sweep);
-- (c) run Electrisim's backend as a separate service and call it.
+- where the network check lives (a new `powertool/` module beside the sizing engine) and
+  what it takes in and returns (the sized `PlantArchitecture`, not diagram JSON);
+- which libraries it adds (pandapower; whether numba and lightsim2grid are worth their
+  weight in the Docker image at this plant size) and the version pin;
+- test strategy: how a network check gets a golden baseline, and how a result is
+  cross-checked against Electrisim on the same plant (observed in the run-locally task).
 
-Weigh licence (02), observed behaviour (01), the Electrisim defects listed in the map's
-Notes, dependency weight (pandapower, numba, lightsim2grid in the Docker image), and test
-strategy (how a network check gets a golden baseline). Resolution is an ADR.
+Weigh observed behaviour from the run-locally task and the Electrisim defects in the map's
+Notes. Resolution is an ADR.
