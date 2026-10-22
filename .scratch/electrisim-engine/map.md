@@ -60,14 +60,10 @@ first capability on the roadmap.
 - [Run Electrisim end-to-end locally](issues/01-run-electrisim-locally.md): all six studies run on a PV/BESS sample plant (payloads and responses saved for cross-checks); no study handles PV and BESS together, storage adds no fault current, the POI study's IEC part fails.
 - [What reactive-power envelopes do the target markets require at the POC?](issues/03-grid-code-reactive-requirements.md): primary sources found for all seven markets (Germany only via summaries); Electrisim's templates are mostly wrong or missing, so envelopes become this tool's own data; Spain and Italy have storage charging-mode rules.
 - [Under what licence is Electrisim's backend published?](issues/02-electrisim-backend-licence.md): no licence file upstream, only a README claim of Apache-2.0; reading is free, copying needs the claim confirmed by the owner; depending on pandapower/lightsim2grid is fine; ANDES is GPL.
+- [How does the network solve come into the engine?](issues/04-how-the-engine-comes-in.md): own `powertool/network/` package taking the sized design plus a POC grid equivalent, returning its own pass/warn/fail results; pandapower pinned 3.3.2, no numba/lightsim2grid; separate network baseline plus Electrisim and hand-calc cross-checks (ADR-0010).
 
 ## Not yet specified
 
-- **Diagram to network**: how stations, busbars, circuits, cables and the HV transformer
-  become buses, lines and transformers; whether identical stations are aggregated; where
-  the grid equivalent (short-circuit power, X/R) at the POC comes from.
-- **BESS import direction**: grid-code import cases and operating-case checks need the
-  charging direction in the network (pandapower storage: +P = charging).
 - **Hybrid capability**: how PV and BESS Q capability combine at one POC. No Electrisim
   study models both together, so there is no reference behaviour to copy.
 - **Transformer taps**: the catalogue has no tap data; P-Q/U-Q sweeps depend on tap
