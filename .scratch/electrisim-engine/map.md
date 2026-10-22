@@ -52,6 +52,8 @@ first capability on the roadmap.
 
 <!-- one line per resolved ticket: [title](issues/NN-slug.md): gist -->
 
+- [Under what licence is Electrisim's backend published?](issues/02-electrisim-backend-licence.md): no licence file upstream, only a README claim of Apache-2.0; reading is free, copying needs the claim confirmed by the owner; depending on pandapower/lightsim2grid is fine; ANDES is GPL.
+
 ## Not yet specified
 
 - **Diagram to network**: how stations, busbars, circuits, cables and the HV transformer
