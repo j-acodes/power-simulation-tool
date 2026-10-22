@@ -51,8 +51,11 @@ station (6 MW / 6.6 MVA, 30/0.8 kV) and BESS station (5 MW / 20 MWh / 5.5 MVA, 3
   with a pandapower 3.3.2 error (`'_is_elements_final'`). It is not usable for IEC as it
   stands.
 - **Grid-code P-Q** works for PV. **Storage can't be selected from the UI**: the backend
-  needs a `storage_names` field that no dialog sends. In the hybrid run it pushed the 6.6
-  MVA PV to the plant's 11 MW and left the BESS at its diagram set point. With no Q curve
+  needs a `storage_names` field that no dialog sends (confirmed in the browser: the unit list
+  shows only the PV). The BESS stays at its diagram set point through the sweep. With the UI
+  default Pn = auto, the sweep scales to the selected units. (An earlier scripted run set
+  Pn = 11 MW by hand and so pushed the 6.6 MVA PV to 11 MW; that was the input, not the
+  engine.) The UI pre-selects the ENTSO-E RfG minimum envelope. With no Q curve
   it falls back to a circular √(Sn²−P²) limit. It reports "compliant" while POC-side
   voltages reach 0.78–1.17 pu and the HV transformer 128 % loaded, unless the protection
   and overload limits are switched on.
@@ -71,7 +74,12 @@ zero-sequence ratios at the POC; inverter/PCS `k` factor and current-source flag
 transformer vector group, zero-sequence impedance and tap range/step; numeric breaker
 rating (`in_ka`); the BESS PCS Sn and Q limits; the grid-code envelope itself.
 
-**Not covered:** the studies were not clicked through in a browser (the Chrome extension
-was not connected). The payloads match `prepareNetworkData()` field for field, and all
-pages and scripts serve with HTTP 200. Offline behaviour of the CDN libraries was not
-checked.
+**Browser check (second pass, same day):** the plant was loaded as a diagram
+(`projects/pv-bess-sample/plant.xml`, commit `c3f16fb`), and load flow and grid-code P-Q
+were run from the Simulate menu. There was no login or subscription prompt and no console
+errors. The load flow matched the scripted run, and the UI payload carries the same fields
+except the transformer tap-changer type and the storage P/Q limits, which the UI omits. One
+UI fragility: Electrisim reads a bus's voltage by attribute **position**, not name.
+
+**Not covered:** short circuit, POI, U-Q and BESS preliminary were run by script only, not
+from the browser. Offline behaviour of the CDN libraries was not checked.
