@@ -1,7 +1,7 @@
 # Run Electrisim end-to-end locally
 
 **Type:** task (AFK)
-**Status:** open
+**Status:** claimed
 **Blocked by:** None
 
 ## Question
