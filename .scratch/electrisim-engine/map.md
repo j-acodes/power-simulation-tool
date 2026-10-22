@@ -47,7 +47,9 @@ first capability on the roadmap.
   - Defects seen in Electrisim, so nothing is copied unverified: `lv_tol_percent` computed
     but not passed to `calc_sc`; BESS-preliminary passes Q mode `'from_curve'`, which the
     P-Q engine does not recognise (falls to Sn/2); the ANSI 1-ph zero-sequence network omits
-    transformers.
+    transformers; storage gives no IEC 60909 contribution; the POI study's IEC cases all
+    error and its breaker duty is ANSI; P-Q/U-Q dialogs cannot select storage (see
+    "Run Electrisim end-to-end locally").
   - Electrisim's grid-code envelopes live in its frontend (`dialogs/RPCDialog.js`); the
     backend P-Q sweep only takes an envelope as input.
 
@@ -55,6 +57,7 @@ first capability on the roadmap.
 
 <!-- one line per resolved ticket: [title](issues/NN-slug.md): gist -->
 
+- [Run Electrisim end-to-end locally](issues/01-run-electrisim-locally.md): all six studies run on a PV/BESS sample plant (payloads and responses saved for cross-checks); no study handles PV and BESS together, storage adds no fault current, the POI study's IEC part fails.
 - [What reactive-power envelopes do the target markets require at the POC?](issues/03-grid-code-reactive-requirements.md): primary sources found for all seven markets (Germany only via summaries); Electrisim's templates are mostly wrong or missing, so envelopes become this tool's own data; Spain and Italy have storage charging-mode rules.
 - [Under what licence is Electrisim's backend published?](issues/02-electrisim-backend-licence.md): no licence file upstream, only a README claim of Apache-2.0; reading is free, copying needs the claim confirmed by the owner; depending on pandapower/lightsim2grid is fine; ANDES is GPL.
 
@@ -63,9 +66,10 @@ first capability on the roadmap.
 - **Diagram to network**: how stations, busbars, circuits, cables and the HV transformer
   become buses, lines and transformers; whether identical stations are aggregated; where
   the grid equivalent (short-circuit power, X/R) at the POC comes from.
-- **BESS import direction**: the engine treats BESS discharge as generation; grid-code
-  import cases and operating-case checks need the charging direction in the network.
-- **Hybrid capability**: how PV and BESS Q capability combine at one POC.
+- **BESS import direction**: grid-code import cases and operating-case checks need the
+  charging direction in the network (pandapower storage: +P = charging).
+- **Hybrid capability**: how PV and BESS Q capability combine at one POC. No Electrisim
+  study models both together, so there is no reference behaviour to copy.
 - **Transformer taps**: the catalogue has no tap data; P-Q/U-Q sweeps depend on tap
   position.
 - **Where results surface**: issue vs warning vs a compliance verdict, how a check reaches
