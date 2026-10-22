@@ -32,7 +32,7 @@ Q/Pmax below: + injecting, − absorbing.
 | Germany | VDE-AR-N 4120 variants 1–3 (+0.48/−0.23, +0.41/−0.33, +0.33/−0.41); 4110 ±0.33 | from summaries; texts paywalled; 4130 not obtained | Medium / Low |
 
 Electrisim's templates (frontend `RPCDialog.js`; the backend sweep only takes an envelope as
-input) do not hold up as a source: of its 13 templates for these markets, 3 match a current
+input) do not hold up as a source: of its 13 templates for these markets, 2 match a current
 primary source (Polish 400 kV U-Q, Polish 2019 Fig. 2 P-Q) and 2 roughly match (VDE 4120
 Var. 2 and 4110, at full P only). The Italian A.68 and both ENTSO-E templates have wrong
 values, and the Polish "110 kV" U-Q is actually Croatia's rectangle. The Polish cos φ
