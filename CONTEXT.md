@@ -262,3 +262,9 @@ reports what it finds against limits without changing any selection. Sizing work
 from the POC through the loss cascade; a network check works forward over the result and
 can only pass, warn or fail it.
 _Avoid_: load flow sizing, network sizing (sizing never comes from the solve)
+
+**Grid equivalent**:
+The public grid as seen from the POC, reduced to its short-circuit power (Sk" maximum and
+minimum) and X/R ratio. It is typed per design from the grid-connection offer, never taken
+from a catalogue or assumed: without it a network check reports no fault levels.
+_Avoid_: external grid, PCC (use POC)

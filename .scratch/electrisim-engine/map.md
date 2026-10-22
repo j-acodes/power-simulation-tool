@@ -61,6 +61,7 @@ first capability on the roadmap.
 - [What reactive-power envelopes do the target markets require at the POC?](issues/03-grid-code-reactive-requirements.md): primary sources found for all seven markets (Germany only via summaries); Electrisim's templates are mostly wrong or missing, so envelopes become this tool's own data; Spain and Italy have storage charging-mode rules.
 - [Under what licence is Electrisim's backend published?](issues/02-electrisim-backend-licence.md): no licence file upstream, only a README claim of Apache-2.0; reading is free, copying needs the claim confirmed by the owner; depending on pandapower/lightsim2grid is fine; ANDES is GPL.
 - [How does the network solve come into the engine?](issues/04-how-the-engine-comes-in.md): own `powertool/network/` package taking the sized design plus a POC grid equivalent, returning its own pass/warn/fail results; pandapower pinned 3.3.2, no numba/lightsim2grid; separate network baseline plus Electrisim and hand-calc cross-checks (ADR-0010).
+- [Where do short-circuit inputs come from?](issues/05-short-circuit-input-data.md): grid Sk" max/min and X/R are a required per-design input (no placeholder; check skipped with a warning); converter k, transformer zero-sequence and numeric switchgear withstand are datasheet catalogue fields with declared defaults; first check is three-phase only; PV station "withstand" strings are really IAC ratings.
 
 ## Not yet specified
 
