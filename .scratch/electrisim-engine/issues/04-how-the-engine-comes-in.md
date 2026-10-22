@@ -1,7 +1,7 @@
 # How does the network solve come into the engine?
 
 **Type:** grilling
-**Status:** open
+**Status:** claimed
 **Blocked by:** 01
 
 ## Question
