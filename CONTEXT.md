@@ -254,3 +254,11 @@ relay implements, the switchgear units on offer — is typed and transcribed ver
 to one field. What the tiers exclude is free-form prose, not non-numeric fact: there is no
 third tier, and a datasheet row that will not survive verbatim transcription is not stored.
 _Avoid_: display field, metadata (both blur the point, which is what the engine reads)
+
+**Network check**:
+A solve of the electrical network of a design that has already been sized — load flow for
+voltages, currents and reactive power at the POC, and short-circuit for fault levels — that
+reports what it finds against limits without changing any selection. Sizing works backward
+from the POC through the loss cascade; a network check works forward over the result and
+can only pass, warn or fail it.
+_Avoid_: load flow sizing, network sizing (sizing never comes from the solve)
