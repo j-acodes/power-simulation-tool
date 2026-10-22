@@ -45,13 +45,14 @@ first capability on the roadmap.
     but not passed to `calc_sc`; BESS-preliminary passes Q mode `'from_curve'`, which the
     P-Q engine does not recognise (falls to Sn/2); the ANSI 1-ph zero-sequence network omits
     transformers.
-  - Electrisim's P-Q templates (frontend `dialogs/RPCDialog.js`) cover ENTSO-E RfG, VDE AR-N
-    4110/4120, Poland, Spain, Italy and others; Portugal, France and Croatia were not seen.
+  - Electrisim's grid-code envelopes live in its frontend (`dialogs/RPCDialog.js`); the
+    backend P-Q sweep only takes an envelope as input.
 
 ## Decisions so far
 
 <!-- one line per resolved ticket: [title](issues/NN-slug.md): gist -->
 
+- [What reactive-power envelopes do the target markets require at the POC?](issues/03-grid-code-reactive-requirements.md): primary sources found for all seven markets (Germany only via summaries); Electrisim's templates are mostly wrong or missing, so envelopes become this tool's own data; Spain and Italy have storage charging-mode rules.
 - [Under what licence is Electrisim's backend published?](issues/02-electrisim-backend-licence.md): no licence file upstream, only a README claim of Apache-2.0; reading is free, copying needs the claim confirmed by the owner; depending on pandapower/lightsim2grid is fine; ANDES is GPL.
 
 ## Not yet specified
@@ -67,6 +68,9 @@ first capability on the roadmap.
 - **Where results surface**: issue vs warning vs a compliance verdict, how a check reaches
   the API, results tables and PDF report, and whether checks run on every auto-solve or on
   demand (sweeps run hundreds of load flows).
+- **Grid-code envelope data**: where envelopes live (a `data/` catalogue like the others?),
+  how a P-Q, a U-Q and a charging-mode envelope are represented, how a design selects its
+  market, type (B/C/D) and voltage variant, and how each envelope carries its source.
 - **Spec assembly** for the first roadmap capability, with acceptance criteria and a
   worked example checked against Electrisim's result on the same plant.
 
