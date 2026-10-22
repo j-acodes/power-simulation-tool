@@ -1,7 +1,7 @@
 # Where do short-circuit inputs come from?
 
 **Type:** grilling
-**Status:** open
+**Status:** claimed
 **Blocked by:** None
 
 ## Question
