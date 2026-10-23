@@ -346,7 +346,7 @@ def _station_aux_tables(station_transformers, warnings: list[str]) -> tuple:
 def _solution_parameters(solution: BessSolution, cycles_per_day, cell_rte_pct,
                          warnings: list[str]):
     """The solution's efficiency-run data, validated: conversion efficiency,
-    cell RTE, the container table, the published ambient range."""
+    cell RTE, the container table."""
     if not solution.aux_consumption:
         raise EfficiencyRunError(
             f"BESS solution {solution.name!r} publishes no auxiliary-consumption table")
@@ -366,14 +366,19 @@ def _solution_parameters(solution: BessSolution, cycles_per_day, cell_rte_pct,
     except ValueError as exc:
         raise EfficiencyRunError(f"BESS solution {solution.name!r}: {exc}") from None
     warnings.extend(aux_warnings)
+    return eta, rho_pct / 100.0, aux_table
 
-    # The published ambient range: where the container tables and the
-    # derating curve all have points. Outside it the run clamps (ADR-0009).
-    curves = [t.ambient_c for t in solution.aux_consumption]
+
+def _published_range(solution: BessSolution, station_aux_tables) -> tuple[float, float]:
+    """The published ambient range: where every curve the run reads (the
+    container tables, the derating curve, each transformer station's band
+    table) has data. Outside it the run clamps (ADR-0009)."""
+    ranges = [(t.ambient_c[0], t.ambient_c[-1]) for t in solution.aux_consumption]
     if solution.derating is not None:
-        curves.append(solution.derating.ambient_c)
-    ambient_range_c = (max(c[0] for c in curves), min(c[-1] for c in curves))
-    return eta, rho_pct / 100.0, aux_table, ambient_range_c
+        ranges.append((solution.derating.ambient_c[0], solution.derating.ambient_c[-1]))
+    ranges.extend((bands[0].ambient_min_c, bands[-1].ambient_max_c)
+                  for bands, _count in station_aux_tables)
+    return max(low for low, _ in ranges), min(high for _, high in ranges)
 
 
 def _rated_active_power(solution: BessSolution) -> float:
@@ -389,7 +394,7 @@ def _fleet(solution: BessSolution, containers: int, stations: int, poc_capacity_
            chain: LossChain, station_transformers, cycles_per_day, cell_rte_pct,
            warnings: list[str]) -> _Fleet:
     pn = _rated_active_power(solution)
-    eta, rho, aux_table, ambient_range_c = _solution_parameters(
+    eta, rho, aux_table = _solution_parameters(
         solution, cycles_per_day, cell_rte_pct, warnings)
     station_aux_tables = _station_aux_tables(station_transformers, warnings)
     if solution.derating is None:
@@ -408,7 +413,7 @@ def _fleet(solution: BessSolution, containers: int, stations: int, poc_capacity_
         aux_table=aux_table,
         station_aux_tables=station_aux_tables,
         derating=solution.derating,
-        ambient_range_c=ambient_range_c,
+        ambient_range_c=_published_range(solution, station_aux_tables),
     )
 
 

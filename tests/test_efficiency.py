@@ -317,3 +317,24 @@ def test_idle_loss_clamps_out_of_range_ambients_to_the_edge(db, outside, edge):
     out_row, edge_row = result.rows
     assert out_row.idle_loss_pct == edge_row.idle_loss_pct
     assert out_row.operating_rte_pct == edge_row.operating_rte_pct
+
+
+def test_a_narrower_station_table_narrows_the_published_range_and_warns(db):
+    station = replace(db.bess_transformer("SUNGROW_MVS7400_LS"), station_aux_consumption=(
+        StationAuxBand(-20, 10, 3.50, 2.50), StationAuxBand(10, 40, 4.02, 2.76)))
+    catalogue = ComponentDatabase(
+        bess_solutions=db.bess_solutions,
+        bess_transformers={**db.bess_transformers, station.name: station},
+        bess_pairings=db.bess_pairings)
+
+    result = run_efficiency([("hot", 45.0), ("edge", 40.0), ("cold", -25.0), ("in", 25.0)],
+                            WORKED, catalogue)
+
+    hot, edge, cold, _ = result.rows
+    # 45 °C reads the station table's 40 °C edge for every figure; the
+    # container table and derating curve, which do cover 45 °C, clamp with it.
+    assert hot.operating_rte_pct == edge.operating_rte_pct
+    assert hot.idle_loss_pct == edge.idle_loss_pct
+    (warning,) = result.warnings
+    assert "2 timestamps" in warning
+    assert "-20 to 40" in warning
