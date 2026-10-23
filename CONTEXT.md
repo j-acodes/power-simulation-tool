@@ -12,6 +12,12 @@ from a power figure set here. A design has exactly one POC, regardless of how ma
 generation or storage sit behind it.
 _Avoid_: PCC, grid connection point, interconnection point
 
+**POC capacity**:
+The active power the plant may export to, or import from, the grid at the point of connection.
+A design's sizing target, or a typed-in figure when no design is given. A PCS fleet's power is
+always above it.
+_Avoid_: grid capacity, export limit (names one direction only)
+
 **MV interconnection / HV interconnection**:
 The two ways a plant can meet the grid. An MV interconnection has no dedicated HV
 transformer: the point of connection sits directly at MV, one level above the stations. An
@@ -174,6 +180,61 @@ A supplier's figure can be **unpublished**, which is not the same as zero: the b
 then understated by that solution's real draw, and the design says so in a warning rather than
 inventing a number or refusing to solve.
 _Avoid_: parasitic load, house load
+
+**Auxiliary consumption**:
+The realistic draw of a BESS solution's auxiliaries (cooling, BMS, controls), which varies
+with ambient temperature and with whether the battery is operating or idle. It is fed from the
+MV busbar and is used only to model efficiency, never to size equipment: sizing for the grid
+code uses the worst-case auxiliary load, and the two figures are never substituted for each
+other.
+_Avoid_: auxiliary load (that is the fixed worst-case sizing figure), parasitic load
+
+**Cycles per day**:
+The daily cycling a supplier's auxiliary-consumption table assumes as its reference. The
+efficiency run takes it as one fixed value for the whole run, never per timestamp; it chooses
+which battery auxiliary-consumption table applies, interpolating between published references
+and falling back to the nearest one outside them. It is the caller's assumption about daily
+cycling; the run itself never models dispatch.
+_Avoid_: cycle count (that counts cycles over life), throughput
+
+**Efficiency run**:
+The reference cycle an efficiency is evaluated over at one timestamp: a full charge then a
+full discharge of the nominal energy at the battery's DC terminals, with the whole cycle held
+at that timestamp's ambient temperature. It runs at the full power available at that ambient:
+the rated active power at the container's AC terminals, or the derated power when PCS derating
+applies, which stretches the cycle. The cycle closes: the charge leg puts back what the
+discharge leg took out divided by the cell round-trip efficiency. Its result is the **operating** round-trip efficiency at the point of
+connection, a percentage, reported with the PCS power available, as a percentage of rated. Alongside it, each timestamp carries an **idle**
+standby loss: standby auxiliary consumption plus the no-load losses of every station and HV
+transformer, imported at the point of connection, as a percentage of nominal energy per hour. Each interval of a battery's dispatch is charging, discharging or
+idle, so the downstream model, not the efficiency run, decides which of the two figures applies.
+_Avoid_: hourly RTE (an interval has no round trip of its own), cycle efficiency
+
+**Rated active power**:
+A BESS container's maximum active power at its AC terminals (the station transformer's LV
+side), Pn in the supplier's system curves: 1724 kW for the ST6900UX-4H, against 1800 kVA of
+apparent power. The declared discharge duration is nominal energy over this figure, which is
+why a "4H" product discharging at it through real conversion losses runs slightly short of
+4 hours. The efficiency run, PCS derating and sizing's active-power check use it; the PCS kVA
+remains the apparent-power limit (ADR-0008). A BESS solution without it cannot be used.
+_Avoid_: rated power (ambiguous between kW and kVA), PCS rating
+
+**PCS derating**:
+The cap a hot ambient puts on a BESS solution's active power, in charge and discharge alike,
+as a fraction of rated active power. It limits how fast energy moves, never how much: a derated
+efficiency run cycles the same energy over a longer time, and derating is never counted as a
+loss in the round-trip efficiency.
+_Avoid_: derating loss, curtailment (curtailment is a dispatch or grid decision)
+
+**Loss chain**:
+The electrical losses between the PCS and the point of connection that an efficiency run
+applies: station transformers (load and no-load), collection cables, the HV transformer and
+the export cable, with auxiliary consumption drawn at the MV busbar. It comes from a design's
+own equipment, or from typed-in load and no-load loss percentages when no design is given. The
+losses are the same in either direction for the same power; a charge leg and a discharge leg
+still lose different percentages because each is measured against the power at the end it
+starts from: the POC import when charging, the DC output when discharging.
+_Avoid_: system losses, BOP losses
 
 **BESS solution**:
 A named battery product, selected from a catalogue and identified the way a supplier quote
