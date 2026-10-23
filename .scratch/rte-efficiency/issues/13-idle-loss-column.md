@@ -8,8 +8,8 @@ as energy imported at the POC. See [spec](../spec.md), "The idle figure", and
 
 **Blocked by:** 12
 
-**Status:** ready-for-agent
+**Status:** done
 
-- [ ] The worked example's idle loss at 25 °C reproduces: 0.094 %/h (417 kW over 441.9 MWh).
-- [ ] The idle figure does not change with derating, and carries no load losses.
-- [ ] Out-of-range ambients clamp the same way as the operating figure.
+- [x] The worked example's idle loss at 25 °C reproduces: 0.094 %/h (417 kW over 441.9 MWh).
+- [x] The idle figure does not change with derating, and carries no load losses.
+- [x] Out-of-range ambients clamp the same way as the operating figure.
