@@ -10,7 +10,7 @@ from dataclasses import replace
 import pytest
 
 from powertool import ComponentDatabase, efficiency_cli
-from powertool.components import MvsAuxBand, resolve_container_aux
+from powertool.components import StationAuxBand, resolve_container_aux
 from powertool.efficiency import EfficiencyRunError, TypedConfiguration, run_efficiency
 
 
@@ -48,8 +48,8 @@ def _without_auxiliaries(db: ComponentDatabase) -> ComponentDatabase:
     zero_tables = tuple(
         replace(t, operating_kw=[0.0] * len(t.ambient_c), standby_kw=[0.0] * len(t.ambient_c))
         for t in solution.aux_consumption)
-    station = replace(db.bess_transformer("SUNGROW_MVS7400_LS"), mvs_aux_consumption=(
-        MvsAuxBand(-30, 50, 0.0, 0.0),))
+    station = replace(db.bess_transformer("SUNGROW_MVS7400_LS"), station_aux_consumption=(
+        StationAuxBand(-30, 50, 0.0, 0.0),))
     return ComponentDatabase(
         bess_solutions={**db.bess_solutions,
                         solution.name: replace(solution, aux_consumption=zero_tables)},
@@ -97,8 +97,8 @@ def test_solution_without_container_table_is_an_error(db):
         run_efficiency([("t", 25.0)], WORKED, _with_solution(db, aux_consumption=()))
 
 
-def test_station_without_mvs_table_counts_zero_and_warns(db):
-    station = replace(db.bess_transformer("SUNGROW_MVS7400_LS"), mvs_aux_consumption=())
+def test_station_without_auxiliary_table_counts_zero_and_warns(db):
+    station = replace(db.bess_transformer("SUNGROW_MVS7400_LS"), station_aux_consumption=())
     catalogue = ComponentDatabase(
         bess_solutions=db.bess_solutions,
         bess_transformers={**db.bess_transformers, station.name: station},

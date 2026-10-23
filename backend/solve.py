@@ -31,17 +31,9 @@ from powertool.graph import (
     sld_fleets,
     validate_graph,
 )
-# The diagram solve itself lives in the engine (powertool.plant); re-exported
-# here unchanged for the web adapter's callers and tests.
-from powertool.plant import (  # noqa: F401
-    _allocation_capacities_kw,
-    _split_active,
-    _split_reactive,
-    _uses_shared_export,
-    build_collection_chain,
-    build_export_chain,
-    solve_architecture,
-)
+# The diagram solve itself lives in the engine (powertool.plant); also
+# imported from here by the tests.
+from powertool.plant import solve_architecture
 
 # Stage-1 cable-sizing rule defaults — max_utilization 80%,
 # collection_loss_pct 1.30%, export_loss_pct_per_km 0.10%/km, inherited from

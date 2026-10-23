@@ -65,8 +65,8 @@ def _parser() -> argparse.ArgumentParser:
     return p
 
 
-def _fmt(value: float | None) -> str:
-    return "" if value is None else f"{round(value, 4):g}"
+def _fmt(value: float) -> str:
+    return f"{round(value, 4):g}"
 
 
 def main(argv: list[str] | None = None) -> int:

@@ -69,7 +69,7 @@ bess_solutions:
     preliminary: true
     datasheet_url: ""
     # Efficiency-run parameters (simulated; read only by powertool.efficiency).
-    # One-way conversion efficiency DC terminals -> MVS LV, as the product of
+    # One-way conversion efficiency DC terminals -> transformer station LV, as the product of
     # these items (98.45 %; Sungrow quotes 98.4 %). Source: Sungrow LV loss
     # parameters for PowerTitan 3.0, preliminary.
     conversion_efficiency_pct:

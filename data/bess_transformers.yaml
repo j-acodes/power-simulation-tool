@@ -55,11 +55,11 @@ bess_transformers:
       # before this leaves a design review.
       sungrow-st6900ux-4h: 4
     # Efficiency-run parameter (simulated; read only by powertool.efficiency):
-    # auxiliary consumption per MVS [kW], operating and standby, by ambient
+    # auxiliary consumption per transformer station [kW], operating and standby, by ambient
     # band [min, max); the last band includes its top. Source: Sungrow
     # PowerTitan 3.0 technical proposal, Table 9, preliminary. Stepped by band,
     # not interpolated (ADR-0009).
-    mvs_aux_consumption:
+    station_aux_consumption:
       - {ambient_min_c: -30, ambient_max_c: 10, operating_kw: 3.50, standby_kw: 2.50}
       - {ambient_min_c: 10,  ambient_max_c: 35, operating_kw: 4.02, standby_kw: 2.76}
       - {ambient_min_c: 35,  ambient_max_c: 50, operating_kw: 4.02, standby_kw: 3.02}

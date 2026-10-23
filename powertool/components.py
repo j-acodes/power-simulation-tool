@@ -229,14 +229,15 @@ class Transformer:
     ac_input_protection: str | None = None
     optional_features: str | None = None
     weight_specification: str | None = None
-    # Efficiency-run parameter (simulated): the MVS auxiliary consumption by
-    # ambient band, read only by powertool.efficiency. Empty: not published.
-    mvs_aux_consumption: tuple[MvsAuxBand, ...] = ()
+    # Efficiency-run parameter (simulated): the transformer station's auxiliary
+    # consumption by ambient band, read only by powertool.efficiency. Empty:
+    # not published.
+    station_aux_consumption: tuple[StationAuxBand, ...] = ()
 
     def __post_init__(self) -> None:
-        self.mvs_aux_consumption = tuple(
-            b if isinstance(b, MvsAuxBand) else MvsAuxBand(**b)
-            for b in self.mvs_aux_consumption)
+        self.station_aux_consumption = tuple(
+            b if isinstance(b, StationAuxBand) else StationAuxBand(**b)
+            for b in self.station_aux_consumption)
         required_positive = {
             "s_rated_kva_at_40c": self.s_rated_kva_at_40c,
             "uk_percent": self.uk_percent,
@@ -477,6 +478,19 @@ def _interpolate(xs: tuple[float, ...], ys: tuple[float, ...], x: float) -> floa
     raise ValueError(f"ambient {x} not bracketed by {xs}")  # unreachable for sorted xs
 
 
+def _validate_ambient_columns(curve, columns: tuple[str, ...], what: str) -> None:
+    """Coerce a frozen curve's ``ambient_c`` and value ``columns`` to float
+    tuples, and check they are equal, non-empty lengths with strictly
+    increasing ambients. Raises ValueError naming ``what``."""
+    for name in ("ambient_c", *columns):
+        object.__setattr__(curve, name, tuple(float(v) for v in getattr(curve, name)))
+    if len({len(getattr(curve, name)) for name in ("ambient_c", *columns)}) != 1 \
+            or not curve.ambient_c:
+        raise ValueError(f"{what} columns must be equal, non-empty lengths")
+    if list(curve.ambient_c) != sorted(set(curve.ambient_c)):
+        raise ValueError(f"{what} ambients must be strictly increasing")
+
+
 @dataclass(frozen=True)
 class AuxConsumptionTable:
     """A BESS solution's auxiliary consumption at one cycles-per-day reference:
@@ -492,12 +506,8 @@ class AuxConsumptionTable:
     standby_kw: tuple[float, ...]
 
     def __post_init__(self) -> None:
-        for field in ("ambient_c", "operating_kw", "standby_kw"):
-            object.__setattr__(self, field, tuple(float(v) for v in getattr(self, field)))
-        if not (len(self.ambient_c) == len(self.operating_kw) == len(self.standby_kw) >= 1):
-            raise ValueError("auxiliary consumption table columns must be equal, non-empty lengths")
-        if list(self.ambient_c) != sorted(set(self.ambient_c)):
-            raise ValueError("auxiliary consumption ambients must be strictly increasing")
+        _validate_ambient_columns(self, ("operating_kw", "standby_kw"),
+                                  "auxiliary consumption table")
 
     def operating_kw_at(self, ambient_c: float) -> float:
         return _interpolate(self.ambient_c, self.operating_kw, ambient_c)
@@ -519,12 +529,7 @@ class DeratingCurve:
     fraction: tuple[float, ...]
 
     def __post_init__(self) -> None:
-        for field in ("ambient_c", "fraction"):
-            object.__setattr__(self, field, tuple(float(v) for v in getattr(self, field)))
-        if not (len(self.ambient_c) == len(self.fraction) >= 1):
-            raise ValueError("derating curve columns must be equal, non-empty lengths")
-        if list(self.ambient_c) != sorted(set(self.ambient_c)):
-            raise ValueError("derating curve ambients must be strictly increasing")
+        _validate_ambient_columns(self, ("fraction",), "derating curve")
         if not all(0 < f <= 1 for f in self.fraction):
             raise ValueError("derating fractions must be in (0, 1]")
 
@@ -590,9 +595,9 @@ def resolve_container_aux(
 
 
 @dataclass(frozen=True)
-class MvsAuxBand:
-    """One ambient band of a station transformer's (MVS) auxiliary consumption:
-    operating and standby kW per MVS for ambients in [ambient_min_c,
+class StationAuxBand:
+    """One ambient band of a transformer station's auxiliary consumption:
+    operating and standby kW per transformer station for ambients in [ambient_min_c,
     ambient_max_c). The supplier publishes these as bands, so they are stepped,
     not interpolated (ADR-0009)."""
 
@@ -602,7 +607,7 @@ class MvsAuxBand:
     standby_kw: float
 
 
-def mvs_aux_band(bands: tuple[MvsAuxBand, ...], ambient_c: float) -> MvsAuxBand:
+def station_aux_band(bands: tuple[StationAuxBand, ...], ambient_c: float) -> StationAuxBand:
     """The band containing ``ambient_c``. Bands are half-open, the last one
     closed at its top; outside the published range the edge band applies."""
     for band in bands:
@@ -658,9 +663,10 @@ class BessSolution:
     # Read only by powertool.efficiency, never by sizing (CONTEXT.md's
     # "Efficiency run"). Empty / None: not published for this solution.
     #
-    # One-way conversion efficiency, DC terminals -> MVS LV, as named items in
-    # percent whose product is used (see ``conversion_efficiency``); constant at
-    # every power level, both directions. YAML gives a mapping; stored as pairs.
+    # One-way conversion efficiency, DC terminals -> transformer station LV, as
+    # named items in percent whose product is used (see
+    # ``conversion_efficiency``); constant at every power level, both
+    # directions. YAML gives a mapping; stored as pairs.
     conversion_efficiency_pct: tuple[tuple[str, float], ...] = ()
     cell_rte_pct: float | None = None           # cell (DC) round-trip efficiency
     aux_consumption: tuple[AuxConsumptionTable, ...] = ()  # one per cycles/day reference

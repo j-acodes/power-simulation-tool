@@ -22,9 +22,10 @@ import math
 from dataclasses import dataclass, field
 from typing import Iterable, Protocol
 
-from .architecture import BranchArchitecture, ExportResult
-from .components import (BessSolution, ContainerAuxLookup, DeratingCurve, MvsAuxBand,
-                         mvs_aux_band, resolve_container_aux)
+from .architecture import BranchArchitecture, ExportResult, SegmentResult
+from .cable_sizing import CableSelection
+from .components import (BessSolution, ContainerAuxLookup, DeratingCurve, StationAuxBand,
+                         Transformer, resolve_container_aux, station_aux_band)
 from .database import ComponentDatabase
 from .graph import graph_to_inputs, validate_graph
 from .plant import solve_architecture
@@ -73,7 +74,7 @@ class EfficiencyRow:
 
     timestamp: str
     operating_rte_pct: float
-    idle_loss_pct: float | None
+    idle_loss_pct: float
     pcs_power_pct: float
 
 
@@ -150,21 +151,21 @@ def _invert(f, target: float) -> float:
 
 @dataclass(frozen=True)
 class _Station:
-    transformer: object       # Transformer
-    share: float              # of the fleet's container AC power
-    cable: object | None      # the sized segment feeding it (CableSelection), if any
+    transformer: Transformer
+    share: float                    # of the fleet's container AC power
+    cable: CableSelection | None    # the sized segment feeding it, if any
     length_km: float
 
 
 @dataclass(frozen=True)
-class _Section:
+class _Busbar:
     """One BESS busbar: its circuits (each far station first), its share of
     the auxiliary draw, and its own MV export run when it has one."""
 
     v_mv_kv: float
     circuits: tuple[tuple[_Station, ...], ...]
     aux_share: float
-    mv_export: object | None  # SegmentResult with a selection, or None
+    mv_export: SegmentResult | None  # only with a cable selection
 
 
 @dataclass(frozen=True)
@@ -186,7 +187,7 @@ class DesignLossChain:
     and export cable carry the battery alone.
     """
 
-    sections: tuple[_Section, ...]
+    busbars: tuple[_Busbar, ...]
     export: ExportResult | None
     no_load_kw: float
 
@@ -195,7 +196,7 @@ class DesignLossChain:
                           export: ExportResult | None) -> "DesignLossChain":
         p_total = sum(plan.p_lv_kw for b in branches
                       for plans in b.layout.circuit_plans for plan in plans)
-        sections: list[_Section] = []
+        busbars: list[_Busbar] = []
         for branch in branches:
             pairs = list(zip(branch.circuits, branch.layout.circuit_plans))
             for section in branch.sections:
@@ -206,24 +207,24 @@ class DesignLossChain:
                           for seg, plan in zip(reversed(circuit.segments), reversed(plans)))
                     for circuit, plans in pairs if circuit.index in indices)
                 mv_export = section.mv_export
-                sections.append(_Section(
+                busbars.append(_Busbar(
                     v_mv_kv=branch.layout.v_mv_kv,
                     circuits=circuits,
                     aux_share=sum(st.share for c in circuits for st in c),
                     mv_export=mv_export if mv_export is not None
                     and mv_export.selection is not None else None,
                 ))
-        no_load = sum(st.transformer.p0_kw for s in sections for c in s.circuits for st in c)
+        no_load = sum(st.transformer.p0_kw for b in busbars for c in b.circuits for st in c)
         if export is not None and export.hv_transformer is not None:
             no_load += export.hv_transformer.p0_kw * export.hv_n_parallel
-        return cls(tuple(sections), export, no_load)
+        return cls(tuple(busbars), export, no_load)
 
     def _poc_kw(self, p_ac_kw: float, aux_kw: float) -> float:
         """Signed power at the POC for signed ``p_ac_kw`` at the containers."""
         p_total = q_total = 0.0
-        for section in self.sections:
+        for busbar in self.busbars:
             p_sec = q_sec = 0.0
-            for circuit in section.circuits:
+            for circuit in busbar.circuits:
                 p = q = 0.0
                 for st in circuit:               # far station first
                     p_lv = p_ac_kw * st.share
@@ -232,16 +233,16 @@ class DesignLossChain:
                     q -= dq
                     if st.cable is not None:
                         dp, dq = st.cable.cable.series_losses(
-                            math.hypot(p, q), section.v_mv_kv, st.length_km)
+                            math.hypot(p, q), busbar.v_mv_kv, st.length_km)
                         p -= dp / st.cable.n_parallel
                         q -= dq / st.cable.n_parallel
                 p_sec += p
                 q_sec += q
-            p_sec -= aux_kw * section.aux_share
-            if section.mv_export is not None:
-                sel = section.mv_export.selection
+            p_sec -= aux_kw * busbar.aux_share
+            if busbar.mv_export is not None:
+                sel = busbar.mv_export.selection
                 dp, dq = sel.cable.series_losses(
-                    math.hypot(p_sec, q_sec), section.v_mv_kv, section.mv_export.length_km)
+                    math.hypot(p_sec, q_sec), busbar.v_mv_kv, busbar.mv_export.length_km)
                 p_sec -= dp / sel.n_parallel
                 q_sec -= dq / sel.n_parallel
             p_total += p_sec
@@ -289,9 +290,10 @@ class _Fleet:
     eta: float                # one-way conversion efficiency
     rho: float                # cell round-trip efficiency
     aux_table: ContainerAuxLookup  # operating and standby kW per container
-    # (MVS auxiliary bands, station count) per station transformer model;
-    # a model with no published table is absent, counted as zero.
-    mvs_tables: tuple[tuple[tuple[MvsAuxBand, ...], int], ...]
+    # (transformer-station auxiliary bands, station count) per station
+    # transformer model; a model with no published table is absent, counted
+    # as zero.
+    station_aux_tables: tuple[tuple[tuple[StationAuxBand, ...], int], ...]
     derating: DeratingCurve | None  # None: no curve, 100 % of rated power
     ambient_range_c: tuple[float, float]  # published range every curve covers
 
@@ -299,12 +301,19 @@ class _Fleet:
         """Fraction of rated active power available at ``ambient_c``."""
         return self.derating.fraction_at(ambient_c) if self.derating else 1.0
 
-    def mvs_kw(self, ambient_c: float, standby: bool) -> float:
-        total = 0.0
-        for bands, count in self.mvs_tables:
-            band = mvs_aux_band(bands, ambient_c)
-            total += count * (band.standby_kw if standby else band.operating_kw)
-        return total
+    def _station_bands(self, ambient_c: float):
+        for bands, count in self.station_aux_tables:
+            yield station_aux_band(bands, ambient_c), count
+
+    def station_operating_kw_at(self, ambient_c: float) -> float:
+        """Operating auxiliary consumption of every transformer station [kW]."""
+        return sum(count * band.operating_kw
+                   for band, count in self._station_bands(ambient_c))
+
+    def station_standby_kw_at(self, ambient_c: float) -> float:
+        """Standby auxiliary consumption of every transformer station [kW]."""
+        return sum(count * band.standby_kw
+                   for band, count in self._station_bands(ambient_c))
 
 
 @dataclass(frozen=True)
@@ -319,17 +328,17 @@ class DesignFleet:
     poc_capacity_kw: float
     chain: DesignLossChain
     # (station transformer, count) over the BESS fleet, first appearance first
-    station_transformers: tuple[tuple[object, int], ...]
+    station_transformers: tuple[tuple[Transformer, int], ...]
 
 
-def _mvs_tables(station_transformers, warnings: list[str]) -> tuple:
+def _station_aux_tables(station_transformers, warnings: list[str]) -> tuple:
     tables = []
     for transformer, count in station_transformers:
-        if transformer.mvs_aux_consumption:
-            tables.append((transformer.mvs_aux_consumption, count))
+        if transformer.station_aux_consumption:
+            tables.append((transformer.station_aux_consumption, count))
         else:
             warnings.append(
-                f"station transformer {transformer.name!r} publishes no MVS "
+                f"station transformer {transformer.name!r} publishes no transformer-station "
                 "auxiliary-consumption table; counted as zero")
     return tuple(tables)
 
@@ -382,7 +391,7 @@ def _fleet(solution: BessSolution, containers: int, stations: int, poc_capacity_
     pn = _rated_active_power(solution)
     eta, rho, aux_table, ambient_range_c = _solution_parameters(
         solution, cycles_per_day, cell_rte_pct, warnings)
-    mvs_tables = _mvs_tables(station_transformers, warnings)
+    station_aux_tables = _station_aux_tables(station_transformers, warnings)
     if solution.derating is None:
         warnings.append(
             f"BESS solution {solution.name!r} publishes no PCS derating curve; "
@@ -397,7 +406,7 @@ def _fleet(solution: BessSolution, containers: int, stations: int, poc_capacity_
         eta=eta,
         rho=rho,
         aux_table=aux_table,
-        mvs_tables=mvs_tables,
+        station_aux_tables=station_aux_tables,
         derating=solution.derating,
         ambient_range_c=ambient_range_c,
     )
@@ -471,15 +480,13 @@ def resolve_design(diagram: dict, db: ComponentDatabase) -> DesignFleet:
     if any(n is None for n in containers):
         raise EfficiencyRunError("a BESS station of the design has no container count")
 
-    transformers: list[tuple[object, int]] = []
+    # Grouped by catalogue key (Transformer is not hashable); a dict keeps
+    # first appearance first.
+    grouped: dict[str, tuple[Transformer, int]] = {}
     for b in branches:
         for tx, count in b.fleet:
-            for i, (known, n) in enumerate(transformers):
-                if known == tx:
-                    transformers[i] = (known, n + count)
-                    break
-            else:
-                transformers.append((tx, count))
+            first, total = grouped.get(tx.name, (tx, 0))
+            grouped[tx.name] = (first, total + count)
 
     return DesignFleet(
         solution=solutions.pop(),
@@ -487,7 +494,7 @@ def resolve_design(diagram: dict, db: ComponentDatabase) -> DesignFleet:
         containers=sum(containers),
         poc_capacity_kw=sum(b.p_poc_target_kw for b in branches),
         chain=DesignLossChain.from_architecture([arch.branches[i] for i in bess], arch.export),
-        station_transformers=tuple(transformers),
+        station_transformers=tuple(grouped.values()),
     )
 
 
@@ -513,7 +520,7 @@ def _operating_rte(fleet: _Fleet, ambient_c: float) -> float:
     POC as a fraction. Derating is never counted as a loss (ticket 04)."""
     chain = fleet.chain
     aux_kw = (fleet.containers * fleet.aux_table.operating_kw_at(ambient_c)
-              + fleet.mvs_kw(ambient_c, standby=False))   # drawn over both legs
+              + fleet.station_operating_kw_at(ambient_c))   # drawn over both legs
     energy_dc_kwh = fleet.containers * fleet.solution.e_nominal_kwh
 
     # Discharge: rated power at the AC terminals, unless the export would
@@ -567,7 +574,7 @@ def _idle_loss(fleet: _Fleet, ambient_c: float) -> float:
     nominal energy: standby auxiliaries plus no-load losses, with no load
     losses and no dependence on PCS derating (spec, "The idle figure")."""
     idle_kw = (fleet.containers * fleet.aux_table.standby_kw_at(ambient_c)
-               + fleet.mvs_kw(ambient_c, standby=True) + fleet.chain.no_load_kw)
+               + fleet.station_standby_kw_at(ambient_c) + fleet.chain.no_load_kw)
     return idle_kw / (fleet.containers * fleet.solution.e_nominal_kwh)
 
 
@@ -579,7 +586,7 @@ def run_efficiency(
     """Evaluate one efficiency run per ``(timestamp, ambient °C)`` row.
 
     Raises :class:`EfficiencyRunError` for an invalid configuration. Warnings
-    (e.g. a missing MVS table) are returned on the result, never in the rows.
+    (e.g. a missing transformer-station table) are returned on the result, never in the rows.
     """
     if isinstance(config, DesignConfiguration):
         fleet, warnings = _resolve_design(config, db)
