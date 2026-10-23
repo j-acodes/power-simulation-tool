@@ -41,7 +41,10 @@ not a second source of requirements.
   own trunk length, spacing, and maximum-loading limit. BESS duty is allocated between stations
   by installed PCS apparent power rather than transformer-station rating, mirroring ADR-0005's
   PV rule; PCS active- and apparent-power limits are checked independently as warnings (not
-  errors) at 100% of installed PCS, with no ambient lookup, while the transformer station is
+  errors) at 100% of installed PCS, with no ambient lookup — active power against the
+  containers' rated active power, apparent power against installed PCS kVA, and the seed sizes
+  on the same two limits. A BESS solution without a rated active power (the ST6680UX-2H, for
+  now) is a validation and seed error. The transformer station is
   still checked separately against its own AC power at ambient and the BESS maximum-loading
   limit. A station's container count above its solution's pairing maximum is a validation error,
   and the canvas container-count input is capped at that maximum. See

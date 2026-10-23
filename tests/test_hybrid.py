@@ -480,7 +480,9 @@ def test_container_count_is_reported_on_each_station():
 def test_bess_station_duty_is_shared_by_installed_pcs_capacity():
     # s1: GENERIC_BESS_TX_2750_LV069, 1 container -> 1 x 4 x 450 = 1800 kVA
     # s2: GENERIC_BESS_TX_4000_LV069, 2 containers -> 2 x 4 x 450 = 3600 kVA
-    # Twice the installed PCS must mean exactly twice the LV duty share.
+    # Twice the installed PCS must mean exactly twice the LV duty share. The
+    # active limit is rated active power, 1724 kW per container (ADR-0008
+    # amendment); it scales with containers too, so the split is unchanged.
     diagram = _bess_only(p_target_mw=3.0)
     diagram["nodes"].append(_node(
         "s2", "station", mode="catalogue", model="GENERIC_BESS_TX_4000_LV069",
@@ -491,8 +493,10 @@ def test_bess_station_duty_is_shared_by_installed_pcs_capacity():
 
     assert result["issues"] == []
     stations = result["results"]["nodes"]
-    assert stations["s1"]["pcs_capacity_kw"] == pytest.approx(1800.0)
-    assert stations["s2"]["pcs_capacity_kw"] == pytest.approx(3600.0)
+    assert stations["s1"]["pcs_capacity_kw"] == pytest.approx(1724.0)
+    assert stations["s2"]["pcs_capacity_kw"] == pytest.approx(3448.0)
+    assert stations["s1"]["pcs_capacity_kva"] == pytest.approx(1800.0)
+    assert stations["s2"]["pcs_capacity_kva"] == pytest.approx(3600.0)
     assert stations["s2"]["p_lv_kw"] == pytest.approx(2 * stations["s1"]["p_lv_kw"])
     assert stations["s2"]["q_lv_kvar"] == pytest.approx(2 * stations["s1"]["q_lv_kvar"])
 
@@ -513,7 +517,8 @@ def test_full_mvs7400_station_is_allocated_on_pcs_not_transformer_rating():
     station = result["results"]["nodes"]["s1"]
     assert station["containers"] == 4
     assert station["s_rated_kva"] == 7400
-    assert station["pcs_capacity_kw"] == pytest.approx(7200.0)
+    assert station["pcs_capacity_kw"] == pytest.approx(6896.0)
+    assert station["pcs_capacity_kva"] == pytest.approx(7200.0)
     assert station["p_lv_kw"] > 7200.0  # inside the transformer's rating...
     assert station["p_lv_kw"] < 7400.0  # ...but above the installed PCS
     assert station["pcs_active_ok"] is False
@@ -525,6 +530,37 @@ def test_full_mvs7400_station_is_allocated_on_pcs_not_transformer_rating():
     assert "pcs_apparent_capacity_exceeded" in codes
 
 
+def test_active_power_between_rated_active_power_and_pcs_kva_fails_only_the_active_check():
+    """ADR-0008 amendment: a full MVS7400-LS station holds 4 x 1724 = 6896 kW
+    of rated active power but 4 x 1800 = 7200 kVA of PCS. At unity power
+    factor, LV duty between the two must fail the active check alone — the
+    case the old single kVA figure passed."""
+    diagram = _bess_only(duration=4.0, model="SUNGROW_MVS7400_LS", p_target_mw=6.95)
+    diagram["nodes"][0]["props"]["pf"] = 1.0
+
+    result = client.post("/api/solve", json=diagram).json()
+
+    assert result["issues"] == []
+    station = result["results"]["nodes"]["s1"]
+    assert 6896.0 < station["p_lv_kw"] < 7200.0
+    assert station["s_lv_kva"] < 7200.0
+    assert station["pcs_active_ok"] is False
+    assert station["pcs_apparent_ok"] is True
+    codes = {w["code"] for w in result["results"]["warnings"]}
+    assert "pcs_active_capacity_exceeded" in codes
+    assert "pcs_apparent_capacity_exceeded" not in codes
+
+
+def test_a_solution_without_rated_active_power_cannot_be_solved():
+    # sungrow-st6680ux-2h has no published rated active power yet: an error,
+    # never a fallback to its PCS kVA (ADR-0008 amendment).
+    diagram = _bess_only(duration=2.0, model="SUNGROW_MVS7080_LS",
+                         solution="sungrow-st6680ux-2h")
+    body = client.post("/api/solve", json=diagram).json()
+    assert body["results"] is None
+    assert "bess_rated_active_power_missing" in {i["code"] for i in body["issues"]}
+
+
 def test_pcs_capacity_violations_warn_but_return_results():
     diagram = _bess_only(duration=4.0)  # 3 MW target against 1800 kVA of PCS
 
@@ -533,7 +569,8 @@ def test_pcs_capacity_violations_warn_but_return_results():
     assert result["issues"] == []
     assert result["results"] is not None
     station = result["results"]["nodes"]["s1"]
-    assert station["pcs_capacity_kw"] == pytest.approx(1800.0)
+    assert station["pcs_capacity_kw"] == pytest.approx(1724.0)
+    assert station["pcs_capacity_kva"] == pytest.approx(1800.0)
     assert station["pcs_active_ok"] is False
     assert station["pcs_apparent_ok"] is False
     codes = {w["code"] for w in result["results"]["warnings"]}

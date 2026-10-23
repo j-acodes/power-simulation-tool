@@ -387,8 +387,8 @@ def _size_bess_fleet(params: dict, db: ComponentDatabase, v_export_kv: float, *,
     cannot have that override eroded by the next iteration.
 
     Returns ``(layout, station_key, solution_key, maximum, containers,
-    pcs_lv_kv)``. Raises ``ValueError`` for a duration mismatch or an
-    unpaired station — same messages as before this split.
+    pcs_lv_kv)``. Raises ``ValueError`` for a duration mismatch, an
+    unpaired station, or a solution with no rated active power.
     """
     station_key = params["bess_station_model"]
     solution_key = params["bess_solution"]
@@ -401,6 +401,11 @@ def _size_bess_fleet(params: dict, db: ComponentDatabase, v_export_kv: float, *,
             f"BESS solution {solution_key!r} sells a {solution.duration_h:g} h "
             f"discharge, not the requested {discharge_hours:g} h."
         )
+    if solution.rated_active_power_kw is None:
+        raise ValueError(
+            f"BESS solution {solution_key!r} has no rated active power in the "
+            f"catalogue, so it cannot be sized."
+        )
     maximum = (db.bess_pairings.get(station_key) or {}).get(solution_key)
     if maximum is None:
         raise ValueError(
@@ -412,9 +417,10 @@ def _size_bess_fleet(params: dict, db: ComponentDatabase, v_export_kv: float, *,
     if p_poc_kw is None:
         p_poc_kw = params["p_poc_bess_mw"] * 1000.0
     pf_target = params["pf_target"]
-    # Installed PCS apparent power at the pairing maximum, one station — the
-    # BESS analogue of PV's per_station_capacity (ADR-0008: PCS kVA read as
-    # kW, one figure for both the active and apparent limit).
+    # Installed PCS at the pairing maximum, one station — the BESS analogue of
+    # PV's per_station_capacity, with two limits (ADR-0008 amendment): rated
+    # active power bounds kW, PCS kVA bounds apparent power.
+    per_station_active_kw = maximum * solution.rated_active_power_kw
     per_station_capacity = maximum * solution.pcs_count * solution.pcs_s_kva
     # The transformer's own AC power at ambient x max_loading, one station —
     # the fleet-loading bound the engine actually checks (hypot(p_inv, q_inv)
@@ -423,7 +429,7 @@ def _size_bess_fleet(params: dict, db: ComponentDatabase, v_export_kv: float, *,
 
     n = max(
         1,
-        math.ceil(p_poc_kw / per_station_capacity),
+        math.ceil(p_poc_kw / per_station_active_kw),
         math.ceil((p_poc_kw / pf_target) / per_station_capacity),
         math.ceil((p_poc_kw / pf_target) / station_limit),
         min_count,
@@ -435,7 +441,7 @@ def _size_bess_fleet(params: dict, db: ComponentDatabase, v_export_kv: float, *,
                                    station=station, p_poc_kw=p_poc_kw)
         next_n = max(
             1,
-            math.ceil(stage1.p_inv_kw / per_station_capacity),
+            math.ceil(stage1.p_inv_kw / per_station_active_kw),
             math.ceil(stage1.s_inv_kva / per_station_capacity),
             math.ceil(stage1.s_inv_kva / station_limit),
             min_count,
