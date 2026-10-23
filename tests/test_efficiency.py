@@ -15,7 +15,8 @@ import pytest
 
 from powertool import ComponentDatabase, efficiency_cli
 from powertool.components import StationAuxBand, resolve_container_aux
-from powertool.efficiency import EfficiencyRunError, TypedConfiguration, run_efficiency
+from powertool.efficiency import (EfficiencyRunError, TypedConfiguration, _operating_rte,
+                                  _resolve_typed, run_efficiency)
 
 
 @pytest.fixture(scope="module")
@@ -181,6 +182,75 @@ def test_worked_example_at_48c_runs_at_the_derated_power(db):
     assert row.pcs_power_pct == pytest.approx(76.0)
     assert row.operating_rte_pct == pytest.approx(87.59, abs=0.01)
     assert result.warnings == []
+
+
+class _RecordingChain:
+    """Wraps a fleet's loss chain and records the per-leg powers one
+    efficiency run passes through it: the discharge leg's AC power and
+    export, the charge leg's import and AC power into the containers."""
+
+    def __init__(self, chain):
+        self.chain = chain
+        self.no_load_kw = chain.no_load_kw
+        self.legs: dict[str, float] = {}
+
+    def export_kw(self, p_ac_kw, aux_kw):
+        export = self.chain.export_kw(p_ac_kw, aux_kw)
+        self.legs.update(discharge_ac_kw=p_ac_kw, export_kw=export)
+        return export
+
+    def import_kw(self, p_in_kw, aux_kw):
+        return self.chain.import_kw(p_in_kw, aux_kw)
+
+    def ac_for_export(self, export_kw, aux_kw):
+        p_ac = self.chain.ac_for_export(export_kw, aux_kw)
+        self.legs.update(discharge_ac_kw=p_ac, export_kw=export_kw)
+        return p_ac
+
+    def ac_from_import(self, import_kw, aux_kw):
+        p_in = self.chain.ac_from_import(import_kw, aux_kw)
+        self.legs.update(import_kw=import_kw, charge_ac_kw=p_in)
+        return p_in
+
+
+def _legs(config, catalogue, ambient_c) -> dict[str, float]:
+    """The per-leg powers of one typed-in efficiency run at ``ambient_c``."""
+    fleet, _warnings = _resolve_typed(config, catalogue)
+    chain = _RecordingChain(fleet.chain)
+    _operating_rte(replace(fleet, chain=chain), ambient_c)
+    return chain.legs
+
+
+def test_worked_example_at_48c_charges_below_the_poc_capacity(db):
+    legs = _legs(WORKED, db, 48.0)
+
+    # Hand calculation (spec, Further Notes): the derated PCS draws 85,954 kW
+    # at the POC, 83,855 kW into the containers; the 100 MW POC does not bind.
+    assert legs["import_kw"] == pytest.approx(85_954, abs=1)
+    assert legs["charge_ac_kw"] == pytest.approx(83_855, abs=1)
+
+
+def test_derating_never_reduces_the_energy_exported(db):
+    lossless = replace(WORKED, load_loss_pct=0.0, no_load_loss_pct=0.0)
+    catalogue = _without_auxiliaries(db)
+    solution = catalogue.bess_solution(WORKED.solution)
+    energy_dc_kwh = WORKED.containers * solution.e_nominal_kwh
+
+    def exported_kwh(ambient_c):
+        legs = _legs(lossless, catalogue, ambient_c)
+        # Spec: the discharge lasts E x eta / P_ac at the AC power the PCS runs at.
+        hours = energy_dc_kwh * solution.conversion_efficiency / legs["discharge_ac_kw"]
+        return legs["export_kw"], legs["export_kw"] * hours
+
+    full_kw, full_kwh = exported_kwh(25.0)
+    derated_kw, derated_kwh = exported_kwh(48.0)
+
+    # At 25 °C the export is held to the 100 MW POC capacity; at 48 °C the
+    # PCS is derated to 76 % of 64 x 1724 kW, below it. The longer discharge
+    # exports the same energy: derating is a cap on power, never a loss.
+    assert full_kw == pytest.approx(100_000.0)
+    assert derated_kw == pytest.approx(0.76 * 64 * 1724.0)
+    assert derated_kwh == pytest.approx(full_kwh, rel=1e-12)
 
 
 @pytest.mark.parametrize("ambient, pcs_pct", [(45.0, 100.0), (48.0, 76.0), (50.0, 60.0)])
