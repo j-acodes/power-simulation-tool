@@ -770,7 +770,8 @@ button.issue-item.clickable:hover {
   border-radius: 8px;
   padding: 0.75rem;
   box-shadow: var(--shadow);
-  z-index: 5;
+  /* Above the results overlay, which it can overlap on narrow canvases. */
+  z-index: 6;
 }
 
 .efficiency-overlay[hidden] {
