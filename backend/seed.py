@@ -456,10 +456,16 @@ def _size_bess_fleet(params: dict, db: ComponentDatabase, v_export_kv: float, *,
     # full station's own loading over max_loading_bess even though
     # fleet_loading reads within it. A full station's duty is
     # S_fleet x maximum / C_total, so the container total must also satisfy
-    # this loading-driven floor (ticket 06).
+    # this loading-driven floor (ticket 06). The installed PCS must also carry
+    # the fleet's own duty: active power against rated active power, apparent
+    # power against PCS kVA (ADR-0008 amendment) — otherwise an energy-sized
+    # count can fall just short of the duty its stations were sized for.
     required_energy = math.ceil((p_poc_kw * discharge_hours) / solution.e_nominal_kwh)
     required_loading = math.ceil((stage1.s_inv_kva * maximum) / station_limit)
-    required = max(required_energy, required_loading)
+    required_active = math.ceil(stage1.p_inv_kw / solution.rated_active_power_kw)
+    required_apparent = math.ceil(
+        stage1.s_inv_kva / (solution.pcs_count * solution.pcs_s_kva))
+    required = max(required_energy, required_loading, required_active, required_apparent)
     if required > n * maximum:
         n = math.ceil(required / maximum)
     containers = _bess_containers(required, maximum, n)
