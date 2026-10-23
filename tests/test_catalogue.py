@@ -9,6 +9,7 @@ from dataclasses import replace
 import pytest
 
 from powertool import CatalogueDataWarning, ComponentDatabase
+from powertool.components import mvs_aux_band
 from powertool.database import load_pv_inverters
 
 # Expected PV transformer stations: key -> (rated kVA, brand, dropdown label).
@@ -372,3 +373,30 @@ def test_the_cable_entry_fallback_is_not_written_into_the_yaml():
         text = Path("data", name).read_text()
         assert "cable_entry_cables_per_phase" not in text
         assert "cable_entry_max_cross_section_mm2" not in text
+
+
+def test_powertitan_carries_its_efficiency_run_parameters(db):
+    solution = db.bess_solution("sungrow-st6900ux-4h")
+    # Sungrow LV loss items: 99.90 x 99.95 x 98.70 x 99.90 % = 98.45 %.
+    assert solution.conversion_efficiency == pytest.approx(0.98454, abs=1e-5)
+    assert solution.cell_rte_pct == 95.0
+    (table,) = solution.aux_consumption       # Table 7, 1 cycle/day
+    assert table.cycles_per_day == 1
+    assert table.operating_kw_at(25.0) == pytest.approx(12.90)
+    assert table.standby_kw_at(25.0) == pytest.approx(4.10)
+    # Between published ambients: linear (ADR-0009), 15 C 11.15 -> 25 C 12.90.
+    assert table.operating_kw_at(20.0) == pytest.approx(12.025)
+
+
+def test_mvs7400_auxiliary_consumption_steps_by_band(db):
+    bands = db.bess_transformer("SUNGROW_MVS7400_LS").mvs_aux_consumption
+    # Table 9 bands [-30,10), [10,35), [35,50].
+    assert mvs_aux_band(bands, 9.9).operating_kw == 3.50
+    assert mvs_aux_band(bands, 10.0).operating_kw == 4.02
+    assert mvs_aux_band(bands, 34.9).standby_kw == 2.76
+    assert mvs_aux_band(bands, 35.0).standby_kw == 3.02
+    assert mvs_aux_band(bands, 50.0).standby_kw == 3.02
+
+
+def test_placeholder_stations_publish_no_mvs_auxiliary_consumption(db):
+    assert db.bess_transformer("GENERIC_BESS_TX_4000_LV069").mvs_aux_consumption == ()

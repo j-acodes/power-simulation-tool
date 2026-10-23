@@ -229,8 +229,14 @@ class Transformer:
     ac_input_protection: str | None = None
     optional_features: str | None = None
     weight_specification: str | None = None
+    # Efficiency-run parameter (simulated): the MVS auxiliary consumption by
+    # ambient band, read only by powertool.efficiency. Empty: not published.
+    mvs_aux_consumption: tuple[MvsAuxBand, ...] = ()
 
     def __post_init__(self) -> None:
+        self.mvs_aux_consumption = tuple(
+            b if isinstance(b, MvsAuxBand) else MvsAuxBand(**b)
+            for b in self.mvs_aux_consumption)
         required_positive = {
             "s_rated_kva_at_40c": self.s_rated_kva_at_40c,
             "uk_percent": self.uk_percent,
@@ -458,6 +464,70 @@ def conversion_label(fleet_kind: str) -> str:
     return "PCS" if fleet_kind == "bess" else "inverter"
 
 
+def _interpolate(xs: tuple[float, ...], ys: tuple[float, ...], x: float) -> float:
+    """Linear interpolation between published points, clamped to the edges
+    (ADR-0009). Outside the range the nearest edge applies."""
+    if x <= xs[0]:
+        return ys[0]
+    if x >= xs[-1]:
+        return ys[-1]
+    for (x0, y0), (x1, y1) in zip(zip(xs, ys), zip(xs[1:], ys[1:])):
+        if x0 <= x <= x1:
+            return y0 + (y1 - y0) * (x - x0) / (x1 - x0)
+    raise ValueError(f"ambient {x} not bracketed by {xs}")  # unreachable for sorted xs
+
+
+@dataclass(frozen=True)
+class AuxConsumptionTable:
+    """A BESS solution's auxiliary consumption at one cycles-per-day reference:
+    operating and standby kW per container at each published ambient.
+
+    An efficiency curve, not a rating: interpolated linearly in ambient
+    (ADR-0009). Used only by the efficiency run, never by sizing.
+    """
+
+    cycles_per_day: float
+    ambient_c: tuple[float, ...]
+    operating_kw: tuple[float, ...]
+    standby_kw: tuple[float, ...]
+
+    def __post_init__(self) -> None:
+        for field in ("ambient_c", "operating_kw", "standby_kw"):
+            object.__setattr__(self, field, tuple(float(v) for v in getattr(self, field)))
+        if not (len(self.ambient_c) == len(self.operating_kw) == len(self.standby_kw) >= 1):
+            raise ValueError("auxiliary consumption table columns must be equal, non-empty lengths")
+        if list(self.ambient_c) != sorted(set(self.ambient_c)):
+            raise ValueError("auxiliary consumption ambients must be strictly increasing")
+
+    def operating_kw_at(self, ambient_c: float) -> float:
+        return _interpolate(self.ambient_c, self.operating_kw, ambient_c)
+
+    def standby_kw_at(self, ambient_c: float) -> float:
+        return _interpolate(self.ambient_c, self.standby_kw, ambient_c)
+
+
+@dataclass(frozen=True)
+class MvsAuxBand:
+    """One ambient band of a station transformer's (MVS) auxiliary consumption:
+    operating and standby kW per MVS for ambients in [ambient_min_c,
+    ambient_max_c). The supplier publishes these as bands, so they are stepped,
+    not interpolated (ADR-0009)."""
+
+    ambient_min_c: float
+    ambient_max_c: float
+    operating_kw: float
+    standby_kw: float
+
+
+def mvs_aux_band(bands: tuple[MvsAuxBand, ...], ambient_c: float) -> MvsAuxBand:
+    """The band containing ``ambient_c``. Bands are half-open, the last one
+    closed at its top; outside the published range the edge band applies."""
+    for band in bands:
+        if band.ambient_min_c <= ambient_c < band.ambient_max_c:
+            return band
+    return bands[0] if ambient_c < bands[0].ambient_min_c else bands[-1]
+
+
 @dataclass(frozen=True)
 class BessSolution:
     """A named BESS supplier product, selected from a catalogue.
@@ -500,6 +570,37 @@ class BessSolution:
     datasheet_version: str | None = None
     preliminary: bool = False
     datasheet_url: str | None = None
+
+    # --- Efficiency-run parameters (simulated) ---------------------------
+    # Read only by powertool.efficiency, never by sizing (CONTEXT.md's
+    # "Efficiency run"). Empty / None: not published for this solution.
+    #
+    # One-way conversion efficiency, DC terminals -> MVS LV, as named items in
+    # percent whose product is used (see ``conversion_efficiency``); constant at
+    # every power level, both directions. YAML gives a mapping; stored as pairs.
+    conversion_efficiency_pct: tuple[tuple[str, float], ...] = ()
+    cell_rte_pct: float | None = None           # cell (DC) round-trip efficiency
+    aux_consumption: tuple[AuxConsumptionTable, ...] = ()  # one per cycles/day reference
+
+    def __post_init__(self) -> None:
+        items = self.conversion_efficiency_pct
+        pairs = items.items() if isinstance(items, dict) else items
+        object.__setattr__(self, "conversion_efficiency_pct",
+                           tuple((str(k), float(v)) for k, v in pairs))
+        object.__setattr__(self, "aux_consumption", tuple(
+            t if isinstance(t, AuxConsumptionTable) else AuxConsumptionTable(**t)
+            for t in self.aux_consumption))
+
+    @property
+    def conversion_efficiency(self) -> float | None:
+        """One-way conversion efficiency as a fraction: the product of the
+        stored items. None when the solution publishes none."""
+        if not self.conversion_efficiency_pct:
+            return None
+        product = 1.0
+        for _, pct in self.conversion_efficiency_pct:
+            product *= pct / 100.0
+        return product
 
     # --- Typed parameters ------------------------------------------------
     # Structured, stored, displayed — never read by the sizing engine. See

@@ -32,6 +32,10 @@
 #   datasheet_version / preliminary / datasheet_url : provenance of the
 #                            transcription; datasheet_url may be empty when
 #                            the source is not publicly linkable.
+#   conversion_efficiency_pct / cell_rte_pct / aux_consumption : efficiency-run
+#                            parameters (CONTEXT.md's "Efficiency run"), read
+#                            only by powertool.efficiency, never by sizing;
+#                            each carries its provenance in a comment.
 #
 # Container count per station is NOT declared here: it lives on the pairing
 # between a solution and a station transformer, in data/bess_transformers.yaml
@@ -64,6 +68,25 @@ bess_solutions:
     datasheet_version: Version 3
     preliminary: true
     datasheet_url: ""
+    # Efficiency-run parameters (simulated; read only by powertool.efficiency).
+    # One-way conversion efficiency DC terminals -> MVS LV, as the product of
+    # these items (98.45 %; Sungrow quotes 98.4 %). Source: Sungrow LV loss
+    # parameters for PowerTitan 3.0, preliminary.
+    conversion_efficiency_pct:
+      dc_cable: 99.90
+      pcs_bus: 99.95
+      pcs: 98.70
+      lv_cable: 99.90
+    cell_rte_pct: 95.0           # PROJECT ASSUMPTION, not supplier data
+    # Auxiliary consumption per container [kW], operating and standby, one
+    # table per cycles-per-day reference. Source: Sungrow PowerTitan 3.0
+    # technical proposal, Table 7 (1 cycle/day), preliminary. Interpolated
+    # linearly in ambient (ADR-0009).
+    aux_consumption:
+      - cycles_per_day: 1
+        ambient_c:    [-30,   -10,   0,    15,    25,    35,    45,    50]
+        operating_kw: [4.63,  5.32,  5.32, 11.15, 12.90, 17.70, 20.40, 19.90]
+        standby_kw:   [12.30, 10.55, 5.10, 4.10,  4.10,  8.25,  10.00, 16.50]
     # Typed specification, transcribed by hand from the datasheet.
     cell_type: LFP
     dc_v_min: 1101.6
