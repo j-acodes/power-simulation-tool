@@ -679,3 +679,33 @@ export interface Stage1Response {
   losses: Stage1LossItem[]
   power_balance_ok: boolean
 }
+
+// --- Efficiency run (POST /api/efficiency) ---------------------------------
+
+export interface AmbientRow {
+  timestamp: string
+  ambient_c: number
+}
+
+export interface EfficiencyRequest {
+  diagram: Diagram
+  rows: AmbientRow[]
+  cycles_per_day: number | null
+  /** null keeps the BESS solution's catalogue cell round-trip efficiency. */
+  cell_rte_pct: number | null
+}
+
+/** One timestamp's figures, unrounded. `idle_loss_pct` is % of nominal
+ * energy per hour; `pcs_power_pct` is the PCS power available at that
+ * ambient (100 unless derated). */
+export interface EfficiencyRow {
+  timestamp: string
+  operating_rte_pct: number
+  idle_loss_pct: number
+  pcs_power_pct: number
+}
+
+export interface EfficiencyResponse {
+  rows: EfficiencyRow[]
+  warnings: string[]
+}
