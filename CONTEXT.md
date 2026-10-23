@@ -302,13 +302,16 @@ _Avoid_: stored energy, capacity
 
 **Simulated parameter / typed parameter**:
 The two tiers every catalogue parameter falls into, and the distinction the catalogue is built
-around. A **simulated** parameter is one the sizing engine reads — nominal energy, PCS rating
-and LV voltage, discharge duration, auxiliary draw, AC power at ambient, inverter power at
-ambient, inverter count and minimum power factor. A **typed** parameter
+around. A **simulated** parameter is one the engine computes with — in sizing (nominal energy,
+PCS rating, rated active power and LV voltage, discharge duration, auxiliary draw, AC power at
+ambient, inverter power at ambient, inverter count and minimum power factor) or in the
+efficiency run only (conversion efficiency, cell round-trip efficiency, auxiliary consumption
+tables, the PCS derating curve). A **typed** parameter
 is structured, stored and shown, but never computed with: cell chemistry, dimensions, ingress
 protection, the operating envelope, a ring main unit's protection functions. Both are
 transcribed from a datasheet with equal care; only one of them can change a number in a design
-review.
+review. A simulated value that is a project assumption rather than supplier data (the 95 % cell
+round-trip efficiency) says so beside the value.
 
 A typed parameter is defined by never being computed with, not by being numeric. A datasheet
 row whose value is a set or an alternative rather than a number — the protection functions a
