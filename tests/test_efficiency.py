@@ -134,6 +134,7 @@ def test_cli_reads_ambients_and_writes_the_four_column_csv(tmp_path, capsys):
     assert rows[0] == ["timestamp", "operating RTE %", "idle loss %", "PCS power % of rated"]
     assert [r[0] for r in rows[1:]] == ["2026-07-01 00:00", "2026-07-01 01:00"]
     assert float(rows[1][1]) == pytest.approx(88.64, abs=0.01)
+    assert float(rows[1][2]) == pytest.approx(0.0944, abs=0.0001)
     assert rows[1][3] == "100"
     assert capsys.readouterr().err == ""
 
@@ -222,3 +223,30 @@ def test_cli_does_not_echo_cycles_per_day(tmp_path):
         rows = list(csv.reader(fh))
     assert rows[0] == ["timestamp", "operating RTE %", "idle loss %", "PCS power % of rated"]
     assert len(rows[1]) == 4
+@pytest.mark.parametrize("ambient, expected", [
+    # Hand calculation (spec, Further Notes): 417 kW over 441.9 MWh at 25 °C;
+    # at 48 °C the figure ignores the PCS derating to 76 %.
+    (25.0, 0.0944),
+    (48.0, 0.2372),
+])
+def test_idle_loss_reproduces_the_worked_example(db, ambient, expected):
+    result = run_efficiency([("t", ambient)], WORKED, db)
+
+    assert result.rows[0].idle_loss_pct == pytest.approx(expected, abs=0.0001)
+
+
+def test_idle_loss_carries_no_load_losses(db):
+    heavier_chain = replace(WORKED, load_loss_pct=3.0, poc_capacity_kw=90_000.0)
+
+    result = run_efficiency([("t", 25.0)], heavier_chain, db)
+
+    assert result.rows[0].idle_loss_pct == pytest.approx(0.0944, abs=0.0001)
+
+
+@pytest.mark.parametrize("outside, edge", [(-45.0, -30.0), (60.0, 50.0)])
+def test_idle_loss_clamps_out_of_range_ambients_to_the_edge(db, outside, edge):
+    result = run_efficiency([("out", outside), ("edge", edge)], WORKED, db)
+
+    out_row, edge_row = result.rows
+    assert out_row.idle_loss_pct == edge_row.idle_loss_pct
+    assert out_row.operating_rte_pct == edge_row.operating_rte_pct
