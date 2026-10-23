@@ -9,9 +9,8 @@ returned separately from the rows.
 Spec: .scratch/rte-efficiency/spec.md. Curve lookup follows ADR-0009.
 
 This module has no web or UI dependency. Not yet implemented (later tickets):
-the idle figure (``idle_loss_pct`` is None), PCS derating (``pcs_power_pct`` is
-always 100), interpolation between cycles-per-day references, and a run from a
-solved design.
+the idle figure (``idle_loss_pct`` is None), interpolation between
+cycles-per-day references, and a run from a solved design.
 """
 
 from __future__ import annotations
@@ -20,7 +19,7 @@ import math
 from dataclasses import dataclass, field
 from typing import Iterable
 
-from .components import AuxConsumptionTable, BessSolution, mvs_aux_band
+from .components import AuxConsumptionTable, BessSolution, DeratingCurve, mvs_aux_band
 from .database import ComponentDatabase
 
 
@@ -49,7 +48,8 @@ class TypedConfiguration:
 @dataclass(frozen=True)
 class EfficiencyRow:
     """One output row. ``idle_loss_pct`` is None until the idle figure is
-    implemented; ``pcs_power_pct`` is 100 until derating is."""
+    implemented; ``pcs_power_pct`` is the PCS power available at the row's
+    ambient (100 unless derated), a power cap, never a loss."""
 
     timestamp: str
     operating_rte_pct: float
@@ -78,6 +78,12 @@ class _Fleet:
     rho: float                # cell round-trip efficiency
     aux_table: AuxConsumptionTable
     mvs_bands: tuple          # empty: no MVS table, counted as zero
+    derating: DeratingCurve | None  # None: no curve, 100 % of rated power
+    ambient_range_c: tuple[float, float]  # published range every curve covers
+
+    def derating_at(self, ambient_c: float) -> float:
+        """Fraction of rated active power available at ``ambient_c``."""
+        return self.derating.fraction_at(ambient_c) if self.derating else 1.0
 
 
 def _resolve(config: TypedConfiguration, db: ComponentDatabase) -> tuple[_Fleet, list[str]]:
@@ -139,6 +145,18 @@ def _resolve(config: TypedConfiguration, db: ComponentDatabase) -> tuple[_Fleet,
             f"station transformer {config.station_transformer!r} publishes no MVS "
             "auxiliary-consumption table; counted as zero")
 
+    # The published ambient range: where the container tables and the
+    # derating curve all have points. Outside it the run clamps (ADR-0009).
+    curves = [t.ambient_c for t in solution.aux_consumption]
+    if solution.derating is not None:
+        curves.append(solution.derating.ambient_c)
+    ambient_range_c = (max(c[0] for c in curves), min(c[-1] for c in curves))
+
+    if solution.derating is None:
+        warnings.append(
+            f"BESS solution {config.solution!r} publishes no PCS derating curve; "
+            "run at 100 % of rated active power at every ambient")
+
     return _Fleet(
         solution=solution,
         containers=config.containers,
@@ -151,6 +169,8 @@ def _resolve(config: TypedConfiguration, db: ComponentDatabase) -> tuple[_Fleet,
         rho=rho_pct / 100.0,
         aux_table=aux_table,
         mvs_bands=transformer.mvs_aux_consumption,
+        derating=solution.derating,
+        ambient_range_c=ambient_range_c,
     ), warnings
 
 
@@ -171,7 +191,9 @@ def _ac_from_import(a: float, available_kw: float) -> float:
 
 
 def _operating_rte(fleet: _Fleet, ambient_c: float) -> float:
-    """One efficiency run at full rated power; returns RTE at the POC as a fraction."""
+    """One efficiency run at the full power available at ``ambient_c``
+    (rated, or derated: same energy over a longer cycle); returns RTE at the
+    POC as a fraction. Derating is never counted as a loss (ticket 04)."""
     a = fleet.load_loss_coeff
     aux_kw = fleet.containers * fleet.aux_table.operating_kw_at(ambient_c)
     if fleet.mvs_bands:
@@ -181,7 +203,8 @@ def _operating_rte(fleet: _Fleet, ambient_c: float) -> float:
 
     # Discharge: rated power at the AC terminals, unless the export would
     # exceed the POC capacity (ticket 11); then AC power drops until it equals it.
-    p_ac = fleet.rated_kw
+    p_full = fleet.rated_kw * fleet.derating_at(ambient_c)
+    p_ac = p_full
     export_kw = p_ac - a * p_ac ** 2 - fixed_kw
     if export_kw > fleet.poc_capacity_kw:
         p_ac = _ac_for_export(a, fleet.poc_capacity_kw + fixed_kw)
@@ -189,14 +212,39 @@ def _operating_rte(fleet: _Fleet, ambient_c: float) -> float:
     discharge_h = energy_dc_kwh * fleet.eta / p_ac
 
     # Charge: import the lesser of the POC capacity and what drives the PCS at
-    # rated power; walk inward to the AC power into the containers. The cycle
-    # closes: the DC side takes back the discharged energy over cell RTE.
-    p_full = fleet.rated_kw
+    # its (derated) power; walk inward to the AC power into the containers. The
+    # cycle closes: the DC side takes back the discharged energy over cell RTE.
     import_kw = min(fleet.poc_capacity_kw, p_full + a * p_full ** 2 + fixed_kw)
     p_in = _ac_from_import(a, import_kw - fixed_kw)
     charge_h = (energy_dc_kwh / fleet.rho) / (p_in * fleet.eta)
 
     return (export_kw * discharge_h) / (import_kw * charge_h)
+
+
+@dataclass
+class _AmbientClamp:
+    """Clamps each row's ambient to the published range once, so every figure
+    of the row reads the same clamped ambient, and reports the clamping as one
+    warning for the whole run."""
+
+    low_c: float
+    high_c: float
+    clamped: list[float] = field(default_factory=list)
+
+    def __call__(self, ambient_c: float) -> float:
+        if self.low_c <= ambient_c <= self.high_c:
+            return ambient_c
+        self.clamped.append(ambient_c)
+        return min(max(ambient_c, self.low_c), self.high_c)
+
+    def warning(self) -> str | None:
+        if not self.clamped:
+            return None
+        n = len(self.clamped)
+        return (f"{n} timestamp{'s' if n != 1 else ''} had an ambient outside the "
+                f"published range {self.low_c:g} to {self.high_c:g} °C (coldest seen "
+                f"{min(self.clamped):g} °C, hottest seen {max(self.clamped):g} °C); "
+                "clamped to the nearest edge")
 
 
 def run_efficiency(
@@ -211,11 +259,16 @@ def run_efficiency(
     """
     fleet, warnings = _resolve(config, db)
     result = EfficiencyResult(warnings=warnings)
+    clamp = _AmbientClamp(*fleet.ambient_range_c)
     for timestamp, ambient_c in rows:
+        ambient_c = clamp(float(ambient_c))
         result.rows.append(EfficiencyRow(
             timestamp=timestamp,
-            operating_rte_pct=_operating_rte(fleet, float(ambient_c)) * 100.0,
+            operating_rte_pct=_operating_rte(fleet, ambient_c) * 100.0,
             idle_loss_pct=None,
-            pcs_power_pct=100.0,
+            pcs_power_pct=fleet.derating_at(ambient_c) * 100.0,
         ))
+    clamp_warning = clamp.warning()
+    if clamp_warning is not None:
+        result.warnings.append(clamp_warning)
     return result

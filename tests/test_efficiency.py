@@ -163,3 +163,70 @@ def test_cli_reports_an_invalid_configuration_and_fails(tmp_path, capsys):
     assert exit_code != 0
     assert "exceed" in capsys.readouterr().err
     assert not (tmp_path / "rte.csv").exists()
+
+
+# --- Hot-ambient PCS derating (ticket 14) -----------------------------------
+
+def test_worked_example_at_48c_runs_at_the_derated_power(db):
+    result = run_efficiency([("t", 48.0)], WORKED, db)
+
+    (row,) = result.rows
+    # Hand calculation (spec, Further Notes): d = 0.76, RTE 87.59 %, with the
+    # charge leg importing 85,954 kW, below the 100 MW POC capacity.
+    assert row.pcs_power_pct == pytest.approx(76.0)
+    assert row.operating_rte_pct == pytest.approx(87.59, abs=0.01)
+    assert result.warnings == []
+
+
+@pytest.mark.parametrize("ambient, pcs_pct", [(45.0, 100.0), (48.0, 76.0), (50.0, 60.0)])
+def test_derating_is_never_counted_as_a_loss(db, ambient, pcs_pct):
+    config = replace(WORKED, load_loss_pct=0.0, no_load_loss_pct=0.0)
+
+    (row,) = run_efficiency([("t", ambient)], config, _without_auxiliaries(db)).rows
+
+    # With no loss chain and no auxiliaries the derated cycle moves the same
+    # energy, so RTE stays rho x eta^2 = 92.08 % however far the PCS derates.
+    assert row.pcs_power_pct == pytest.approx(pcs_pct)
+    assert row.operating_rte_pct == pytest.approx(92.08, abs=0.01)
+
+
+def test_solution_without_derating_curve_runs_at_rated_power_and_warns(db):
+    result = run_efficiency([("a", 48.0), ("b", 50.0)], WORKED, _with_solution(db, derating=None))
+
+    assert [r.pcs_power_pct for r in result.rows] == [100.0, 100.0]
+    assert len(result.warnings) == 1
+    assert "derating" in result.warnings[0]
+
+
+def test_out_of_range_ambients_clamp_to_the_edge_with_one_warning(db):
+    rows = [("a", -35.0), ("b", 25.0), ("c", 55.0), ("d", 60.0), ("e", -31.0), ("f", 50.0)]
+
+    result = run_efficiency(rows, WORKED, db)
+    edges = run_efficiency([("cold", -30.0), ("hot", 50.0)], WORKED, db).rows
+
+    by_ts = {r.timestamp: r for r in result.rows}
+    for ts in ("a", "e"):
+        assert by_ts[ts].operating_rte_pct == edges[0].operating_rte_pct
+    for ts in ("c", "d"):
+        assert by_ts[ts].operating_rte_pct == edges[1].operating_rte_pct
+        assert by_ts[ts].pcs_power_pct == pytest.approx(60.0)
+    (warning,) = result.warnings
+    # Four timestamps clamped (50 °C is on the edge, not outside it); the
+    # extremes seen are -35 and 60 °C.
+    assert "4 timestamps" in warning
+    assert "-35" in warning and "60" in warning
+
+
+def test_cli_writes_the_derated_pcs_power_and_the_clamp_warning(tmp_path, capsys):
+    source = tmp_path / "ambient.csv"
+    source.write_text("timestamp,ambient_c\nt0,48\nt1,55\n")
+    target = tmp_path / "rte.csv"
+
+    assert efficiency_cli.main([str(source), str(target), *WORKED_ARGS]) == 0
+
+    with target.open(newline="") as fh:
+        rows = list(csv.reader(fh))
+    assert [r[3] for r in rows[1:]] == ["76", "60"]
+    err = capsys.readouterr().err
+    assert err.count("warning:") == 1
+    assert "1 timestamp had" in err
