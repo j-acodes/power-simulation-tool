@@ -9,8 +9,7 @@ returned separately from the rows.
 Spec: .scratch/rte-efficiency/spec.md. Curve lookup follows ADR-0009.
 
 This module has no web or UI dependency. Not yet implemented (later tickets):
-the idle figure (``idle_loss_pct`` is None), interpolation between
-cycles-per-day references, and a run from a solved design.
+a run from a solved design.
 """
 
 from __future__ import annotations
@@ -19,7 +18,8 @@ import math
 from dataclasses import dataclass, field
 from typing import Iterable
 
-from .components import AuxConsumptionTable, BessSolution, DeratingCurve, mvs_aux_band
+from .components import (BessSolution, ContainerAuxLookup, DeratingCurve, mvs_aux_band,
+                         resolve_container_aux)
 from .database import ComponentDatabase
 
 
@@ -47,9 +47,9 @@ class TypedConfiguration:
 
 @dataclass(frozen=True)
 class EfficiencyRow:
-    """One output row. ``idle_loss_pct`` is None until the idle figure is
-    implemented; ``pcs_power_pct`` is the PCS power available at the row's
-    ambient (100 unless derated), a power cap, never a loss."""
+    """One output row. ``idle_loss_pct`` is % of nominal energy per hour,
+    imported at the POC; ``pcs_power_pct`` is the PCS power available at the
+    row's ambient (100 unless derated), a power cap, never a loss."""
 
     timestamp: str
     operating_rte_pct: float
@@ -76,7 +76,7 @@ class _Fleet:
     no_load_kw: float
     eta: float                # one-way conversion efficiency
     rho: float                # cell round-trip efficiency
-    aux_table: AuxConsumptionTable
+    aux_table: ContainerAuxLookup  # operating and standby kW per container
     mvs_bands: tuple          # empty: no MVS table, counted as zero
     derating: DeratingCurve | None  # None: no curve, 100 % of rated power
     ambient_range_c: tuple[float, float]  # published range every curve covers
@@ -134,11 +134,12 @@ def _resolve(config: TypedConfiguration, db: ComponentDatabase) -> tuple[_Fleet,
     if not 0 < rho_pct <= 100:
         raise EfficiencyRunError("cell RTE must be in (0, 100] %")
 
-    # Nearest published cycles-per-day reference (interpolation between
-    # references is a later ticket).
-    cycles = config.cycles_per_day
-    aux_table = min(solution.aux_consumption,
-                    key=lambda t: abs(t.cycles_per_day - cycles) if cycles is not None else 0)
+    try:
+        aux_table, aux_warnings = resolve_container_aux(
+            solution.aux_consumption, config.cycles_per_day)
+    except ValueError as exc:
+        raise EfficiencyRunError(f"BESS solution {config.solution!r}: {exc}") from None
+    warnings.extend(aux_warnings)
 
     if not transformer.mvs_aux_consumption:
         warnings.append(
@@ -247,6 +248,16 @@ class _AmbientClamp:
                 "clamped to the nearest edge")
 
 
+def _idle_loss(fleet: _Fleet, ambient_c: float) -> float:
+    """Idle draw imported at the POC per hour, as a fraction of the fleet's
+    nominal energy: standby auxiliaries plus no-load losses, with no load
+    losses and no dependence on PCS derating (spec, "The idle figure")."""
+    idle_kw = fleet.containers * fleet.aux_table.standby_kw_at(ambient_c) + fleet.no_load_kw
+    if fleet.mvs_bands:
+        idle_kw += fleet.stations * mvs_aux_band(fleet.mvs_bands, ambient_c).standby_kw
+    return idle_kw / (fleet.containers * fleet.solution.e_nominal_kwh)
+
+
 def run_efficiency(
     rows: Iterable[tuple[str, float]],
     config: TypedConfiguration,
@@ -265,7 +276,7 @@ def run_efficiency(
         result.rows.append(EfficiencyRow(
             timestamp=timestamp,
             operating_rte_pct=_operating_rte(fleet, ambient_c) * 100.0,
-            idle_loss_pct=None,
+            idle_loss_pct=_idle_loss(fleet, ambient_c) * 100.0,
             pcs_power_pct=fleet.derating_at(ambient_c) * 100.0,
         ))
     clamp_warning = clamp.warning()
