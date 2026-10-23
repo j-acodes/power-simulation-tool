@@ -5,7 +5,11 @@ Expected figures come from the spec's worked example
 """
 
 import csv
+import os
+import subprocess
+import sys
 from dataclasses import replace
+from pathlib import Path
 
 import pytest
 
@@ -338,3 +342,18 @@ def test_a_narrower_station_table_narrows_the_published_range_and_warns(db):
     (warning,) = result.warnings
     assert "2 timestamps" in warning
     assert "-20 to 40" in warning
+
+
+def test_cli_writes_warnings_as_utf8_whatever_the_console_encoding(tmp_path):
+    source = tmp_path / "ambient.csv"
+    source.write_text("timestamp,ambient_c\nt0,55\n", encoding="utf-8")
+    env = {k: v for k, v in os.environ.items() if k != "PYTHONUTF8"}
+    env["PYTHONIOENCODING"] = "cp1252"   # a Windows console's default
+
+    done = subprocess.run(
+        [sys.executable, "-m", "powertool.efficiency_cli", str(source),
+         str(tmp_path / "rte.csv"), *WORKED_ARGS],
+        capture_output=True, env=env, cwd=Path(__file__).resolve().parents[1])
+
+    assert done.returncode == 0, done.stderr
+    assert "50 °C" in done.stderr.decode("utf-8")
