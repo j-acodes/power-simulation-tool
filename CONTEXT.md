@@ -234,7 +234,7 @@ the export cable, with auxiliary consumption drawn at the MV busbar. It comes fr
 own equipment, or from typed-in load and no-load loss percentages when no design is given. The
 losses are the same in either direction for the same power; a charge leg and a discharge leg
 still lose different percentages because each is measured against the power at the end it
-starts from: the POC import when charging, the DC output when discharging.
+starts from: the POC import when charging, the container AC terminals when discharging.
 _Avoid_: system losses, BOP losses
 
 **BESS solution**:
