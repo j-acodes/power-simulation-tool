@@ -14,10 +14,10 @@ Scope includes adding the ST6900UX-4H derating curve to the catalogue with prove
 
 **Blocked by:** 12
 
-**Status:** ready-for-agent
+**Status:** done
 
-- [ ] The worked example at 48 °C reproduces: PCS power 76 %, operating RTE 87.6 %, charge
+- [x] The worked example at 48 °C reproduces: PCS power 76 %, operating RTE 87.6 %, charge
       import 85,954 kW (below the POC capacity).
-- [ ] Derating is never a loss: exported energy stays within loss-chain differences of the
+- [x] Derating is never a loss: exported energy stays within loss-chain differences of the
       non-derated case.
-- [ ] Clamping produces one warning with the count and extremes; a missing curve warns.
+- [x] Clamping produces one warning with the count and extremes; a missing curve warns.
