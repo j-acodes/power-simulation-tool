@@ -202,7 +202,8 @@ The reference cycle an efficiency is evaluated over at one timestamp: a full cha
 full discharge of the nominal energy at the battery's DC terminals, with the whole cycle held
 at that timestamp's ambient temperature. It runs at the full power available at that ambient:
 the rated active power at the container's AC terminals, or the derated power when PCS derating
-applies, which stretches the cycle. The cycle closes: the charge leg puts back what the
+applies, which stretches the cycle; discharge never exports more than the point-of-connection
+capacity. The cycle closes: the charge leg puts back what the
 discharge leg took out divided by the cell round-trip efficiency. Its result is the **operating** round-trip efficiency at the point of
 connection, a percentage, reported with the PCS power available, as a percentage of rated. Alongside it, each timestamp carries an **idle**
 standby loss: standby auxiliary consumption plus the no-load losses of every station and HV

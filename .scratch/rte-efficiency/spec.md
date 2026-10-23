@@ -1,7 +1,7 @@
 # Spec: BESS efficiency run (round-trip efficiency at the point of connection)
 
-**Status:** ready for implementation, 2026-10-23, except the time-series edge cases (deferred,
-see Further Notes) and one open point (discharge above the POC capacity).
+**Status:** split into tickets 11–16 under `issues/`, 2026-10-23. Time-series edge cases are
+deferred (see Further Notes).
 **Decisions:** tickets 01–10 under `issues/`, summarised in [map.md](map.md).
 **Decision records:** [ADR-0009](../../docs/adr/0009-efficiency-curves-interpolated-ratings-not.md)
 (curve lookup), the
@@ -117,9 +117,11 @@ Notation: N containers, S stations, E nominal energy per container (6904 kWh), d
 factor, η conversion efficiency, ρ cell RTE.
 
 1. **Discharge.** The run cycles the nominal energy N·E at the DC terminals. AC power at the
-   container terminals is P_ac = N · Pn · d; the DC side runs at P_ac ÷ η, so the leg lasts
-   t_d = N·E·η ÷ P_ac (~3.94 h at d = 1). Export at the POC = P_ac − loss chain(P_ac) −
-   no-load losses − operating auxiliary consumption.
+   container terminals is P_ac = N · Pn · d, unless the resulting export would exceed the POC
+   capacity: then P_ac is reduced until the export equals the POC capacity
+   ([ticket 11](issues/11-discharge-above-poc-capacity.md)). Export at the POC = P_ac − loss
+   chain(P_ac) − no-load losses − operating auxiliary consumption. The DC side runs at
+   P_ac ÷ η, so the leg lasts t_d = N·E·η ÷ P_ac (~3.94 h at full Pn).
 2. **Charge.** The leg must put N·E ÷ ρ back in at the DC terminals, so the cycle closes. Import
    at the POC is the lesser of the POC capacity and the import that drives the PCS at N·Pn·d.
    Walking inward from the POC: subtract auxiliary consumption and no-load losses, then the load
@@ -178,15 +180,6 @@ transformer and the HV transformer) ÷ (N × E) × 100, in % per hour.**
 
 ## Further Notes
 
-### Open point: discharge above the POC capacity
-
-The decisions run discharge at full rated power N·Pn and charge at the POC capacity. With a
-PCS fleet larger than the POC (always true by rule), discharge exports more than the POC
-allows: 108 MW through a 100 MW connection in the worked example. RTE is a ratio and moves
-little, but the reference cycle is not physically possible. To decide before or during
-implementation: cap the discharge export at the POC capacity (shorter AC power, longer leg),
-or keep it as a reference-cycle simplification.
-
 ### Deferred: time-series edge cases
 
 Resolution detection, gaps, and timezone/DST handling are not decided. Because each row is
@@ -209,8 +202,8 @@ real MVS7400-LS load and no-load losses, and the ST6680UX-2H's rated active powe
 |---|---|---|
 | Derating d | 1.00 | 0.76 |
 | Operating aux (64 × container + 16 × MVS) | 890 kW | 1,351 kW |
-| Discharge: AC power / export | 110,336 / 108,232 kW | 83,855 / 81,757 kW |
-| Discharge: duration / energy exported | 3.94 h / 426.7 MWh | 5.19 h / 424.1 MWh |
+| Discharge: AC power / export (capped at POC) | 101,942 / 100,000 kW | 83,855 / 81,757 kW |
+| Discharge: duration / energy exported | 4.27 h / 426.7 MWh | 5.19 h / 424.1 MWh |
 | Charge: import / AC into containers | 100,000 / 98,127 kW | 85,954 / 83,855 kW |
 | Charge: duration / energy imported | 4.81 h / 481.4 MWh | 5.63 h / 484.2 MWh |
 | **Operating RTE at POC** | **88.6 %** | **87.6 %** |

@@ -53,14 +53,13 @@ and writes, per timestamp, the **operating** round-trip efficiency of an efficie
 
 - [What exactly goes into the idle standby loss?](issues/10-idle-figure.md): POC import ÷ fleet nominal DC energy, % per hour; container and MVS standby aux plus no-load of every station and HV transformer (in full in a hybrid); PCS standby inside Sungrow's standby aux; no load losses on the idle draw; no cell self-discharge; independent of derating.
 - [Should sizing use rated active power?](issues/09-rated-active-power-in-sizing.md): yes; Pn is the active limit in the PCS check and the seed, kVA stays the apparent limit (ADR-0008 amendment); missing Pn is an error everywhere, which blocks ST6680UX-2H until Sungrow supplies it; sizing change built on its own branch before the spec.
+- [Discharge above the POC capacity](issues/11-discharge-above-poc-capacity.md): discharge export is capped at the POC capacity; the containers run below Pn and the leg stretches.
 
 ## Not yet specified
 
 - **Time-series edge cases** (deferred by the owner, 2026-10-23): resolution detection, gaps,
   timezone/DST. Rows are evaluated independently, so these affect input validation only
   (out-of-range ambients are settled: clamp and warn).
-- **Discharge above the POC capacity**: found while writing [spec.md](spec.md); cap the
-  discharge export at the POC capacity, or keep it as a reference-cycle simplification.
 
 [spec.md](spec.md) is written (2026-10-23) with a worked example.
 
