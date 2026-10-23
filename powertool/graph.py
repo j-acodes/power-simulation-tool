@@ -1173,7 +1173,7 @@ class BranchInputs:
     independently). ``q_poc_target_kvar`` is a PLACEHOLDER at parse time
     (0.0): the reactive duty a branch is actually assigned can only be known
     once the shared export chain has been sized (it depends on the combined
-    flow's own losses), so :func:`backend.solve.solve_architecture` fills in
+    flow's own losses), so :func:`powertool.plant.solve_architecture` fills in
     the real value after running step 1 of the solve order — see the reactive
     split there.
     """
@@ -1226,7 +1226,7 @@ class BranchInputs:
     def aux_ids(self) -> list[str]:
         """Every aux load of the fleet, concatenated in busbar-drawn order —
         for callers that want the fleet's aux nodes as one flat list (e.g.
-        :func:`backend.solve.build_collection_chain`'s Stage-1 lumped aux)."""
+        :func:`powertool.plant.build_collection_chain`'s Stage-1 lumped aux)."""
         return [aid for busbar in self.busbars for aid in busbar.aux_ids]
 
     @property
@@ -1313,7 +1313,7 @@ class GraphInputs:
     # Every busbar drawn on the plant, whichever fleet it belongs to (ticket
     # 05) — NOT ``len(branches)``, which counts fleets: a single fleet may
     # hold more than one busbar. This is what decides whether the POC-side
-    # run is ONE shared physical line (:func:`backend.solve._uses_shared_export`)
+    # run is ONE shared physical line (:func:`powertool.plant._uses_shared_export`)
     # or each busbar's own MV export (``mv_export_applicable`` in
     # :func:`graph_to_inputs`) — the two rules are complements of each other.
     n_busbars: int
@@ -1324,7 +1324,7 @@ class GraphInputs:
     def p_poc_kw(self) -> float:
         """Combined active target across every branch — what the shared
         export chain is sized against (step 1 of the solve order; see
-        :func:`backend.solve.solve_architecture`)."""
+        :func:`powertool.plant.solve_architecture`)."""
         return sum(b.p_poc_target_kw for b in self.branches)
 
 
@@ -1731,7 +1731,7 @@ def sld_fleets(inputs: GraphInputs) -> list[dict]:
     ``bess_stations[c][k]`` is a BESS station's ``{"pcs_model",
     "pcs_count", "battery_mwh"}`` (the solution's catalogue key) — or ``None`` when its container count is unknown — positional
     with ``station_ids`` (the drawn circuits are kept verbatim, see
-    :func:`backend.solve.solve_architecture`), because a BESS station's
+    :func:`powertool.plant.solve_architecture`), because a BESS station's
     container count depends on its own transformer pairing. Empty for PV.
 
     ``aux_loads[j]`` is busbar ``j``'s auxiliary loads, one SLD feeder each:
@@ -1838,7 +1838,7 @@ def map_results(inputs: GraphInputs, stage1s: list[SizingResult],
 
     ``stage1s`` carries one Stage-1 result per branch, same order as
     ``inputs.branches`` and ``arch.branches`` — the shape
-    :func:`backend.solve.solve_architecture` returns.
+    :func:`powertool.plant.solve_architecture` returns.
 
     The mapping is purely positional (see the module docstring): circuit c,
     segment k of a branch's architecture belongs to that branch's
