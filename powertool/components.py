@@ -507,6 +507,32 @@ class AuxConsumptionTable:
 
 
 @dataclass(frozen=True)
+class DeratingCurve:
+    """A BESS solution's PCS derating: the fraction of rated active power
+    available at each published ambient, the same in charge and discharge.
+
+    An efficiency curve, not a rating: interpolated linearly in ambient and
+    clamped to the edges (ADR-0009). Used only by the efficiency run.
+    """
+
+    ambient_c: tuple[float, ...]
+    fraction: tuple[float, ...]
+
+    def __post_init__(self) -> None:
+        for field in ("ambient_c", "fraction"):
+            object.__setattr__(self, field, tuple(float(v) for v in getattr(self, field)))
+        if not (len(self.ambient_c) == len(self.fraction) >= 1):
+            raise ValueError("derating curve columns must be equal, non-empty lengths")
+        if list(self.ambient_c) != sorted(set(self.ambient_c)):
+            raise ValueError("derating curve ambients must be strictly increasing")
+        if not all(0 < f <= 1 for f in self.fraction):
+            raise ValueError("derating fractions must be in (0, 1]")
+
+    def fraction_at(self, ambient_c: float) -> float:
+        return _interpolate(self.ambient_c, self.fraction, ambient_c)
+
+
+@dataclass(frozen=True)
 class ContainerAuxLookup:
     """Container auxiliary consumption resolved for one cycles-per-day value:
     the two bracketing reference tables and the weight of the upper one. Both
@@ -638,6 +664,7 @@ class BessSolution:
     conversion_efficiency_pct: tuple[tuple[str, float], ...] = ()
     cell_rte_pct: float | None = None           # cell (DC) round-trip efficiency
     aux_consumption: tuple[AuxConsumptionTable, ...] = ()  # one per cycles/day reference
+    derating: DeratingCurve | None = None       # None: unpublished, run at 100 %
 
     def __post_init__(self) -> None:
         items = self.conversion_efficiency_pct
@@ -647,6 +674,8 @@ class BessSolution:
         object.__setattr__(self, "aux_consumption", tuple(
             t if isinstance(t, AuxConsumptionTable) else AuxConsumptionTable(**t)
             for t in self.aux_consumption))
+        if isinstance(self.derating, dict):
+            object.__setattr__(self, "derating", DeratingCurve(**self.derating))
 
     @property
     def conversion_efficiency(self) -> float | None:
