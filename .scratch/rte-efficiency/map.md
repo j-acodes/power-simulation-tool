@@ -56,9 +56,13 @@ and writes, per timestamp, the **operating** round-trip efficiency of an efficie
 
 ## Not yet specified
 
-- **Time-series edge cases**: resolution detection, gaps, timezone/DST (out-of-range ambients are settled: clamp and warn).
-- **Spec assembly**: write `spec.md` from the decisions, with acceptance criteria and a worked
-  example.
+- **Time-series edge cases** (deferred by the owner, 2026-10-23): resolution detection, gaps,
+  timezone/DST. Rows are evaluated independently, so these affect input validation only
+  (out-of-range ambients are settled: clamp and warn).
+- **Discharge above the POC capacity**: found while writing [spec.md](spec.md); cap the
+  discharge export at the POC capacity, or keep it as a reference-cycle simplification.
+
+[spec.md](spec.md) is written (2026-10-23) with a worked example.
 
 ## Out of scope
 
