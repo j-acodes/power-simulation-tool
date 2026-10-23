@@ -2,6 +2,8 @@ import type {
   CatalogueResponse,
   Diagram,
   DesignFull,
+  EfficiencyRequest,
+  EfficiencyResponse,
   ProjectDetail,
   ProjectSummary,
   SeedParams,
@@ -93,6 +95,23 @@ export function seedDiagram(params: SeedParams): Promise<Diagram> {
     headers: JSON_HEADERS,
     body: JSON.stringify(params),
   }).then(asJson<Diagram>)
+}
+
+/** Efficiency run of the drawn design (POST /api/efficiency). A run the
+ * engine refuses (no BESS fleet, invalid design, ...) is a 400 whose message
+ * is thrown as an Error. */
+export async function runEfficiency(req: EfficiencyRequest): Promise<EfficiencyResponse> {
+  const res = await fetch('/api/efficiency', {
+    method: 'POST',
+    headers: JSON_HEADERS,
+    body: JSON.stringify(req),
+  })
+  if (!res.ok) {
+    const body = await res.json().catch(() => null)
+    const detail = typeof body?.detail === 'string' ? body.detail : null
+    throw new Error(detail ?? `Efficiency run failed (${res.status})`)
+  }
+  return (await res.json()) as EfficiencyResponse
 }
 
 /** Stage-1 conceptual sizing: lumped-chain inverter requirement over the

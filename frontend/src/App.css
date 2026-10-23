@@ -753,6 +753,142 @@ button.issue-item.clickable:hover {
   margin-top: 0;
 }
 
+/* Efficiency overlay (ticket 17): the settings overlay's frame, wide enough
+   for the chart. Stays mounted while hidden to keep the last run. */
+
+.efficiency-overlay {
+  position: absolute;
+  top: 0.75rem;
+  right: 0.75rem;
+  width: 600px;
+  max-width: calc(100% - 1.5rem);
+  max-height: calc(100% - 1.5rem);
+  overflow-y: auto;
+  box-sizing: border-box;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 0.75rem;
+  box-shadow: var(--shadow);
+  z-index: 5;
+}
+
+.efficiency-overlay[hidden] {
+  display: none;
+}
+
+.efficiency-panel h3:first-child {
+  margin-top: 0;
+}
+
+.efficiency-panel .field input[type='file'] {
+  font-size: 13px;
+}
+
+.efficiency-messages {
+  font-size: 13px;
+  margin: 0 0 0.6rem;
+  padding-left: 1.2rem;
+}
+
+.efficiency-error {
+  display: block;
+  margin-top: 0.5rem;
+}
+
+.efficiency-summary {
+  font-size: 13px;
+  border-collapse: collapse;
+  margin-bottom: 0.6rem;
+}
+
+.efficiency-summary th {
+  text-align: left;
+  font-weight: 400;
+  padding: 0.1rem 1rem 0.1rem 0;
+}
+
+.efficiency-summary td {
+  color: var(--text-h);
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
+.efficiency-chart {
+  position: relative;
+  margin-bottom: 0.6rem;
+}
+
+.efficiency-chart svg {
+  display: block;
+  max-width: 100%;
+  touch-action: pan-y;
+}
+
+.efficiency-chart svg:focus-visible {
+  outline: 2px solid var(--accent-border);
+}
+
+.efficiency-chart-title {
+  font-size: 12px;
+  fill: var(--text-h);
+}
+
+.efficiency-chart-tick {
+  font-size: 11px;
+  fill: var(--text);
+  font-variant-numeric: tabular-nums;
+}
+
+.efficiency-chart-grid {
+  stroke: var(--border);
+  stroke-width: 1;
+}
+
+.efficiency-chart-line {
+  fill: none;
+  stroke: var(--chart-series);
+  stroke-width: 2;
+  stroke-linejoin: round;
+  stroke-linecap: round;
+}
+
+.efficiency-chart-crosshair {
+  stroke: var(--text);
+  stroke-width: 1;
+}
+
+.efficiency-chart-dot {
+  fill: var(--chart-series);
+  stroke: var(--bg);
+  stroke-width: 2;
+}
+
+.efficiency-chart-tooltip {
+  position: absolute;
+  top: 0;
+  pointer-events: none;
+  font-size: 12px;
+  line-height: 1.4;
+  color: var(--text);
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  box-shadow: var(--shadow);
+  padding: 0.3rem 0.5rem;
+  white-space: nowrap;
+}
+
+.efficiency-chart-tooltip strong {
+  color: var(--text-h);
+  font-variant-numeric: tabular-nums;
+}
+
+.efficiency-chart-tooltip-time {
+  color: var(--text-h);
+  font-weight: 600;
+}
+
 /* Results overlay */
 
 .results-overlay {

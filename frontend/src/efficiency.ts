@@ -89,7 +89,7 @@ export const CLI_HEADER = ['timestamp', 'operating RTE %', 'idle loss %', 'PCS p
 /** Python's `round(value, 4)`: nearest, and an exact binary tie to even. */
 function roundHalfEven4(value: number): number {
   const fixed = value.toFixed(4) // nearest; a tie goes away from zero
-  const exact = Math.abs(value).toFixed(30)
+  const exact = Math.abs(value).toFixed(20)
   const tail = exact.slice(exact.indexOf('.') + 5)
   if (/^50*$/.test(tail)) {
     const lastDigit = Number(exact[exact.indexOf('.') + 4])
