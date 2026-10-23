@@ -9,7 +9,7 @@ from dataclasses import replace
 import pytest
 
 from powertool import CatalogueDataWarning, ComponentDatabase
-from powertool.components import mvs_aux_band
+from powertool.components import station_aux_band
 from powertool.database import load_pv_inverters
 
 # Expected PV transformer stations: key -> (rated kVA, brand, dropdown label).
@@ -299,7 +299,7 @@ def test_the_0_5c_sungrow_station_carries_its_confirmed_container_count(db):
 
 
 def test_sungrow_stations_publish_their_switchgear_rated_current(db):
-    # Both the PV MVS stations and the two real BESS stations publish 630 A.
+    # Both the PV transformer stations and the two real BESS stations publish 630 A.
     for key in ("SUNGROW_MVS3200", "SUNGROW_MVS4480", "SUNGROW_MVS6400",
                 "SUNGROW_MVS7040", "SUNGROW_MVS8960"):
         station = db.transformers[key]
@@ -391,14 +391,14 @@ def test_powertitan_carries_its_efficiency_run_parameters(db):
 
 
 def test_mvs7400_auxiliary_consumption_steps_by_band(db):
-    bands = db.bess_transformer("SUNGROW_MVS7400_LS").mvs_aux_consumption
+    bands = db.bess_transformer("SUNGROW_MVS7400_LS").station_aux_consumption
     # Table 9 bands [-30,10), [10,35), [35,50].
-    assert mvs_aux_band(bands, 9.9).operating_kw == 3.50
-    assert mvs_aux_band(bands, 10.0).operating_kw == 4.02
-    assert mvs_aux_band(bands, 34.9).standby_kw == 2.76
-    assert mvs_aux_band(bands, 35.0).standby_kw == 3.02
-    assert mvs_aux_band(bands, 50.0).standby_kw == 3.02
+    assert station_aux_band(bands, 9.9).operating_kw == 3.50
+    assert station_aux_band(bands, 10.0).operating_kw == 4.02
+    assert station_aux_band(bands, 34.9).standby_kw == 2.76
+    assert station_aux_band(bands, 35.0).standby_kw == 3.02
+    assert station_aux_band(bands, 50.0).standby_kw == 3.02
 
 
-def test_placeholder_stations_publish_no_mvs_auxiliary_consumption(db):
-    assert db.bess_transformer("GENERIC_BESS_TX_4000_LV069").mvs_aux_consumption == ()
+def test_placeholder_stations_publish_no_station_auxiliary_consumption(db):
+    assert db.bess_transformer("GENERIC_BESS_TX_4000_LV069").station_aux_consumption == ()

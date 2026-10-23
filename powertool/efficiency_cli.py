@@ -65,11 +65,20 @@ def _parser() -> argparse.ArgumentParser:
     return p
 
 
-def _fmt(value: float | None) -> str:
-    return "" if value is None else f"{round(value, 4):g}"
+def _fmt(value: float) -> str:
+    return f"{round(value, 4):g}"
+
+
+def _utf8_streams() -> None:
+    """Write stdout and stderr as UTF-8 (the warnings carry "°C"), whatever
+    the console's own encoding, e.g. cp1252 on Windows."""
+    for stream in (sys.stdout, sys.stderr):
+        if hasattr(stream, "reconfigure"):
+            stream.reconfigure(encoding="utf-8")
 
 
 def main(argv: list[str] | None = None) -> int:
+    _utf8_streams()
     parser = _parser()
     args = parser.parse_args(argv)
     if args.diagram is not None:

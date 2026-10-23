@@ -183,7 +183,7 @@ def test_split_reactive_always_divides_pro_rata_by_active_power():
     """
     from types import SimpleNamespace
 
-    from backend.solve import _split_reactive
+    from powertool.plant import _split_reactive
 
     pv = SimpleNamespace(kind="pv", p_poc_target_kw=3000.0)
     bess = SimpleNamespace(kind="bess", p_poc_target_kw=1000.0)

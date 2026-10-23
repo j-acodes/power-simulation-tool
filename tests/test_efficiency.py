@@ -5,13 +5,18 @@ Expected figures come from the spec's worked example
 """
 
 import csv
+import os
+import subprocess
+import sys
 from dataclasses import replace
+from pathlib import Path
 
 import pytest
 
 from powertool import ComponentDatabase, efficiency_cli
-from powertool.components import MvsAuxBand, resolve_container_aux
-from powertool.efficiency import EfficiencyRunError, TypedConfiguration, run_efficiency
+from powertool.components import StationAuxBand, resolve_container_aux
+from powertool.efficiency import (EfficiencyRunError, TypedConfiguration, _operating_rte,
+                                  _resolve_typed, run_efficiency)
 
 
 @pytest.fixture(scope="module")
@@ -48,8 +53,8 @@ def _without_auxiliaries(db: ComponentDatabase) -> ComponentDatabase:
     zero_tables = tuple(
         replace(t, operating_kw=[0.0] * len(t.ambient_c), standby_kw=[0.0] * len(t.ambient_c))
         for t in solution.aux_consumption)
-    station = replace(db.bess_transformer("SUNGROW_MVS7400_LS"), mvs_aux_consumption=(
-        MvsAuxBand(-30, 50, 0.0, 0.0),))
+    station = replace(db.bess_transformer("SUNGROW_MVS7400_LS"), station_aux_consumption=(
+        StationAuxBand(-30, 50, 0.0, 0.0),))
     return ComponentDatabase(
         bess_solutions={**db.bess_solutions,
                         solution.name: replace(solution, aux_consumption=zero_tables)},
@@ -97,8 +102,8 @@ def test_solution_without_container_table_is_an_error(db):
         run_efficiency([("t", 25.0)], WORKED, _with_solution(db, aux_consumption=()))
 
 
-def test_station_without_mvs_table_counts_zero_and_warns(db):
-    station = replace(db.bess_transformer("SUNGROW_MVS7400_LS"), mvs_aux_consumption=())
+def test_station_without_auxiliary_table_counts_zero_and_warns(db):
+    station = replace(db.bess_transformer("SUNGROW_MVS7400_LS"), station_aux_consumption=())
     catalogue = ComponentDatabase(
         bess_solutions=db.bess_solutions,
         bess_transformers={**db.bess_transformers, station.name: station},
@@ -177,6 +182,75 @@ def test_worked_example_at_48c_runs_at_the_derated_power(db):
     assert row.pcs_power_pct == pytest.approx(76.0)
     assert row.operating_rte_pct == pytest.approx(87.59, abs=0.01)
     assert result.warnings == []
+
+
+class _RecordingChain:
+    """Wraps a fleet's loss chain and records the per-leg powers one
+    efficiency run passes through it: the discharge leg's AC power and
+    export, the charge leg's import and AC power into the containers."""
+
+    def __init__(self, chain):
+        self.chain = chain
+        self.no_load_kw = chain.no_load_kw
+        self.legs: dict[str, float] = {}
+
+    def export_kw(self, p_ac_kw, aux_kw):
+        export = self.chain.export_kw(p_ac_kw, aux_kw)
+        self.legs.update(discharge_ac_kw=p_ac_kw, export_kw=export)
+        return export
+
+    def import_kw(self, p_in_kw, aux_kw):
+        return self.chain.import_kw(p_in_kw, aux_kw)
+
+    def ac_for_export(self, export_kw, aux_kw):
+        p_ac = self.chain.ac_for_export(export_kw, aux_kw)
+        self.legs.update(discharge_ac_kw=p_ac, export_kw=export_kw)
+        return p_ac
+
+    def ac_from_import(self, import_kw, aux_kw):
+        p_in = self.chain.ac_from_import(import_kw, aux_kw)
+        self.legs.update(import_kw=import_kw, charge_ac_kw=p_in)
+        return p_in
+
+
+def _legs(config, catalogue, ambient_c) -> dict[str, float]:
+    """The per-leg powers of one typed-in efficiency run at ``ambient_c``."""
+    fleet, _warnings = _resolve_typed(config, catalogue)
+    chain = _RecordingChain(fleet.chain)
+    _operating_rte(replace(fleet, chain=chain), ambient_c)
+    return chain.legs
+
+
+def test_worked_example_at_48c_charges_below_the_poc_capacity(db):
+    legs = _legs(WORKED, db, 48.0)
+
+    # Hand calculation (spec, Further Notes): the derated PCS draws 85,954 kW
+    # at the POC, 83,855 kW into the containers; the 100 MW POC does not bind.
+    assert legs["import_kw"] == pytest.approx(85_954, abs=1)
+    assert legs["charge_ac_kw"] == pytest.approx(83_855, abs=1)
+
+
+def test_derating_never_reduces_the_energy_exported(db):
+    lossless = replace(WORKED, load_loss_pct=0.0, no_load_loss_pct=0.0)
+    catalogue = _without_auxiliaries(db)
+    solution = catalogue.bess_solution(WORKED.solution)
+    energy_dc_kwh = WORKED.containers * solution.e_nominal_kwh
+
+    def exported_kwh(ambient_c):
+        legs = _legs(lossless, catalogue, ambient_c)
+        # Spec: the discharge lasts E x eta / P_ac at the AC power the PCS runs at.
+        hours = energy_dc_kwh * solution.conversion_efficiency / legs["discharge_ac_kw"]
+        return legs["export_kw"], legs["export_kw"] * hours
+
+    full_kw, full_kwh = exported_kwh(25.0)
+    derated_kw, derated_kwh = exported_kwh(48.0)
+
+    # At 25 °C the export is held to the 100 MW POC capacity; at 48 °C the
+    # PCS is derated to 76 % of 64 x 1724 kW, below it. The longer discharge
+    # exports the same energy: derating is a cap on power, never a loss.
+    assert full_kw == pytest.approx(100_000.0)
+    assert derated_kw == pytest.approx(0.76 * 64 * 1724.0)
+    assert derated_kwh == pytest.approx(full_kwh, rel=1e-12)
 
 
 @pytest.mark.parametrize("ambient, pcs_pct", [(45.0, 100.0), (48.0, 76.0), (50.0, 60.0)])
@@ -317,3 +391,39 @@ def test_idle_loss_clamps_out_of_range_ambients_to_the_edge(db, outside, edge):
     out_row, edge_row = result.rows
     assert out_row.idle_loss_pct == edge_row.idle_loss_pct
     assert out_row.operating_rte_pct == edge_row.operating_rte_pct
+
+
+def test_a_narrower_station_table_narrows_the_published_range_and_warns(db):
+    station = replace(db.bess_transformer("SUNGROW_MVS7400_LS"), station_aux_consumption=(
+        StationAuxBand(-20, 10, 3.50, 2.50), StationAuxBand(10, 40, 4.02, 2.76)))
+    catalogue = ComponentDatabase(
+        bess_solutions=db.bess_solutions,
+        bess_transformers={**db.bess_transformers, station.name: station},
+        bess_pairings=db.bess_pairings)
+
+    result = run_efficiency([("hot", 45.0), ("edge", 40.0), ("cold", -25.0), ("in", 25.0)],
+                            WORKED, catalogue)
+
+    hot, edge, cold, _ = result.rows
+    # 45 °C reads the station table's 40 °C edge for every figure; the
+    # container table and derating curve, which do cover 45 °C, clamp with it.
+    assert hot.operating_rte_pct == edge.operating_rte_pct
+    assert hot.idle_loss_pct == edge.idle_loss_pct
+    (warning,) = result.warnings
+    assert "2 timestamps" in warning
+    assert "-20 to 40" in warning
+
+
+def test_cli_writes_warnings_as_utf8_whatever_the_console_encoding(tmp_path):
+    source = tmp_path / "ambient.csv"
+    source.write_text("timestamp,ambient_c\nt0,55\n", encoding="utf-8")
+    env = {k: v for k, v in os.environ.items() if k != "PYTHONUTF8"}
+    env["PYTHONIOENCODING"] = "cp1252"   # a Windows console's default
+
+    done = subprocess.run(
+        [sys.executable, "-m", "powertool.efficiency_cli", str(source),
+         str(tmp_path / "rte.csv"), *WORKED_ARGS],
+        capture_output=True, env=env, cwd=Path(__file__).resolve().parents[1])
+
+    assert done.returncode == 0, done.stderr
+    assert "50 °C" in done.stderr.decode("utf-8")
