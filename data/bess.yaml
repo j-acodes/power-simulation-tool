@@ -32,10 +32,26 @@
 #   datasheet_version / preliminary / datasheet_url : provenance of the
 #                            transcription; datasheet_url may be empty when
 #                            the source is not publicly linkable.
-#   conversion_efficiency_pct / cell_rte_pct / aux_consumption : efficiency-run
-#                            parameters (CONTEXT.md's "Efficiency run"), read
-#                            only by powertool.efficiency, never by sizing;
-#                            each carries its provenance in a comment.
+#   Efficiency-run parameters (CONTEXT.md's "Efficiency run"), read only by
+#   powertool.efficiency, never by sizing; each carries its provenance in a
+#   comment, and a solution that omits one cannot run (or, for derating, runs
+#   at 100 % with a warning):
+#   conversion_efficiency_pct : one-way conversion efficiency, DC terminals ->
+#                            transformer station LV, as named items in percent
+#                            whose product is used; the same at every power
+#                            level and in both directions
+#   cell_rte_pct           : cell (DC) round-trip efficiency [%], the default
+#                            a run may override
+#   aux_consumption        : auxiliary consumption per container [kW], one
+#                            table per cycles_per_day reference, each with
+#                            ambient_c [°C] and operating_kw / standby_kw
+#                            columns of equal length; interpolated linearly in
+#                            ambient and cycles per day (ADR-0009)
+#   derating               : PCS derating, ambient_c [°C] and fraction of
+#                            rated active power (0 < fraction <= 1), charge
+#                            and discharge alike; interpolated linearly and
+#                            clamped to its edges (ADR-0009). A cap on power,
+#                            never a loss. Omitted: no curve is published
 #
 # Container count per station is NOT declared here: it lives on the pairing
 # between a solution and a station transformer, in data/bess_transformers.yaml
@@ -69,9 +85,9 @@ bess_solutions:
     preliminary: true
     datasheet_url: ""
     # Efficiency-run parameters (simulated; read only by powertool.efficiency).
-    # One-way conversion efficiency DC terminals -> transformer station LV, as the product of
-    # these items (98.45 %; Sungrow quotes 98.4 %). Source: Sungrow LV loss
-    # parameters for PowerTitan 3.0, preliminary.
+    # One-way conversion efficiency DC terminals -> transformer station LV,
+    # as the product of these items (98.45 %; Sungrow quotes 98.4 %). Source:
+    # Sungrow LV loss parameters for PowerTitan 3.0, preliminary.
     conversion_efficiency_pct:
       dc_cable: 99.90
       pcs_bus: 99.95
@@ -96,6 +112,12 @@ bess_solutions:
     # 1.0 Pn up to 45 °C, linear to 0.6 Pn at 50 °C. Source: Sungrow
     # PowerTitan 3.0 technical proposal, Fig. 2-4, preliminary. Interpolated
     # linearly in ambient (ADR-0009).
+    # Published: the flat 1.0 Pn segment to 45 °C and the slope to 0.6 Pn at
+    # 50 °C; Fig. 2-4 draws the flat segment from its axis start at -30 °C
+    # and publishes nothing below -30 or above 50 °C. The -30 °C point is a
+    # PROJECT EXTENSION read off that axis start, not a labelled data point:
+    # it aligns the curve's range with the auxiliary-consumption tables
+    # (-30 to 50 °C).
     derating:
       ambient_c: [-30, 45,  50]
       fraction:  [1.0, 1.0, 0.6]
