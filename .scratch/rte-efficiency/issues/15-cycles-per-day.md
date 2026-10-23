@@ -12,8 +12,8 @@ provenance.
 
 **Blocked by:** 12
 
-**Status:** ready-for-agent
+**Status:** done
 
-- [ ] 1.5 cycles/day at 25 °C uses the midpoint of the two tables (operating and standby).
-- [ ] 3 cycles/day uses the 2 cycles/day table and warns; omitting it is an error for PT3.
-- [ ] The output CSV is unchanged (cycles per day is not echoed).
+- [x] 1.5 cycles/day at 25 °C uses the midpoint of the two tables (operating and standby).
+- [x] 3 cycles/day uses the 2 cycles/day table and warns; omitting it is an error for PT3.
+- [x] The output CSV is unchanged (cycles per day is not echoed).
