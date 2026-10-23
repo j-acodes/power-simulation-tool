@@ -1,0 +1,1656 @@
+{
+ "_comment": "Generated from the engine and powertool.efficiency_cli (--diagram, seeded 100 MW / 4 h BESS design, 1 cycle/day): the unrounded rows as /api/efficiency returns them, and the CLI's CSV text for the same run.",
+ "rows": [
+  {
+   "timestamp": "2026-01-01 0000",
+   "operating_rte_pct": 88.62457540273014,
+   "idle_loss_pct": 0.2339723099053023,
+   "pcs_power_pct": 100.0
+  },
+  {
+   "timestamp": "2026-01-01 0001",
+   "operating_rte_pct": 88.62457540273014,
+   "idle_loss_pct": 0.2339723099053023,
+   "pcs_power_pct": 100.0
+  },
+  {
+   "timestamp": "2026-01-01 0002",
+   "operating_rte_pct": 88.62457540273014,
+   "idle_loss_pct": 0.2339723099053023,
+   "pcs_power_pct": 100.0
+  },
+  {
+   "timestamp": "2026-01-01 0003",
+   "operating_rte_pct": 88.62457540273014,
+   "idle_loss_pct": 0.2339723099053023,
+   "pcs_power_pct": 100.0
+  },
+  {
+   "timestamp": "2026-01-01 0004",
+   "operating_rte_pct": 88.62457540273014,
+   "idle_loss_pct": 0.2339723099053023,
+   "pcs_power_pct": 100.0
+  },
+  {
+   "timestamp": "2026-01-01 0005",
+   "operating_rte_pct": 88.62457540273014,
+   "idle_loss_pct": 0.2339723099053023,
+   "pcs_power_pct": 100.0
+  },
+  {
+   "timestamp": "2026-01-01 0006",
+   "operating_rte_pct": 88.62457540273014,
+   "idle_loss_pct": 0.2339723099053023,
+   "pcs_power_pct": 100.0
+  },
+  {
+   "timestamp": "2026-01-01 0007",
+   "operating_rte_pct": 88.62457540273014,
+   "idle_loss_pct": 0.2339723099053023,
+   "pcs_power_pct": 100.0
+  },
+  {
+   "timestamp": "2026-01-01 0008",
+   "operating_rte_pct": 88.62457540273014,
+   "idle_loss_pct": 0.2339723099053023,
+   "pcs_power_pct": 100.0
+  },
+  {
+   "timestamp": "2026-01-01 0009",
+   "operating_rte_pct": 88.62457540273014,
+   "idle_loss_pct": 0.2339723099053023,
+   "pcs_power_pct": 100.0
+  },
+  {
+   "timestamp": "2026-01-01 0010",
+   "operating_rte_pct": 88.62457540273014,
+   "idle_loss_pct": 0.2339723099053023,
+   "pcs_power_pct": 100.0
+  },
+  {
+   "timestamp": "2026-01-01 0011",
+   "operating_rte_pct": 88.62457540273014,
+   "idle_loss_pct": 0.2339723099053023,
+   "pcs_power_pct": 100.0
+  },
+  {
+   "timestamp": "2026-01-01 0012",
+   "operating_rte_pct": 88.62457540273014,
+   "idle_loss_pct": 0.2339723099053023,
+   "pcs_power_pct": 100.0
+  },
+  {
+   "timestamp": "2026-01-01 0013",
+   "operating_rte_pct": 88.62457540273014,
+   "idle_loss_pct": 0.2339723099053023,
+   "pcs_power_pct": 100.0
+  },
+  {
+   "timestamp": "2026-01-01 0014",
+   "operating_rte_pct": 88.62457540273014,
+   "idle_loss_pct": 0.2339723099053023,
+   "pcs_power_pct": 100.0
+  },
+  {
+   "timestamp": "2026-01-01 0015",
+   "operating_rte_pct": 88.62457540273014,
+   "idle_loss_pct": 0.2339723099053023,
+   "pcs_power_pct": 100.0
+  },
+  {
+   "timestamp": "2026-01-01 0016",
+   "operating_rte_pct": 88.62457540273014,
+   "idle_loss_pct": 0.2339723099053023,
+   "pcs_power_pct": 100.0
+  },
+  {
+   "timestamp": "2026-01-01 0017",
+   "operating_rte_pct": 88.62457540273014,
+   "idle_loss_pct": 0.2339723099053023,
+   "pcs_power_pct": 100.0
+  },
+  {
+   "timestamp": "2026-01-01 0018",
+   "operating_rte_pct": 88.62457540273014,
+   "idle_loss_pct": 0.2339723099053023,
+   "pcs_power_pct": 100.0
+  },
+  {
+   "timestamp": "2026-01-01 0019",
+   "operating_rte_pct": 88.62457540273014,
+   "idle_loss_pct": 0.2339723099053023,
+   "pcs_power_pct": 100.0
+  },
+  {
+   "timestamp": "2026-01-01 0020",
+   "operating_rte_pct": 88.62457540273014,
+   "idle_loss_pct": 0.2339723099053023,
+   "pcs_power_pct": 100.0
+  },
+  {
+   "timestamp": "2026-01-01 0021",
+   "operating_rte_pct": 88.62457540273014,
+   "idle_loss_pct": 0.2339723099053023,
+   "pcs_power_pct": 100.0
+  },
+  {
+   "timestamp": "2026-01-01 0022",
+   "operating_rte_pct": 88.62457540273014,
+   "idle_loss_pct": 0.2339723099053023,
+   "pcs_power_pct": 100.0
+  },
+  {
+   "timestamp": "2026-01-01 0023",
+   "operating_rte_pct": 88.62457540273014,
+   "idle_loss_pct": 0.2339723099053023,
+   "pcs_power_pct": 100.0
+  },
+  {
+   "timestamp": "2026-01-01 0024",
+   "operating_rte_pct": 88.62457540273014,
+   "idle_loss_pct": 0.2339723099053023,
+   "pcs_power_pct": 100.0
+  },
+  {
+   "timestamp": "2026-01-01 0025",
+   "operating_rte_pct": 88.62457540273014,
+   "idle_loss_pct": 0.2339723099053023,
+   "pcs_power_pct": 100.0
+  },
+  {
+   "timestamp": "2026-01-01 0026",
+   "operating_rte_pct": 88.62457540273014,
+   "idle_loss_pct": 0.2339723099053023,
+   "pcs_power_pct": 100.0
+  },
+  {
+   "timestamp": "2026-01-01 0027",
+   "operating_rte_pct": 88.62457540273014,
+   "idle_loss_pct": 0.2339723099053023,
+   "pcs_power_pct": 100.0
+  },
+  {
+   "timestamp": "2026-01-01 0028",
+   "operating_rte_pct": 88.62329172465539,
+   "idle_loss_pct": 0.23351605266312384,
+   "pcs_power_pct": 100.0
+  },
+  {
+   "timestamp": "2026-01-01 0029",
+   "operating_rte_pct": 88.62197239841008,
+   "idle_loss_pct": 0.23304712160866267,
+   "pcs_power_pct": 100.0
+  },
+  {
+   "timestamp": "2026-01-01 0030",
+   "operating_rte_pct": 88.62065308184928,
+   "idle_loss_pct": 0.23257819055420148,
+   "pcs_power_pct": 100.0
+  },
+  {
+   "timestamp": "2026-01-01 0031",
+   "operating_rte_pct": 88.61933377497313,
+   "idle_loss_pct": 0.23210925949974032,
+   "pcs_power_pct": 100.0
+  },
+  {
+   "timestamp": "2026-01-01 0032",
+   "operating_rte_pct": 88.61801447778154,
+   "idle_loss_pct": 0.2316403284452791,
+   "pcs_power_pct": 100.0
+  },
+  {
+   "timestamp": "2026-01-01 0033",
+   "operating_rte_pct": 88.61669519027456,
+   "idle_loss_pct": 0.23117139739081793,
+   "pcs_power_pct": 100.0
+  },
+  {
+   "timestamp": "2026-01-01 0034",
+   "operating_rte_pct": 88.61537591245214,
+   "idle_loss_pct": 0.23070246633635677,
+   "pcs_power_pct": 100.0
+  },
+  {
+   "timestamp": "2026-01-01 0035",
+   "operating_rte_pct": 88.61405664431432,
+   "idle_loss_pct": 0.23023353528189555,
+   "pcs_power_pct": 100.0
+  },
+  {
+   "timestamp": "2026-01-01 0036",
+   "operating_rte_pct": 88.61273738586114,
+   "idle_loss_pct": 0.22976460422743436,
+   "pcs_power_pct": 100.0
+  },
+  {
+   "timestamp": "2026-01-01 0037",
+   "operating_rte_pct": 88.61141813709249,
+   "idle_loss_pct": 0.2292956731729732,
+   "pcs_power_pct": 100.0
+  },
+  {
+   "timestamp": "2026-01-01 0038",
+   "operating_rte_pct": 88.61009889800852,
+   "idle_loss_pct": 0.22882674211851203,
+   "pcs_power_pct": 100.0
+  },
+  {
+   "timestamp": "2026-01-01 0039",
+   "operating_rte_pct": 88.60877966860909,
+   "idle_loss_pct": 0.22835781106405084,
+   "pcs_power_pct": 100.0
+  },
+  {
+   "timestamp": "2026-01-01 0040",
+   "operating_rte_pct": 88.6074604488943,
+   "idle_loss_pct": 0.22788888000958968,
+   "pcs_power_pct": 100.0
+  },
+  {
+   "timestamp": "2026-01-01 0041",
+   "operating_rte_pct": 88.60614123886414,
+   "idle_loss_pct": 0.22741994895512846,
+   "pcs_power_pct": 100.0
+  },
+  {
+   "timestamp": "2026-01-01 0042",
+   "operating_rte_pct": 88.60482203851858,
+   "idle_loss_pct": 0.2269510179006673,
+   "pcs_power_pct": 100.0
+  },
+  {
+   "timestamp": "2026-01-01 0043",
+   "operating_rte_pct": 88.60350284785761,
+   "idle_loss_pct": 0.22648208684620608,
+   "pcs_power_pct": 100.0
+  },
+  {
+   "timestamp": "2026-01-01 0044",
+   "operating_rte_pct": 88.6021836668813,
+   "idle_loss_pct": 0.2260131557917449,
+   "pcs_power_pct": 100.0
+  },
+  {
+   "timestamp": "2026-01-01 0045",
+   "operating_rte_pct": 88.6008644955896,
+   "idle_loss_pct": 0.22554422473728375,
+   "pcs_power_pct": 100.0
+  },
+  {
+   "timestamp": "2026-01-01 0046",
+   "operating_rte_pct": 88.59954533398253,
+   "idle_loss_pct": 0.22507529368282256,
+   "pcs_power_pct": 100.0
+  },
+  {
+   "timestamp": "2026-01-01 0047",
+   "operating_rte_pct": 88.59822618206006,
+   "idle_loss_pct": 0.2246063626283614,
+   "pcs_power_pct": 100.0
+  },
+  {
+   "timestamp": "2026-01-01 0048",
+   "operating_rte_pct": 88.5969070398223,
+   "idle_loss_pct": 0.22413743157390018,
+   "pcs_power_pct": 100.0
+  },
+  {
+   "timestamp": "2026-01-01 0049",
+   "operating_rte_pct": 88.59558790726915,
+   "idle_loss_pct": 0.223668500519439,
+   "pcs_power_pct": 100.0
+  },
+  {
+   "timestamp": "2026-01-01 0050",
+   "operating_rte_pct": 88.59426878440063,
+   "idle_loss_pct": 0.22319956946497782,
+   "pcs_power_pct": 100.0
+  },
+  {
+   "timestamp": "2026-01-01 0051",
+   "operating_rte_pct": 88.59294967121674,
+   "idle_loss_pct": 0.22273063841051666,
+   "pcs_power_pct": 100.0
+  },
+  {
+   "timestamp": "2026-01-01 0052",
+   "operating_rte_pct": 88.59163056771753,
+   "idle_loss_pct": 0.2222617073560555,
+   "pcs_power_pct": 100.0
+  },
+  {
+   "timestamp": "2026-01-01 0053",
+   "operating_rte_pct": 88.59031147390293,
+   "idle_loss_pct": 0.22179277630159427,
+   "pcs_power_pct": 100.0
+  },
+  {
+   "timestamp": "2026-01-01 0054",
+   "operating_rte_pct": 88.58899238977303,
+   "idle_loss_pct": 0.2213238452471331,
+   "pcs_power_pct": 100.0
+  },
+  {
+   "timestamp": "2026-01-01 0055",
+   "operating_rte_pct": 88.58767331532773,
+   "idle_loss_pct": 0.22085491419267192,
+   "pcs_power_pct": 100.0
+  },
+  {
+   "timestamp": "2026-01-01 0056",
+   "operating_rte_pct": 88.58635425056714,
+   "idle_loss_pct": 0.2203859831382107,
+   "pcs_power_pct": 100.0
+  },
+  {
+   "timestamp": "2026-01-01 0057",
+   "operating_rte_pct": 88.58503519549116,
+   "idle_loss_pct": 0.21991705208374954,
+   "pcs_power_pct": 100.0
+  },
+  {
+   "timestamp": "2026-01-01 0058",
+   "operating_rte_pct": 88.58371615009987,
+   "idle_loss_pct": 0.21944812102928837,
+   "pcs_power_pct": 100.0
+  },
+  {
+   "timestamp": "2026-01-01 0059",
+   "operating_rte_pct": 88.58239711439325,
+   "idle_loss_pct": 0.21897918997482718,
+   "pcs_power_pct": 100.0
+  },
+  {
+   "timestamp": "2026-01-01 0060",
+   "operating_rte_pct": 88.58107808837129,
+   "idle_loss_pct": 0.21851025892036602,
+   "pcs_power_pct": 100.0
+  },
+  {
+   "timestamp": "2026-01-01 0061",
+   "operating_rte_pct": 88.579759072034,
+   "idle_loss_pct": 0.21804132786590485,
+   "pcs_power_pct": 100.0
+  },
+  {
+   "timestamp": "2026-01-01 0062",
+   "operating_rte_pct": 88.57844006538141,
+   "idle_loss_pct": 0.21757239681144364,
+   "pcs_power_pct": 100.0
+  },
+  {
+   "timestamp": "2026-01-01 0063",
+   "operating_rte_pct": 88.57712106841349,
+   "idle_loss_pct": 0.21710346575698247,
+   "pcs_power_pct": 100.0
+  },
+  {
+   "timestamp": "2026-01-01 0064",
+   "operating_rte_pct": 88.57580208113023,
+   "idle_loss_pct": 0.21663453470252128,
+   "pcs_power_pct": 100.0
+  },
+  {
+   "timestamp": "2026-01-01 0065",
+   "operating_rte_pct": 88.57448310353169,
+   "idle_loss_pct": 0.21616560364806006,
+   "pcs_power_pct": 100.0
+  },
+  {
+   "timestamp": "2026-01-01 0066",
+   "operating_rte_pct": 88.57316413561782,
+   "idle_loss_pct": 0.21569667259359895,
+   "pcs_power_pct": 100.0
+  },
+  {
+   "timestamp": "2026-01-01 0067",
+   "operating_rte_pct": 88.57184517738862,
+   "idle_loss_pct": 0.21522774153913773,
+   "pcs_power_pct": 100.0
+  },
+  {
+   "timestamp": "2026-01-01 0068",
+   "operating_rte_pct": 88.57052622884416,
+   "idle_loss_pct": 0.21475881048467654,
+   "pcs_power_pct": 100.0
+  },
+  {
+   "timestamp": "2026-01-01 0069",
+   "operating_rte_pct": 88.56920728998438,
+   "idle_loss_pct": 0.21428987943021538,
+   "pcs_power_pct": 100.0
+  },
+  {
+   "timestamp": "2026-01-01 0070",
+   "operating_rte_pct": 88.5678883608093,
+   "idle_loss_pct": 0.21382094837575422,
+   "pcs_power_pct": 100.0
+  },
+  {
+   "timestamp": "2026-01-01 0071",
+   "operating_rte_pct": 88.5665694413189,
+   "idle_loss_pct": 0.21335201732129305,
+   "pcs_power_pct": 100.0
+  },
+  {
+   "timestamp": "2026-01-01 0072",
+   "operating_rte_pct": 88.56525053151324,
+   "idle_loss_pct": 0.21288308626683186,
+   "pcs_power_pct": 100.0
+  },
+  {
+   "timestamp": "2026-01-01 0073",
+   "operating_rte_pct": 88.56393163139228,
+   "idle_loss_pct": 0.21241415521237064,
+   "pcs_power_pct": 100.0
+  },
+  {
+   "timestamp": "2026-01-01 0074",
+   "operating_rte_pct": 88.56261274095598,
+   "idle_loss_pct": 0.21194522415790948,
+   "pcs_power_pct": 100.0
+  },
+  {
+   "timestamp": "2026-01-01 0075",
+   "operating_rte_pct": 88.56129386020444,
+   "idle_loss_pct": 0.21147629310344826,
+   "pcs_power_pct": 100.0
+  },
+  {
+   "timestamp": "2026-01-01 0076",
+   "operating_rte_pct": 88.55997498913764,
+   "idle_loss_pct": 0.2110073620489871,
+   "pcs_power_pct": 100.0
+  },
+  {
+   "timestamp": "2026-01-01 0077",
+   "operating_rte_pct": 88.55865612775553,
+   "idle_loss_pct": 0.21053843099452593,
+   "pcs_power_pct": 100.0
+  },
+  {
+   "timestamp": "2026-01-01 0078",
+   "operating_rte_pct": 88.55733727605816,
+   "idle_loss_pct": 0.21006949994006474,
+   "pcs_power_pct": 100.0
+  },
+  {
+   "timestamp": "2026-01-01 0079",
+   "operating_rte_pct": 88.5560184340455,
+   "idle_loss_pct": 0.20960056888560358,
+   "pcs_power_pct": 100.0
+  },
+  {
+   "timestamp": "2026-01-01 0080",
+   "operating_rte_pct": 88.55469960171757,
+   "idle_loss_pct": 0.20913163783114241,
+   "pcs_power_pct": 100.0
+  },
+  {
+   "timestamp": "2026-01-01 0081",
+   "operating_rte_pct": 88.5533807790744,
+   "idle_loss_pct": 0.2086627067766812,
+   "pcs_power_pct": 100.0
+  },
+  {
+   "timestamp": "2026-01-01 0082",
+   "operating_rte_pct": 88.5532738479332,
+   "idle_loss_pct": 0.20594073400727214,
+   "pcs_power_pct": 100.0
+  },
+  {
+   "timestamp": "2026-01-01 0083",
+   "operating_rte_pct": 88.5532738479332,
+   "idle_loss_pct": 0.2030199634394854,
+   "pcs_power_pct": 100.0
+  },
+  {
+   "timestamp": "2026-01-01 0084",
+   "operating_rte_pct": 88.5532738479332,
+   "idle_loss_pct": 0.20009919287169858,
+   "pcs_power_pct": 100.0
+  },
+  {
+   "timestamp": "2026-01-01 0085",
+   "operating_rte_pct": 88.5532738479332,
+   "idle_loss_pct": 0.19717842230391178,
+   "pcs_power_pct": 100.0
+  },
+  {
+   "timestamp": "2026-01-01 0086",
+   "operating_rte_pct": 88.5532738479332,
+   "idle_loss_pct": 0.19425765173612497,
+   "pcs_power_pct": 100.0
+  },
+  {
+   "timestamp": "2026-01-01 0087",
+   "operating_rte_pct": 88.5532738479332,
+   "idle_loss_pct": 0.19133688116833822,
+   "pcs_power_pct": 100.0
+  },
+  {
+   "timestamp": "2026-01-01 0088",
+   "operating_rte_pct": 88.5532738479332,
+   "idle_loss_pct": 0.18841611060055144,
+   "pcs_power_pct": 100.0
+  },
+  {
+   "timestamp": "2026-01-01 0089",
+   "operating_rte_pct": 88.5532738479332,
+   "idle_loss_pct": 0.18549534003276463,
+   "pcs_power_pct": 100.0
+  },
+  {
+   "timestamp": "2026-01-01 0090",
+   "operating_rte_pct": 88.5532738479332,
+   "idle_loss_pct": 0.18257456946497783,
+   "pcs_power_pct": 100.0
+  },
+  {
+   "timestamp": "2026-01-01 0091",
+   "operating_rte_pct": 88.5532738479332,
+   "idle_loss_pct": 0.17965379889719105,
+   "pcs_power_pct": 100.0
+  },
+  {
+   "timestamp": "2026-01-01 0092",
+   "operating_rte_pct": 88.5532738479332,
+   "idle_loss_pct": 0.17673302832940424,
+   "pcs_power_pct": 100.0
+  },
+  {
+   "timestamp": "2026-01-01 0093",
+   "operating_rte_pct": 88.5532738479332,
+   "idle_loss_pct": 0.17381225776161746,
+   "pcs_power_pct": 100.0
+  },
+  {
+   "timestamp": "2026-01-01 0094",
+   "operating_rte_pct": 88.5532738479332,
+   "idle_loss_pct": 0.17089148719383065,
+   "pcs_power_pct": 100.0
+  },
+  {
+   "timestamp": "2026-01-01 0095",
+   "operating_rte_pct": 88.5532738479332,
+   "idle_loss_pct": 0.1679707166260439,
+   "pcs_power_pct": 100.0
+  },
+  {
+   "timestamp": "2026-01-01 0096",
+   "operating_rte_pct": 88.5532738479332,
+   "idle_loss_pct": 0.1650499460582571,
+   "pcs_power_pct": 100.0
+  },
+  {
+   "timestamp": "2026-01-01 0097",
+   "operating_rte_pct": 88.5532738479332,
+   "idle_loss_pct": 0.16212917549047032,
+   "pcs_power_pct": 100.0
+  },
+  {
+   "timestamp": "2026-01-01 0098",
+   "operating_rte_pct": 88.5532738479332,
+   "idle_loss_pct": 0.1592084049226835,
+   "pcs_power_pct": 100.0
+  },
+  {
+   "timestamp": "2026-01-01 0099",
+   "operating_rte_pct": 88.5532738479332,
+   "idle_loss_pct": 0.1562876343548967,
+   "pcs_power_pct": 100.0
+  },
+  {
+   "timestamp": "2026-01-01 0100",
+   "operating_rte_pct": 88.5532738479332,
+   "idle_loss_pct": 0.15336686378710992,
+   "pcs_power_pct": 100.0
+  },
+  {
+   "timestamp": "2026-01-01 0101",
+   "operating_rte_pct": 88.5532738479332,
+   "idle_loss_pct": 0.15044609321932312,
+   "pcs_power_pct": 100.0
+  },
+  {
+   "timestamp": "2026-01-01 0102",
+   "operating_rte_pct": 88.5532738479332,
+   "idle_loss_pct": 0.14752532265153634,
+   "pcs_power_pct": 100.0
+  },
+  {
+   "timestamp": "2026-01-01 0103",
+   "operating_rte_pct": 88.5532738479332,
+   "idle_loss_pct": 0.14460455208374953,
+   "pcs_power_pct": 100.0
+  },
+  {
+   "timestamp": "2026-01-01 0104",
+   "operating_rte_pct": 88.5532738479332,
+   "idle_loss_pct": 0.14168378151596275,
+   "pcs_power_pct": 100.0
+  },
+  {
+   "timestamp": "2026-01-01 0105",
+   "operating_rte_pct": 88.5532738479332,
+   "idle_loss_pct": 0.13876301094817595,
+   "pcs_power_pct": 100.0
+  },
+  {
+   "timestamp": "2026-01-01 0106",
+   "operating_rte_pct": 88.5532738479332,
+   "idle_loss_pct": 0.13584224038038917,
+   "pcs_power_pct": 100.0
+  },
+  {
+   "timestamp": "2026-01-01 0107",
+   "operating_rte_pct": 88.5532738479332,
+   "idle_loss_pct": 0.1329214698126024,
+   "pcs_power_pct": 100.0
+  },
+  {
+   "timestamp": "2026-01-01 0108",
+   "operating_rte_pct": 88.5532738479332,
+   "idle_loss_pct": 0.1300006992448156,
+   "pcs_power_pct": 100.0
+  },
+  {
+   "timestamp": "2026-01-01 0109",
+   "operating_rte_pct": 88.54002314445427,
+   "idle_loss_pct": 0.1293662844128341,
+   "pcs_power_pct": 100.0
+  },
+  {
+   "timestamp": "2026-01-01 0110",
+   "operating_rte_pct": 88.5251674578105,
+   "idle_loss_pct": 0.12900900360943512,
+   "pcs_power_pct": 100.0
+  },
+  {
+   "timestamp": "2026-01-01 0111",
+   "operating_rte_pct": 88.510313000323,
+   "idle_loss_pct": 0.12865172280603615,
+   "pcs_power_pct": 100.0
+  },
+  {
+   "timestamp": "2026-01-01 0112",
+   "operating_rte_pct": 88.49545977199601,
+   "idle_loss_pct": 0.12829444200263715,
+   "pcs_power_pct": 100.0
+  },
+  {
+   "timestamp": "2026-01-01 0113",
+   "operating_rte_pct": 88.48060777283388,
+   "idle_loss_pct": 0.12793716119923815,
+   "pcs_power_pct": 100.0
+  },
+  {
+   "timestamp": "2026-01-01 0114",
+   "operating_rte_pct": 88.46575700284086,
+   "idle_loss_pct": 0.12757988039583915,
+   "pcs_power_pct": 100.0
+  },
+  {
+   "timestamp": "2026-01-01 0115",
+   "operating_rte_pct": 88.4509074620213,
+   "idle_loss_pct": 0.12722259959244017,
+   "pcs_power_pct": 100.0
+  },
+  {
+   "timestamp": "2026-01-01 0116",
+   "operating_rte_pct": 88.43605915037944,
+   "idle_loss_pct": 0.12686531878904117,
+   "pcs_power_pct": 100.0
+  },
+  {
+   "timestamp": "2026-01-01 0117",
+   "operating_rte_pct": 88.42121206791957,
+   "idle_loss_pct": 0.12650803798564217,
+   "pcs_power_pct": 100.0
+  },
+  {
+   "timestamp": "2026-01-01 0118",
+   "operating_rte_pct": 88.40636621464607,
+   "idle_loss_pct": 0.12615075718224317,
+   "pcs_power_pct": 100.0
+  },
+  {
+   "timestamp": "2026-01-01 0119",
+   "operating_rte_pct": 88.39152159056317,
+   "idle_loss_pct": 0.1257934763788442,
+   "pcs_power_pct": 100.0
+  },
+  {
+   "timestamp": "2026-01-01 0120",
+   "operating_rte_pct": 88.37667819567517,
+   "idle_loss_pct": 0.1254361955754452,
+   "pcs_power_pct": 100.0
+  },
+  {
+   "timestamp": "2026-01-01 0121",
+   "operating_rte_pct": 88.36183602998642,
+   "idle_loss_pct": 0.1250789147720462,
+   "pcs_power_pct": 100.0
+  },
+  {
+   "timestamp": "2026-01-01 0122",
+   "operating_rte_pct": 88.3469950935011,
+   "idle_loss_pct": 0.1247216339686472,
+   "pcs_power_pct": 100.0
+  },
+  {
+   "timestamp": "2026-01-01 0123",
+   "operating_rte_pct": 88.33215538622366,
+   "idle_loss_pct": 0.12436435316524819,
+   "pcs_power_pct": 100.0
+  },
+  {
+   "timestamp": "2026-01-01 0124",
+   "operating_rte_pct": 88.31731690815833,
+   "idle_loss_pct": 0.1240070723618492,
+   "pcs_power_pct": 100.0
+  },
+  {
+   "timestamp": "2026-01-01 0125",
+   "operating_rte_pct": 88.3024796593094,
+   "idle_loss_pct": 0.12364979155845018,
+   "pcs_power_pct": 100.0
+  },
+  {
+   "timestamp": "2026-01-01 0126",
+   "operating_rte_pct": 88.28764363968106,
+   "idle_loss_pct": 0.12329251075505121,
+   "pcs_power_pct": 100.0
+  },
+  {
+   "timestamp": "2026-01-01 0127",
+   "operating_rte_pct": 88.2728088492778,
+   "idle_loss_pct": 0.12293522995165222,
+   "pcs_power_pct": 100.0
+  },
+  {
+   "timestamp": "2026-01-01 0128",
+   "operating_rte_pct": 88.25797528810382,
+   "idle_loss_pct": 0.12257794914825322,
+   "pcs_power_pct": 100.0
+  },
+  {
+   "timestamp": "2026-01-01 0129",
+   "operating_rte_pct": 88.24314295616344,
+   "idle_loss_pct": 0.12222066834485423,
+   "pcs_power_pct": 100.0
+  },
+  {
+   "timestamp": "2026-01-01 0130",
+   "operating_rte_pct": 88.22831185346091,
+   "idle_loss_pct": 0.12186338754145523,
+   "pcs_power_pct": 100.0
+  },
+  {
+   "timestamp": "2026-01-01 0131",
+   "operating_rte_pct": 88.21348198000058,
+   "idle_loss_pct": 0.12150610673805622,
+   "pcs_power_pct": 100.0
+  },
+  {
+   "timestamp": "2026-01-01 0132",
+   "operating_rte_pct": 88.19865333578672,
+   "idle_loss_pct": 0.12114882593465724,
+   "pcs_power_pct": 100.0
+  },
+  {
+   "timestamp": "2026-01-01 0133",
+   "operating_rte_pct": 88.18382592082362,
+   "idle_loss_pct": 0.12079154513125823,
+   "pcs_power_pct": 100.0
+  },
+  {
+   "timestamp": "2026-01-01 0134",
+   "operating_rte_pct": 88.16899973511563,
+   "idle_loss_pct": 0.12043426432785925,
+   "pcs_power_pct": 100.0
+  },
+  {
+   "timestamp": "2026-01-01 0135",
+   "operating_rte_pct": 88.15417477866696,
+   "idle_loss_pct": 0.12007698352446024,
+   "pcs_power_pct": 100.0
+  },
+  {
+   "timestamp": "2026-01-01 0136",
+   "operating_rte_pct": 88.12548955385488,
+   "idle_loss_pct": 0.12069365085707436,
+   "pcs_power_pct": 100.0
+  },
+  {
+   "timestamp": "2026-01-01 0137",
+   "operating_rte_pct": 88.11066820550843,
+   "idle_loss_pct": 0.12033637005367537,
+   "pcs_power_pct": 100.0
+  },
+  {
+   "timestamp": "2026-01-01 0138",
+   "operating_rte_pct": 88.09584808643824,
+   "idle_loss_pct": 0.11997908925027637,
+   "pcs_power_pct": 100.0
+  },
+  {
+   "timestamp": "2026-01-01 0139",
+   "operating_rte_pct": 88.08102919664864,
+   "idle_loss_pct": 0.11962180844687735,
+   "pcs_power_pct": 100.0
+  },
+  {
+   "timestamp": "2026-01-01 0140",
+   "operating_rte_pct": 88.0662115361439,
+   "idle_loss_pct": 0.11926452764347836,
+   "pcs_power_pct": 100.0
+  },
+  {
+   "timestamp": "2026-01-01 0141",
+   "operating_rte_pct": 88.05139510492833,
+   "idle_loss_pct": 0.11890724684007936,
+   "pcs_power_pct": 100.0
+  },
+  {
+   "timestamp": "2026-01-01 0142",
+   "operating_rte_pct": 88.03657990300624,
+   "idle_loss_pct": 0.11854996603668037,
+   "pcs_power_pct": 100.0
+  },
+  {
+   "timestamp": "2026-01-01 0143",
+   "operating_rte_pct": 88.02176593038195,
+   "idle_loss_pct": 0.11819268523328137,
+   "pcs_power_pct": 100.0
+  },
+  {
+   "timestamp": "2026-01-01 0144",
+   "operating_rte_pct": 88.0069531870597,
+   "idle_loss_pct": 0.11783540442988237,
+   "pcs_power_pct": 100.0
+  },
+  {
+   "timestamp": "2026-01-01 0145",
+   "operating_rte_pct": 87.9921416730438,
+   "idle_loss_pct": 0.11747812362648338,
+   "pcs_power_pct": 100.0
+  },
+  {
+   "timestamp": "2026-01-01 0146",
+   "operating_rte_pct": 87.97733138833856,
+   "idle_loss_pct": 0.1171208428230844,
+   "pcs_power_pct": 100.0
+  },
+  {
+   "timestamp": "2026-01-01 0147",
+   "operating_rte_pct": 87.96252233294831,
+   "idle_loss_pct": 0.1167635620196854,
+   "pcs_power_pct": 100.0
+  },
+  {
+   "timestamp": "2026-01-01 0148",
+   "operating_rte_pct": 87.94771450687726,
+   "idle_loss_pct": 0.1164062812162864,
+   "pcs_power_pct": 100.0
+  },
+  {
+   "timestamp": "2026-01-01 0149",
+   "operating_rte_pct": 87.9357677506109,
+   "idle_loss_pct": 0.11617453150597355,
+   "pcs_power_pct": 100.0
+  },
+  {
+   "timestamp": "2026-01-01 0150",
+   "operating_rte_pct": 87.92910126694274,
+   "idle_loss_pct": 0.11617453150597355,
+   "pcs_power_pct": 100.0
+  },
+  {
+   "timestamp": "2026-01-01 0151",
+   "operating_rte_pct": 87.9224350324984,
+   "idle_loss_pct": 0.11617453150597355,
+   "pcs_power_pct": 100.0
+  },
+  {
+   "timestamp": "2026-01-01 0152",
+   "operating_rte_pct": 87.91576904727829,
+   "idle_loss_pct": 0.11617453150597355,
+   "pcs_power_pct": 100.0
+  },
+  {
+   "timestamp": "2026-01-01 0153",
+   "operating_rte_pct": 87.90910331128285,
+   "idle_loss_pct": 0.11617453150597355,
+   "pcs_power_pct": 100.0
+  },
+  {
+   "timestamp": "2026-01-01 0154",
+   "operating_rte_pct": 87.90243782451245,
+   "idle_loss_pct": 0.11617453150597355,
+   "pcs_power_pct": 100.0
+  },
+  {
+   "timestamp": "2026-01-01 0155",
+   "operating_rte_pct": 87.89577258696745,
+   "idle_loss_pct": 0.11617453150597355,
+   "pcs_power_pct": 100.0
+  },
+  {
+   "timestamp": "2026-01-01 0156",
+   "operating_rte_pct": 87.88910759864834,
+   "idle_loss_pct": 0.11617453150597355,
+   "pcs_power_pct": 100.0
+  },
+  {
+   "timestamp": "2026-01-01 0157",
+   "operating_rte_pct": 87.88244285955533,
+   "idle_loss_pct": 0.11617453150597355,
+   "pcs_power_pct": 100.0
+  },
+  {
+   "timestamp": "2026-01-01 0158",
+   "operating_rte_pct": 87.875778369689,
+   "idle_loss_pct": 0.11617453150597355,
+   "pcs_power_pct": 100.0
+  },
+  {
+   "timestamp": "2026-01-01 0159",
+   "operating_rte_pct": 87.86911412904963,
+   "idle_loss_pct": 0.11617453150597355,
+   "pcs_power_pct": 100.0
+  },
+  {
+   "timestamp": "2026-01-01 0160",
+   "operating_rte_pct": 87.8624501376377,
+   "idle_loss_pct": 0.11617453150597355,
+   "pcs_power_pct": 100.0
+  },
+  {
+   "timestamp": "2026-01-01 0161",
+   "operating_rte_pct": 87.85578639545352,
+   "idle_loss_pct": 0.11617453150597355,
+   "pcs_power_pct": 100.0
+  },
+  {
+   "timestamp": "2026-01-01 0162",
+   "operating_rte_pct": 87.84912290249754,
+   "idle_loss_pct": 0.11617453150597355,
+   "pcs_power_pct": 100.0
+  },
+  {
+   "timestamp": "2026-01-01 0163",
+   "operating_rte_pct": 87.84245965877014,
+   "idle_loss_pct": 0.11617453150597355,
+   "pcs_power_pct": 100.0
+  },
+  {
+   "timestamp": "2026-01-01 0164",
+   "operating_rte_pct": 87.83579666427165,
+   "idle_loss_pct": 0.11617453150597355,
+   "pcs_power_pct": 100.0
+  },
+  {
+   "timestamp": "2026-01-01 0165",
+   "operating_rte_pct": 87.82913391900249,
+   "idle_loss_pct": 0.11617453150597355,
+   "pcs_power_pct": 100.0
+  },
+  {
+   "timestamp": "2026-01-01 0166",
+   "operating_rte_pct": 87.82247142296313,
+   "idle_loss_pct": 0.11617453150597355,
+   "pcs_power_pct": 100.0
+  },
+  {
+   "timestamp": "2026-01-01 0167",
+   "operating_rte_pct": 87.81580917615389,
+   "idle_loss_pct": 0.11617453150597355,
+   "pcs_power_pct": 100.0
+  },
+  {
+   "timestamp": "2026-01-01 0168",
+   "operating_rte_pct": 87.80914717857522,
+   "idle_loss_pct": 0.11617453150597355,
+   "pcs_power_pct": 100.0
+  },
+  {
+   "timestamp": "2026-01-01 0169",
+   "operating_rte_pct": 87.80248543022742,
+   "idle_loss_pct": 0.11617453150597355,
+   "pcs_power_pct": 100.0
+  },
+  {
+   "timestamp": "2026-01-01 0170",
+   "operating_rte_pct": 87.79582393111092,
+   "idle_loss_pct": 0.11617453150597355,
+   "pcs_power_pct": 100.0
+  },
+  {
+   "timestamp": "2026-01-01 0171",
+   "operating_rte_pct": 87.78916268122616,
+   "idle_loss_pct": 0.11617453150597355,
+   "pcs_power_pct": 100.0
+  },
+  {
+   "timestamp": "2026-01-01 0172",
+   "operating_rte_pct": 87.78250168057352,
+   "idle_loss_pct": 0.11617453150597355,
+   "pcs_power_pct": 100.0
+  },
+  {
+   "timestamp": "2026-01-01 0173",
+   "operating_rte_pct": 87.7758409291533,
+   "idle_loss_pct": 0.11617453150597355,
+   "pcs_power_pct": 100.0
+  },
+  {
+   "timestamp": "2026-01-01 0174",
+   "operating_rte_pct": 87.769180426966,
+   "idle_loss_pct": 0.11617453150597355,
+   "pcs_power_pct": 100.0
+  },
+  {
+   "timestamp": "2026-01-01 0175",
+   "operating_rte_pct": 87.76252017401198,
+   "idle_loss_pct": 0.11617453150597355,
+   "pcs_power_pct": 100.0
+  },
+  {
+   "timestamp": "2026-01-01 0176",
+   "operating_rte_pct": 87.75209570701618,
+   "idle_loss_pct": 0.11689585247932233,
+   "pcs_power_pct": 100.0
+  },
+  {
+   "timestamp": "2026-01-01 0177",
+   "operating_rte_pct": 87.73382993398936,
+   "idle_loss_pct": 0.11911992548048107,
+   "pcs_power_pct": 100.0
+  },
+  {
+   "timestamp": "2026-01-01 0178",
+   "operating_rte_pct": 87.71556603602622,
+   "idle_loss_pct": 0.1213439984816398,
+   "pcs_power_pct": 100.0
+  },
+  {
+   "timestamp": "2026-01-01 0179",
+   "operating_rte_pct": 87.69730401313491,
+   "idle_loss_pct": 0.12356807148279857,
+   "pcs_power_pct": 100.0
+  },
+  {
+   "timestamp": "2026-01-01 0180",
+   "operating_rte_pct": 87.67904386532346,
+   "idle_loss_pct": 0.12579214448395734,
+   "pcs_power_pct": 100.0
+  },
+  {
+   "timestamp": "2026-01-01 0181",
+   "operating_rte_pct": 87.66078559260005,
+   "idle_loss_pct": 0.12801621748511607,
+   "pcs_power_pct": 100.0
+  },
+  {
+   "timestamp": "2026-01-01 0182",
+   "operating_rte_pct": 87.6425291949727,
+   "idle_loss_pct": 0.1302402904862748,
+   "pcs_power_pct": 100.0
+  },
+  {
+   "timestamp": "2026-01-01 0183",
+   "operating_rte_pct": 87.62427467244959,
+   "idle_loss_pct": 0.13246436348743357,
+   "pcs_power_pct": 100.0
+  },
+  {
+   "timestamp": "2026-01-01 0184",
+   "operating_rte_pct": 87.60602202503874,
+   "idle_loss_pct": 0.1346884364885923,
+   "pcs_power_pct": 100.0
+  },
+  {
+   "timestamp": "2026-01-01 0185",
+   "operating_rte_pct": 87.58777125274828,
+   "idle_loss_pct": 0.13691250948975106,
+   "pcs_power_pct": 100.0
+  },
+  {
+   "timestamp": "2026-01-01 0186",
+   "operating_rte_pct": 87.56952235558624,
+   "idle_loss_pct": 0.1391365824909098,
+   "pcs_power_pct": 100.0
+  },
+  {
+   "timestamp": "2026-01-01 0187",
+   "operating_rte_pct": 87.55127533356085,
+   "idle_loss_pct": 0.14136065549206858,
+   "pcs_power_pct": 100.0
+  },
+  {
+   "timestamp": "2026-01-01 0188",
+   "operating_rte_pct": 87.53303018668012,
+   "idle_loss_pct": 0.1435847284932273,
+   "pcs_power_pct": 100.0
+  },
+  {
+   "timestamp": "2026-01-01 0189",
+   "operating_rte_pct": 87.51478691495214,
+   "idle_loss_pct": 0.14580880149438605,
+   "pcs_power_pct": 100.0
+  },
+  {
+   "timestamp": "2026-01-01 0190",
+   "operating_rte_pct": 87.49654551838498,
+   "idle_loss_pct": 0.1480328744955448,
+   "pcs_power_pct": 100.0
+  },
+  {
+   "timestamp": "2026-01-01 0191",
+   "operating_rte_pct": 87.47830599698682,
+   "idle_loss_pct": 0.15025694749670357,
+   "pcs_power_pct": 100.0
+  },
+  {
+   "timestamp": "2026-01-01 0192",
+   "operating_rte_pct": 87.46006835076568,
+   "idle_loss_pct": 0.15248102049786227,
+   "pcs_power_pct": 100.0
+  },
+  {
+   "timestamp": "2026-01-01 0193",
+   "operating_rte_pct": 87.44183257972969,
+   "idle_loss_pct": 0.15470509349902103,
+   "pcs_power_pct": 100.0
+  },
+  {
+   "timestamp": "2026-01-01 0194",
+   "operating_rte_pct": 87.42359868388696,
+   "idle_loss_pct": 0.15692916650017982,
+   "pcs_power_pct": 100.0
+  },
+  {
+   "timestamp": "2026-01-01 0195",
+   "operating_rte_pct": 87.40536666324556,
+   "idle_loss_pct": 0.15915323950133853,
+   "pcs_power_pct": 100.0
+  },
+  {
+   "timestamp": "2026-01-01 0196",
+   "operating_rte_pct": 87.3871365178136,
+   "idle_loss_pct": 0.1613773125024973,
+   "pcs_power_pct": 100.0
+  },
+  {
+   "timestamp": "2026-01-01 0197",
+   "operating_rte_pct": 87.36890824759914,
+   "idle_loss_pct": 0.16360138550365605,
+   "pcs_power_pct": 100.0
+  },
+  {
+   "timestamp": "2026-01-01 0198",
+   "operating_rte_pct": 87.35068185261032,
+   "idle_loss_pct": 0.1658254585048148,
+   "pcs_power_pct": 100.0
+  },
+  {
+   "timestamp": "2026-01-01 0199",
+   "operating_rte_pct": 87.33245733285526,
+   "idle_loss_pct": 0.16804953150597357,
+   "pcs_power_pct": 100.0
+  },
+  {
+   "timestamp": "2026-01-01 0200",
+   "operating_rte_pct": 87.31423468834197,
+   "idle_loss_pct": 0.17027360450713228,
+   "pcs_power_pct": 100.0
+  },
+  {
+   "timestamp": "2026-01-01 0201",
+   "operating_rte_pct": 87.29601391907862,
+   "idle_loss_pct": 0.172497677508291,
+   "pcs_power_pct": 100.0
+  },
+  {
+   "timestamp": "2026-01-01 0202",
+   "operating_rte_pct": 87.27779502507322,
+   "idle_loss_pct": 0.17472175050944982,
+   "pcs_power_pct": 100.0
+  },
+  {
+   "timestamp": "2026-01-01 0203",
+   "operating_rte_pct": 87.26194734355627,
+   "idle_loss_pct": 0.17753738462460542,
+   "pcs_power_pct": 100.0
+  },
+  {
+   "timestamp": "2026-01-01 0204",
+   "operating_rte_pct": 87.2517009574092,
+   "idle_loss_pct": 0.17847524673352777,
+   "pcs_power_pct": 100.0
+  },
+  {
+   "timestamp": "2026-01-01 0205",
+   "operating_rte_pct": 87.24145516461175,
+   "idle_loss_pct": 0.17941310884245015,
+   "pcs_power_pct": 100.0
+  },
+  {
+   "timestamp": "2026-01-01 0206",
+   "operating_rte_pct": 87.2312099651653,
+   "idle_loss_pct": 0.1803509709513725,
+   "pcs_power_pct": 100.0
+  },
+  {
+   "timestamp": "2026-01-01 0207",
+   "operating_rte_pct": 87.22096535907126,
+   "idle_loss_pct": 0.1812888330602949,
+   "pcs_power_pct": 100.0
+  },
+  {
+   "timestamp": "2026-01-01 0208",
+   "operating_rte_pct": 87.21072134633123,
+   "idle_loss_pct": 0.18222669516921725,
+   "pcs_power_pct": 100.0
+  },
+  {
+   "timestamp": "2026-01-01 0209",
+   "operating_rte_pct": 87.2004779269465,
+   "idle_loss_pct": 0.1831645572781396,
+   "pcs_power_pct": 100.0
+  },
+  {
+   "timestamp": "2026-01-01 0210",
+   "operating_rte_pct": 87.1902351009185,
+   "idle_loss_pct": 0.18410241938706198,
+   "pcs_power_pct": 100.0
+  },
+  {
+   "timestamp": "2026-01-01 0211",
+   "operating_rte_pct": 87.17999286824882,
+   "idle_loss_pct": 0.18504028149598434,
+   "pcs_power_pct": 100.0
+  },
+  {
+   "timestamp": "2026-01-01 0212",
+   "operating_rte_pct": 87.16975122893878,
+   "idle_loss_pct": 0.18597814360490672,
+   "pcs_power_pct": 100.0
+  },
+  {
+   "timestamp": "2026-01-01 0213",
+   "operating_rte_pct": 87.15951018298988,
+   "idle_loss_pct": 0.18691600571382905,
+   "pcs_power_pct": 100.0
+  },
+  {
+   "timestamp": "2026-01-01 0214",
+   "operating_rte_pct": 87.14926973040346,
+   "idle_loss_pct": 0.18785386782275143,
+   "pcs_power_pct": 100.0
+  },
+  {
+   "timestamp": "2026-01-01 0215",
+   "operating_rte_pct": 87.1390298711811,
+   "idle_loss_pct": 0.18879172993167376,
+   "pcs_power_pct": 100.0
+  },
+  {
+   "timestamp": "2026-01-01 0216",
+   "operating_rte_pct": 87.12879060532416,
+   "idle_loss_pct": 0.18972959204059614,
+   "pcs_power_pct": 100.0
+  },
+  {
+   "timestamp": "2026-01-01 0217",
+   "operating_rte_pct": 87.11855193283411,
+   "idle_loss_pct": 0.19066745414951852,
+   "pcs_power_pct": 100.0
+  },
+  {
+   "timestamp": "2026-01-01 0218",
+   "operating_rte_pct": 87.10831385371235,
+   "idle_loss_pct": 0.19160531625844085,
+   "pcs_power_pct": 100.0
+  },
+  {
+   "timestamp": "2026-01-01 0219",
+   "operating_rte_pct": 87.09807636796036,
+   "idle_loss_pct": 0.19254317836736326,
+   "pcs_power_pct": 100.0
+  },
+  {
+   "timestamp": "2026-01-01 0220",
+   "operating_rte_pct": 87.08783947557961,
+   "idle_loss_pct": 0.1934810404762856,
+   "pcs_power_pct": 100.0
+  },
+  {
+   "timestamp": "2026-01-01 0221",
+   "operating_rte_pct": 87.07760317657144,
+   "idle_loss_pct": 0.19441890258520797,
+   "pcs_power_pct": 100.0
+  },
+  {
+   "timestamp": "2026-01-01 0222",
+   "operating_rte_pct": 87.06736747093738,
+   "idle_loss_pct": 0.19535676469413032,
+   "pcs_power_pct": 100.0
+  },
+  {
+   "timestamp": "2026-01-01 0223",
+   "operating_rte_pct": 87.05713235867886,
+   "idle_loss_pct": 0.19629462680305268,
+   "pcs_power_pct": 100.0
+  },
+  {
+   "timestamp": "2026-01-01 0224",
+   "operating_rte_pct": 87.04689783979728,
+   "idle_loss_pct": 0.19723248891197506,
+   "pcs_power_pct": 100.0
+  },
+  {
+   "timestamp": "2026-01-01 0225",
+   "operating_rte_pct": 87.0366639142941,
+   "idle_loss_pct": 0.19817035102089742,
+   "pcs_power_pct": 100.0
+  },
+  {
+   "timestamp": "2026-01-01 0226",
+   "operating_rte_pct": 87.02643058217076,
+   "idle_loss_pct": 0.19910821312981974,
+   "pcs_power_pct": 100.0
+  },
+  {
+   "timestamp": "2026-01-01 0227",
+   "operating_rte_pct": 87.01619784342876,
+   "idle_loss_pct": 0.20004607523874213,
+   "pcs_power_pct": 100.0
+  },
+  {
+   "timestamp": "2026-01-01 0228",
+   "operating_rte_pct": 87.00596569806945,
+   "idle_loss_pct": 0.20098393734766454,
+   "pcs_power_pct": 100.0
+  },
+  {
+   "timestamp": "2026-01-01 0229",
+   "operating_rte_pct": 86.9957341460943,
+   "idle_loss_pct": 0.20192179945658686,
+   "pcs_power_pct": 100.0
+  },
+  {
+   "timestamp": "2026-01-01 0230",
+   "operating_rte_pct": 86.98899633281927,
+   "idle_loss_pct": 0.2044891517161466,
+   "pcs_power_pct": 99.19999999999999
+  },
+  {
+   "timestamp": "2026-01-01 0231",
+   "operating_rte_pct": 86.98957644749447,
+   "idle_loss_pct": 0.21145612738242697,
+   "pcs_power_pct": 96.24000000000001
+  },
+  {
+   "timestamp": "2026-01-01 0232",
+   "operating_rte_pct": 86.98481191174083,
+   "idle_loss_pct": 0.21842310304870743,
+   "pcs_power_pct": 93.27999999999997
+  },
+  {
+   "timestamp": "2026-01-01 0233",
+   "operating_rte_pct": 86.97492474283455,
+   "idle_loss_pct": 0.22539007871498778,
+   "pcs_power_pct": 90.32
+  },
+  {
+   "timestamp": "2026-01-01 0234",
+   "operating_rte_pct": 86.95939827620506,
+   "idle_loss_pct": 0.2323570543812682,
+   "pcs_power_pct": 87.36000000000001
+  },
+  {
+   "timestamp": "2026-01-01 0235",
+   "operating_rte_pct": 86.93764443387104,
+   "idle_loss_pct": 0.2393240300475487,
+   "pcs_power_pct": 84.39999999999998
+  },
+  {
+   "timestamp": "2026-01-01 0236",
+   "operating_rte_pct": 86.90899095882769,
+   "idle_loss_pct": 0.24629100571382906,
+   "pcs_power_pct": 81.44
+  },
+  {
+   "timestamp": "2026-01-01 0237",
+   "operating_rte_pct": 86.87266580965648,
+   "idle_loss_pct": 0.2532579813801094,
+   "pcs_power_pct": 78.48000000000002
+  },
+  {
+   "timestamp": "2026-01-01 0238",
+   "operating_rte_pct": 86.82777794997088,
+   "idle_loss_pct": 0.2602249570463899,
+   "pcs_power_pct": 75.51999999999998
+  },
+  {
+   "timestamp": "2026-01-01 0239",
+   "operating_rte_pct": 86.77329352210779,
+   "idle_loss_pct": 0.26719193271267033,
+   "pcs_power_pct": 72.56
+  },
+  {
+   "timestamp": "2026-01-01 0240",
+   "operating_rte_pct": 86.70800605721763,
+   "idle_loss_pct": 0.2741589083789507,
+   "pcs_power_pct": 69.60000000000002
+  },
+  {
+   "timestamp": "2026-01-01 0241",
+   "operating_rte_pct": 86.63049890450837,
+   "idle_loss_pct": 0.28112588404523114,
+   "pcs_power_pct": 66.63999999999999
+  },
+  {
+   "timestamp": "2026-01-01 0242",
+   "operating_rte_pct": 86.53909740073594,
+   "idle_loss_pct": 0.28809285971151155,
+   "pcs_power_pct": 63.68000000000001
+  },
+  {
+   "timestamp": "2026-01-01 0243",
+   "operating_rte_pct": 86.43180735541263,
+   "idle_loss_pct": 0.2950598353777919,
+   "pcs_power_pct": 60.72000000000003
+  },
+  {
+   "timestamp": "2026-01-01 0244",
+   "operating_rte_pct": 86.4030465875211,
+   "idle_loss_pct": 0.2967545051344548,
+   "pcs_power_pct": 60.0
+  },
+  {
+   "timestamp": "2026-01-01 0245",
+   "operating_rte_pct": 86.4030465875211,
+   "idle_loss_pct": 0.2967545051344548,
+   "pcs_power_pct": 60.0
+  },
+  {
+   "timestamp": "2026-01-01 0246",
+   "operating_rte_pct": 86.4030465875211,
+   "idle_loss_pct": 0.2967545051344548,
+   "pcs_power_pct": 60.0
+  },
+  {
+   "timestamp": "2026-01-01 0247",
+   "operating_rte_pct": 86.4030465875211,
+   "idle_loss_pct": 0.2967545051344548,
+   "pcs_power_pct": 60.0
+  },
+  {
+   "timestamp": "2026-01-01 0248",
+   "operating_rte_pct": 86.4030465875211,
+   "idle_loss_pct": 0.2967545051344548,
+   "pcs_power_pct": 60.0
+  },
+  {
+   "timestamp": "2026-01-01 0249",
+   "operating_rte_pct": 86.4030465875211,
+   "idle_loss_pct": 0.2967545051344548,
+   "pcs_power_pct": 60.0
+  },
+  {
+   "timestamp": "2026-01-01 0250",
+   "operating_rte_pct": 86.4030465875211,
+   "idle_loss_pct": 0.2967545051344548,
+   "pcs_power_pct": 60.0
+  },
+  {
+   "timestamp": "2026-01-01 0251",
+   "operating_rte_pct": 86.4030465875211,
+   "idle_loss_pct": 0.2967545051344548,
+   "pcs_power_pct": 60.0
+  },
+  {
+   "timestamp": "2026-01-01 0252",
+   "operating_rte_pct": 86.4030465875211,
+   "idle_loss_pct": 0.2967545051344548,
+   "pcs_power_pct": 60.0
+  },
+  {
+   "timestamp": "2026-01-01 0253",
+   "operating_rte_pct": 86.4030465875211,
+   "idle_loss_pct": 0.2967545051344548,
+   "pcs_power_pct": 60.0
+  },
+  {
+   "timestamp": "2026-01-01 0254",
+   "operating_rte_pct": 86.4030465875211,
+   "idle_loss_pct": 0.2967545051344548,
+   "pcs_power_pct": 60.0
+  },
+  {
+   "timestamp": "2026-01-01 0255",
+   "operating_rte_pct": 86.4030465875211,
+   "idle_loss_pct": 0.2967545051344548,
+   "pcs_power_pct": 60.0
+  },
+  {
+   "timestamp": "2026-01-01 0256",
+   "operating_rte_pct": 86.4030465875211,
+   "idle_loss_pct": 0.2967545051344548,
+   "pcs_power_pct": 60.0
+  },
+  {
+   "timestamp": "2026-01-01 0257",
+   "operating_rte_pct": 86.4030465875211,
+   "idle_loss_pct": 0.2967545051344548,
+   "pcs_power_pct": 60.0
+  },
+  {
+   "timestamp": "2026-01-01 0258",
+   "operating_rte_pct": 86.4030465875211,
+   "idle_loss_pct": 0.2967545051344548,
+   "pcs_power_pct": 60.0
+  },
+  {
+   "timestamp": "2026-01-01 0259",
+   "operating_rte_pct": 86.4030465875211,
+   "idle_loss_pct": 0.2967545051344548,
+   "pcs_power_pct": 60.0
+  },
+  {
+   "timestamp": "2026-01-01 0260",
+   "operating_rte_pct": 86.4030465875211,
+   "idle_loss_pct": 0.2967545051344548,
+   "pcs_power_pct": 60.0
+  },
+  {
+   "timestamp": "2026-01-01 0261",
+   "operating_rte_pct": 86.4030465875211,
+   "idle_loss_pct": 0.2967545051344548,
+   "pcs_power_pct": 60.0
+  },
+  {
+   "timestamp": "2026-01-01 0262",
+   "operating_rte_pct": 86.4030465875211,
+   "idle_loss_pct": 0.2967545051344548,
+   "pcs_power_pct": 60.0
+  },
+  {
+   "timestamp": "2026-01-01 0263",
+   "operating_rte_pct": 86.4030465875211,
+   "idle_loss_pct": 0.2967545051344548,
+   "pcs_power_pct": 60.0
+  },
+  {
+   "timestamp": "2026-01-01 0264",
+   "operating_rte_pct": 86.4030465875211,
+   "idle_loss_pct": 0.2967545051344548,
+   "pcs_power_pct": 60.0
+  },
+  {
+   "timestamp": "2026-01-01 0265",
+   "operating_rte_pct": 86.4030465875211,
+   "idle_loss_pct": 0.2967545051344548,
+   "pcs_power_pct": 60.0
+  },
+  {
+   "timestamp": "2026-01-01 0266",
+   "operating_rte_pct": 86.4030465875211,
+   "idle_loss_pct": 0.2967545051344548,
+   "pcs_power_pct": 60.0
+  },
+  {
+   "timestamp": "2026-01-01 0267",
+   "operating_rte_pct": 86.4030465875211,
+   "idle_loss_pct": 0.2967545051344548,
+   "pcs_power_pct": 60.0
+  },
+  {
+   "timestamp": "2026-01-01 0268",
+   "operating_rte_pct": 86.4030465875211,
+   "idle_loss_pct": 0.2967545051344548,
+   "pcs_power_pct": 60.0
+  },
+  {
+   "timestamp": "2026-01-01 0269",
+   "operating_rte_pct": 86.4030465875211,
+   "idle_loss_pct": 0.2967545051344548,
+   "pcs_power_pct": 60.0
+  },
+  {
+   "timestamp": "2026-01-01 0270",
+   "operating_rte_pct": 86.4030465875211,
+   "idle_loss_pct": 0.2967545051344548,
+   "pcs_power_pct": 60.0
+  },
+  {
+   "timestamp": "2026-01-01 0271",
+   "operating_rte_pct": 86.83567986234432,
+   "idle_loss_pct": 0.2590951772086147,
+   "pcs_power_pct": 76.0
+  },
+  {
+   "timestamp": "2026-01-01 0272",
+   "operating_rte_pct": 87.7580201441899,
+   "idle_loss_pct": 0.11617453150597355,
+   "pcs_power_pct": 100.0
+  },
+  {
+   "timestamp": "2026-01-01 0273",
+   "operating_rte_pct": 86.4030465875211,
+   "idle_loss_pct": 0.2967545051344548,
+   "pcs_power_pct": 60.0
+  },
+  {
+   "timestamp": "day 1, \"noon\"",
+   "operating_rte_pct": 87.51133569610403,
+   "idle_loss_pct": 0.14622957206217285,
+   "pcs_power_pct": 100.0
+  }
+ ],
+ "cli_csv": "timestamp,operating RTE %,idle loss %,PCS power % of rated\r\n2026-01-01 0000,88.6246,0.234,100\r\n2026-01-01 0001,88.6246,0.234,100\r\n2026-01-01 0002,88.6246,0.234,100\r\n2026-01-01 0003,88.6246,0.234,100\r\n2026-01-01 0004,88.6246,0.234,100\r\n2026-01-01 0005,88.6246,0.234,100\r\n2026-01-01 0006,88.6246,0.234,100\r\n2026-01-01 0007,88.6246,0.234,100\r\n2026-01-01 0008,88.6246,0.234,100\r\n2026-01-01 0009,88.6246,0.234,100\r\n2026-01-01 0010,88.6246,0.234,100\r\n2026-01-01 0011,88.6246,0.234,100\r\n2026-01-01 0012,88.6246,0.234,100\r\n2026-01-01 0013,88.6246,0.234,100\r\n2026-01-01 0014,88.6246,0.234,100\r\n2026-01-01 0015,88.6246,0.234,100\r\n2026-01-01 0016,88.6246,0.234,100\r\n2026-01-01 0017,88.6246,0.234,100\r\n2026-01-01 0018,88.6246,0.234,100\r\n2026-01-01 0019,88.6246,0.234,100\r\n2026-01-01 0020,88.6246,0.234,100\r\n2026-01-01 0021,88.6246,0.234,100\r\n2026-01-01 0022,88.6246,0.234,100\r\n2026-01-01 0023,88.6246,0.234,100\r\n2026-01-01 0024,88.6246,0.234,100\r\n2026-01-01 0025,88.6246,0.234,100\r\n2026-01-01 0026,88.6246,0.234,100\r\n2026-01-01 0027,88.6246,0.234,100\r\n2026-01-01 0028,88.6233,0.2335,100\r\n2026-01-01 0029,88.622,0.233,100\r\n2026-01-01 0030,88.6207,0.2326,100\r\n2026-01-01 0031,88.6193,0.2321,100\r\n2026-01-01 0032,88.618,0.2316,100\r\n2026-01-01 0033,88.6167,0.2312,100\r\n2026-01-01 0034,88.6154,0.2307,100\r\n2026-01-01 0035,88.6141,0.2302,100\r\n2026-01-01 0036,88.6127,0.2298,100\r\n2026-01-01 0037,88.6114,0.2293,100\r\n2026-01-01 0038,88.6101,0.2288,100\r\n2026-01-01 0039,88.6088,0.2284,100\r\n2026-01-01 0040,88.6075,0.2279,100\r\n2026-01-01 0041,88.6061,0.2274,100\r\n2026-01-01 0042,88.6048,0.227,100\r\n2026-01-01 0043,88.6035,0.2265,100\r\n2026-01-01 0044,88.6022,0.226,100\r\n2026-01-01 0045,88.6009,0.2255,100\r\n2026-01-01 0046,88.5995,0.2251,100\r\n2026-01-01 0047,88.5982,0.2246,100\r\n2026-01-01 0048,88.5969,0.2241,100\r\n2026-01-01 0049,88.5956,0.2237,100\r\n2026-01-01 0050,88.5943,0.2232,100\r\n2026-01-01 0051,88.5929,0.2227,100\r\n2026-01-01 0052,88.5916,0.2223,100\r\n2026-01-01 0053,88.5903,0.2218,100\r\n2026-01-01 0054,88.589,0.2213,100\r\n2026-01-01 0055,88.5877,0.2209,100\r\n2026-01-01 0056,88.5864,0.2204,100\r\n2026-01-01 0057,88.585,0.2199,100\r\n2026-01-01 0058,88.5837,0.2194,100\r\n2026-01-01 0059,88.5824,0.219,100\r\n2026-01-01 0060,88.5811,0.2185,100\r\n2026-01-01 0061,88.5798,0.218,100\r\n2026-01-01 0062,88.5784,0.2176,100\r\n2026-01-01 0063,88.5771,0.2171,100\r\n2026-01-01 0064,88.5758,0.2166,100\r\n2026-01-01 0065,88.5745,0.2162,100\r\n2026-01-01 0066,88.5732,0.2157,100\r\n2026-01-01 0067,88.5718,0.2152,100\r\n2026-01-01 0068,88.5705,0.2148,100\r\n2026-01-01 0069,88.5692,0.2143,100\r\n2026-01-01 0070,88.5679,0.2138,100\r\n2026-01-01 0071,88.5666,0.2134,100\r\n2026-01-01 0072,88.5653,0.2129,100\r\n2026-01-01 0073,88.5639,0.2124,100\r\n2026-01-01 0074,88.5626,0.2119,100\r\n2026-01-01 0075,88.5613,0.2115,100\r\n2026-01-01 0076,88.56,0.211,100\r\n2026-01-01 0077,88.5587,0.2105,100\r\n2026-01-01 0078,88.5573,0.2101,100\r\n2026-01-01 0079,88.556,0.2096,100\r\n2026-01-01 0080,88.5547,0.2091,100\r\n2026-01-01 0081,88.5534,0.2087,100\r\n2026-01-01 0082,88.5533,0.2059,100\r\n2026-01-01 0083,88.5533,0.203,100\r\n2026-01-01 0084,88.5533,0.2001,100\r\n2026-01-01 0085,88.5533,0.1972,100\r\n2026-01-01 0086,88.5533,0.1943,100\r\n2026-01-01 0087,88.5533,0.1913,100\r\n2026-01-01 0088,88.5533,0.1884,100\r\n2026-01-01 0089,88.5533,0.1855,100\r\n2026-01-01 0090,88.5533,0.1826,100\r\n2026-01-01 0091,88.5533,0.1797,100\r\n2026-01-01 0092,88.5533,0.1767,100\r\n2026-01-01 0093,88.5533,0.1738,100\r\n2026-01-01 0094,88.5533,0.1709,100\r\n2026-01-01 0095,88.5533,0.168,100\r\n2026-01-01 0096,88.5533,0.165,100\r\n2026-01-01 0097,88.5533,0.1621,100\r\n2026-01-01 0098,88.5533,0.1592,100\r\n2026-01-01 0099,88.5533,0.1563,100\r\n2026-01-01 0100,88.5533,0.1534,100\r\n2026-01-01 0101,88.5533,0.1504,100\r\n2026-01-01 0102,88.5533,0.1475,100\r\n2026-01-01 0103,88.5533,0.1446,100\r\n2026-01-01 0104,88.5533,0.1417,100\r\n2026-01-01 0105,88.5533,0.1388,100\r\n2026-01-01 0106,88.5533,0.1358,100\r\n2026-01-01 0107,88.5533,0.1329,100\r\n2026-01-01 0108,88.5533,0.13,100\r\n2026-01-01 0109,88.54,0.1294,100\r\n2026-01-01 0110,88.5252,0.129,100\r\n2026-01-01 0111,88.5103,0.1287,100\r\n2026-01-01 0112,88.4955,0.1283,100\r\n2026-01-01 0113,88.4806,0.1279,100\r\n2026-01-01 0114,88.4658,0.1276,100\r\n2026-01-01 0115,88.4509,0.1272,100\r\n2026-01-01 0116,88.4361,0.1269,100\r\n2026-01-01 0117,88.4212,0.1265,100\r\n2026-01-01 0118,88.4064,0.1262,100\r\n2026-01-01 0119,88.3915,0.1258,100\r\n2026-01-01 0120,88.3767,0.1254,100\r\n2026-01-01 0121,88.3618,0.1251,100\r\n2026-01-01 0122,88.347,0.1247,100\r\n2026-01-01 0123,88.3322,0.1244,100\r\n2026-01-01 0124,88.3173,0.124,100\r\n2026-01-01 0125,88.3025,0.1236,100\r\n2026-01-01 0126,88.2876,0.1233,100\r\n2026-01-01 0127,88.2728,0.1229,100\r\n2026-01-01 0128,88.258,0.1226,100\r\n2026-01-01 0129,88.2431,0.1222,100\r\n2026-01-01 0130,88.2283,0.1219,100\r\n2026-01-01 0131,88.2135,0.1215,100\r\n2026-01-01 0132,88.1987,0.1211,100\r\n2026-01-01 0133,88.1838,0.1208,100\r\n2026-01-01 0134,88.169,0.1204,100\r\n2026-01-01 0135,88.1542,0.1201,100\r\n2026-01-01 0136,88.1255,0.1207,100\r\n2026-01-01 0137,88.1107,0.1203,100\r\n2026-01-01 0138,88.0958,0.12,100\r\n2026-01-01 0139,88.081,0.1196,100\r\n2026-01-01 0140,88.0662,0.1193,100\r\n2026-01-01 0141,88.0514,0.1189,100\r\n2026-01-01 0142,88.0366,0.1185,100\r\n2026-01-01 0143,88.0218,0.1182,100\r\n2026-01-01 0144,88.007,0.1178,100\r\n2026-01-01 0145,87.9921,0.1175,100\r\n2026-01-01 0146,87.9773,0.1171,100\r\n2026-01-01 0147,87.9625,0.1168,100\r\n2026-01-01 0148,87.9477,0.1164,100\r\n2026-01-01 0149,87.9358,0.1162,100\r\n2026-01-01 0150,87.9291,0.1162,100\r\n2026-01-01 0151,87.9224,0.1162,100\r\n2026-01-01 0152,87.9158,0.1162,100\r\n2026-01-01 0153,87.9091,0.1162,100\r\n2026-01-01 0154,87.9024,0.1162,100\r\n2026-01-01 0155,87.8958,0.1162,100\r\n2026-01-01 0156,87.8891,0.1162,100\r\n2026-01-01 0157,87.8824,0.1162,100\r\n2026-01-01 0158,87.8758,0.1162,100\r\n2026-01-01 0159,87.8691,0.1162,100\r\n2026-01-01 0160,87.8625,0.1162,100\r\n2026-01-01 0161,87.8558,0.1162,100\r\n2026-01-01 0162,87.8491,0.1162,100\r\n2026-01-01 0163,87.8425,0.1162,100\r\n2026-01-01 0164,87.8358,0.1162,100\r\n2026-01-01 0165,87.8291,0.1162,100\r\n2026-01-01 0166,87.8225,0.1162,100\r\n2026-01-01 0167,87.8158,0.1162,100\r\n2026-01-01 0168,87.8091,0.1162,100\r\n2026-01-01 0169,87.8025,0.1162,100\r\n2026-01-01 0170,87.7958,0.1162,100\r\n2026-01-01 0171,87.7892,0.1162,100\r\n2026-01-01 0172,87.7825,0.1162,100\r\n2026-01-01 0173,87.7758,0.1162,100\r\n2026-01-01 0174,87.7692,0.1162,100\r\n2026-01-01 0175,87.7625,0.1162,100\r\n2026-01-01 0176,87.7521,0.1169,100\r\n2026-01-01 0177,87.7338,0.1191,100\r\n2026-01-01 0178,87.7156,0.1213,100\r\n2026-01-01 0179,87.6973,0.1236,100\r\n2026-01-01 0180,87.679,0.1258,100\r\n2026-01-01 0181,87.6608,0.128,100\r\n2026-01-01 0182,87.6425,0.1302,100\r\n2026-01-01 0183,87.6243,0.1325,100\r\n2026-01-01 0184,87.606,0.1347,100\r\n2026-01-01 0185,87.5878,0.1369,100\r\n2026-01-01 0186,87.5695,0.1391,100\r\n2026-01-01 0187,87.5513,0.1414,100\r\n2026-01-01 0188,87.533,0.1436,100\r\n2026-01-01 0189,87.5148,0.1458,100\r\n2026-01-01 0190,87.4965,0.148,100\r\n2026-01-01 0191,87.4783,0.1503,100\r\n2026-01-01 0192,87.4601,0.1525,100\r\n2026-01-01 0193,87.4418,0.1547,100\r\n2026-01-01 0194,87.4236,0.1569,100\r\n2026-01-01 0195,87.4054,0.1592,100\r\n2026-01-01 0196,87.3871,0.1614,100\r\n2026-01-01 0197,87.3689,0.1636,100\r\n2026-01-01 0198,87.3507,0.1658,100\r\n2026-01-01 0199,87.3325,0.168,100\r\n2026-01-01 0200,87.3142,0.1703,100\r\n2026-01-01 0201,87.296,0.1725,100\r\n2026-01-01 0202,87.2778,0.1747,100\r\n2026-01-01 0203,87.2619,0.1775,100\r\n2026-01-01 0204,87.2517,0.1785,100\r\n2026-01-01 0205,87.2415,0.1794,100\r\n2026-01-01 0206,87.2312,0.1804,100\r\n2026-01-01 0207,87.221,0.1813,100\r\n2026-01-01 0208,87.2107,0.1822,100\r\n2026-01-01 0209,87.2005,0.1832,100\r\n2026-01-01 0210,87.1902,0.1841,100\r\n2026-01-01 0211,87.18,0.185,100\r\n2026-01-01 0212,87.1698,0.186,100\r\n2026-01-01 0213,87.1595,0.1869,100\r\n2026-01-01 0214,87.1493,0.1879,100\r\n2026-01-01 0215,87.139,0.1888,100\r\n2026-01-01 0216,87.1288,0.1897,100\r\n2026-01-01 0217,87.1186,0.1907,100\r\n2026-01-01 0218,87.1083,0.1916,100\r\n2026-01-01 0219,87.0981,0.1925,100\r\n2026-01-01 0220,87.0878,0.1935,100\r\n2026-01-01 0221,87.0776,0.1944,100\r\n2026-01-01 0222,87.0674,0.1954,100\r\n2026-01-01 0223,87.0571,0.1963,100\r\n2026-01-01 0224,87.0469,0.1972,100\r\n2026-01-01 0225,87.0367,0.1982,100\r\n2026-01-01 0226,87.0264,0.1991,100\r\n2026-01-01 0227,87.0162,0.2,100\r\n2026-01-01 0228,87.006,0.201,100\r\n2026-01-01 0229,86.9957,0.2019,100\r\n2026-01-01 0230,86.989,0.2045,99.2\r\n2026-01-01 0231,86.9896,0.2115,96.24\r\n2026-01-01 0232,86.9848,0.2184,93.28\r\n2026-01-01 0233,86.9749,0.2254,90.32\r\n2026-01-01 0234,86.9594,0.2324,87.36\r\n2026-01-01 0235,86.9376,0.2393,84.4\r\n2026-01-01 0236,86.909,0.2463,81.44\r\n2026-01-01 0237,86.8727,0.2533,78.48\r\n2026-01-01 0238,86.8278,0.2602,75.52\r\n2026-01-01 0239,86.7733,0.2672,72.56\r\n2026-01-01 0240,86.708,0.2742,69.6\r\n2026-01-01 0241,86.6305,0.2811,66.64\r\n2026-01-01 0242,86.5391,0.2881,63.68\r\n2026-01-01 0243,86.4318,0.2951,60.72\r\n2026-01-01 0244,86.403,0.2968,60\r\n2026-01-01 0245,86.403,0.2968,60\r\n2026-01-01 0246,86.403,0.2968,60\r\n2026-01-01 0247,86.403,0.2968,60\r\n2026-01-01 0248,86.403,0.2968,60\r\n2026-01-01 0249,86.403,0.2968,60\r\n2026-01-01 0250,86.403,0.2968,60\r\n2026-01-01 0251,86.403,0.2968,60\r\n2026-01-01 0252,86.403,0.2968,60\r\n2026-01-01 0253,86.403,0.2968,60\r\n2026-01-01 0254,86.403,0.2968,60\r\n2026-01-01 0255,86.403,0.2968,60\r\n2026-01-01 0256,86.403,0.2968,60\r\n2026-01-01 0257,86.403,0.2968,60\r\n2026-01-01 0258,86.403,0.2968,60\r\n2026-01-01 0259,86.403,0.2968,60\r\n2026-01-01 0260,86.403,0.2968,60\r\n2026-01-01 0261,86.403,0.2968,60\r\n2026-01-01 0262,86.403,0.2968,60\r\n2026-01-01 0263,86.403,0.2968,60\r\n2026-01-01 0264,86.403,0.2968,60\r\n2026-01-01 0265,86.403,0.2968,60\r\n2026-01-01 0266,86.403,0.2968,60\r\n2026-01-01 0267,86.403,0.2968,60\r\n2026-01-01 0268,86.403,0.2968,60\r\n2026-01-01 0269,86.403,0.2968,60\r\n2026-01-01 0270,86.403,0.2968,60\r\n2026-01-01 0271,86.8357,0.2591,76\r\n2026-01-01 0272,87.758,0.1162,100\r\n2026-01-01 0273,86.403,0.2968,60\r\n\"day 1, \"\"noon\"\"\",87.5113,0.1462,100\r\n"
+}

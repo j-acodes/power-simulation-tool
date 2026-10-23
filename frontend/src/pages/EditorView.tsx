@@ -7,6 +7,7 @@ import { SeedWizard } from '../components/SeedWizard'
 import { EXAMPLE_DIAGRAM } from '../example'
 import { useAutoSolve } from '../hooks/useAutoSolve'
 import { useFillInverters } from '../hooks/useFillInverters'
+import { EfficiencyPanel } from '../panels/EfficiencyPanel'
 import { IssuesBanner } from '../panels/IssuesBanner'
 import { Inspector } from '../panels/Inspector'
 import { Palette } from '../panels/Palette'
@@ -31,6 +32,7 @@ export function EditorView({ title, headerLeft, headerRight }: EditorViewProps) 
   useAutoSolve()
   useFillInverters()
   const [showSettings, setShowSettings] = useState(false)
+  const [showEfficiency, setShowEfficiency] = useState(false)
   const [showSeedWizard, setShowSeedWizard] = useState(false)
   const loadDiagram = useStore((s) => s.loadDiagram)
   const diagram = useStore((s) => s.diagram)
@@ -48,6 +50,8 @@ export function EditorView({ title, headerLeft, headerRight }: EditorViewProps) 
   // (ticket 02); the button only needs to know whether either fleet kind is
   // seedable — a "Load example plant" (PV-only) exception below.
   const canSeed = canDrawPv || permitsFleetKind(technology, 'bess')
+  // The efficiency run needs a BESS fleet; a PV-only design never has one.
+  const canRunEfficiency = permitsFleetKind(technology, 'bess')
   return (
     <div className="app">
       <header className="app-header">
@@ -72,9 +76,27 @@ export function EditorView({ title, headerLeft, headerRight }: EditorViewProps) 
           <button type="button" onClick={() => loadDiagram(EMPTY_DIAGRAM)}>
             Clear
           </button>
-          <button type="button" onClick={() => setShowSettings((v) => !v)}>
+          <button
+            type="button"
+            onClick={() => {
+              setShowSettings((v) => !v)
+              setShowEfficiency(false)
+            }}
+          >
             Settings
           </button>
+          {canRunEfficiency && (
+            <button
+              type="button"
+              aria-pressed={showEfficiency}
+              onClick={() => {
+                setShowEfficiency((v) => !v)
+                setShowSettings(false)
+              }}
+            >
+              Efficiency
+            </button>
+          )}
           {headerRight}
         </div>
       </header>
@@ -87,6 +109,13 @@ export function EditorView({ title, headerLeft, headerRight }: EditorViewProps) 
           {showSettings && (
             <div className="settings-overlay">
               <SettingsPanel />
+            </div>
+          )}
+          {/* Kept mounted while hidden, so closing the panel to look at the
+              canvas does not throw away the uploaded CSV and the last run. */}
+          {canRunEfficiency && (
+            <div className="efficiency-overlay" hidden={!showEfficiency}>
+              <EfficiencyPanel />
             </div>
           )}
           <div className="results-overlay">
