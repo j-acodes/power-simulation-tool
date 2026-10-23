@@ -167,6 +167,39 @@ class SolveResponse(BaseModel):
     results: dict | None = None
 
 
+class AmbientRow(BaseModel):
+    timestamp: str
+    ambient_c: float
+
+
+class EfficiencyRequest(BaseModel):
+    """``POST /api/efficiency``: an efficiency run of the design on the canvas
+    (see powertool.efficiency.run_efficiency with a DesignConfiguration). The
+    diagram is the same payload as /api/solve; ``cell_rte_pct`` null keeps the
+    BESS solution's catalogue cell round-trip efficiency."""
+
+    diagram: dict
+    rows: list[AmbientRow]
+    cycles_per_day: float | None = None
+    cell_rte_pct: float | None = None
+
+
+class EfficiencyRowOut(BaseModel):
+    """One timestamp's figures, unrounded (the CLI rounds only when writing
+    its CSV). ``idle_loss_pct`` is % of nominal energy per hour;
+    ``pcs_power_pct`` is the PCS power available at that ambient."""
+
+    timestamp: str
+    operating_rte_pct: float
+    idle_loss_pct: float
+    pcs_power_pct: float
+
+
+class EfficiencyResponse(BaseModel):
+    rows: list[EfficiencyRowOut]
+    warnings: list[str]
+
+
 class TransformerInfo(BaseModel):
     key: str
     display_name: str

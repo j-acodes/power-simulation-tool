@@ -20,6 +20,7 @@ from sqlalchemy import delete, func, select, update
 from sqlalchemy.orm import Session
 
 from powertool import ComponentDatabase, size_generation
+from powertool.efficiency import DesignConfiguration, EfficiencyRunError, run_efficiency
 
 from .models import Base, Design, Project, check_schema, make_engine, make_session_factory
 from .schemas import (
@@ -31,6 +32,9 @@ from .schemas import (
     DesignFull,
     DesignSummary,
     DesignUpdate,
+    EfficiencyRequest,
+    EfficiencyResponse,
+    EfficiencyRowOut,
     LossItem,
     ProjectCreate,
     ProjectDetail,
@@ -392,6 +396,29 @@ def post_seed(req: SeedRequest) -> dict:
         return seed_diagram(req.model_dump(), db)
     except (KeyError, ValueError) as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@app.post("/api/efficiency", response_model=EfficiencyResponse)
+def post_efficiency(req: EfficiencyRequest) -> EfficiencyResponse:
+    """Efficiency run of a drawn design: operating round-trip efficiency at the
+    point of connection, idle standby loss and PCS power per ambient row.
+
+    The diagram is the /api/solve payload; it supplies the BESS solution,
+    stations, containers, POC capacity and loss chain. A run the engine refuses
+    (no BESS fleet, invalid design, ...) is a 400 carrying its message.
+    """
+    config = DesignConfiguration(diagram=req.diagram, cycles_per_day=req.cycles_per_day,
+                                 cell_rte_pct=req.cell_rte_pct)
+    try:
+        result = run_efficiency([(r.timestamp, r.ambient_c) for r in req.rows], config, db)
+    except EfficiencyRunError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return EfficiencyResponse(
+        rows=[EfficiencyRowOut(timestamp=r.timestamp, operating_rte_pct=r.operating_rte_pct,
+                               idle_loss_pct=r.idle_loss_pct, pcs_power_pct=r.pcs_power_pct)
+              for r in result.rows],
+        warnings=result.warnings,
+    )
 
 
 @app.get("/api/projects", response_model=list[ProjectSummary])
