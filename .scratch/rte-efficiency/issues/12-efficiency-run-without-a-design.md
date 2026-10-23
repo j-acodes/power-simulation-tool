@@ -28,12 +28,12 @@ Scope (see [spec](../spec.md), "Implementation Decisions"):
 
 **Blocked by:** 11 (resolved)
 
-**Status:** ready-for-agent
+**Status:** done
 
-- [ ] The spec's worked example at 25 °C reproduces: operating RTE 88.6 % (within 0.01 point
+- [x] The spec's worked example at 25 °C reproduces: operating RTE 88.6 % (within 0.01 point
       of the hand calculation in the spec's Further Notes), discharge capped at 100,000 kW.
-- [ ] With the loss chain and auxiliary consumption zeroed, RTE equals cell RTE × η² at every
+- [x] With the loss chain and auxiliary consumption zeroed, RTE equals cell RTE × η² at every
       ambient.
-- [ ] Each invalid configuration above raises a clear error; a missing MVS table warns.
-- [ ] The CLI reads and writes the CSVs and prints warnings separately.
-- [ ] Catalogue entries carry provenance; the README test commands pass.
+- [x] Each invalid configuration above raises a clear error; a missing MVS table warns.
+- [x] The CLI reads and writes the CSVs and prints warnings separately.
+- [x] Catalogue entries carry provenance; the README test commands pass.
