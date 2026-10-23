@@ -9,8 +9,8 @@ vi.mock('../api', () => ({ runEfficiency: (...args: unknown[]) => runEfficiency(
 
 const RESPONSE: EfficiencyResponse = {
   rows: [
-    { timestamp: 't0', operating_rte_pct: 88.62461, idle_loss_pct: 0.234, pcs_power_pct: 100 },
-    { timestamp: 't1', operating_rte_pct: 86.10002, idle_loss_pct: 0.31, pcs_power_pct: 76.00000000000001 },
+    { timestamp: 't0', operating_rte_pct: 88.62461, idle_loss_kwh_per_h: 416.8964, pcs_power_pct: 100 },
+    { timestamp: 't1', operating_rte_pct: 86.10002, idle_loss_kwh_per_h: 1048.256, pcs_power_pct: 76.00000000000001 },
   ],
   warnings: ['1 timestamps had an ambient outside the published range -30 to 50 °C'],
 }
@@ -55,7 +55,7 @@ describe('EfficiencyPanel (ticket 17)', () => {
     expect(summary.getByText('Minimum operating RTE').nextSibling?.textContent).toBe('86.10 %')
     expect(summary.getByText('Average operating RTE').nextSibling?.textContent).toBe('87.36 %')
     expect(summary.getByText('Maximum operating RTE').nextSibling?.textContent).toBe('88.62 %')
-    expect(summary.getByText('Average idle standby loss').nextSibling?.textContent).toBe('0.272 % per hour')
+    expect(summary.getByText('Average idle standby loss').nextSibling?.textContent).toBe('733 kWh per idle hour')
     expect(summary.getByText('Timestamps with PCS derating').nextSibling?.textContent).toBe('1 of 2')
     expect(screen.getByText(RESPONSE.warnings[0])).toBeTruthy()
     expect(screen.getByRole('img', { name: /Operating RTE, idle standby loss and PCS power/ })).toBeTruthy()
@@ -100,9 +100,9 @@ describe('EfficiencyPanel (ticket 17)', () => {
 
     await waitFor(() => expect(blob).toBeDefined())
     expect(await blob!.text()).toBe(
-      'timestamp,operating RTE %,idle loss %,PCS power % of rated\r\n' +
-        't0,88.6246,0.234,100\r\n' +
-        't1,86.1,0.31,76\r\n',
+      'timestamp,operating RTE %,idle loss kWh/h,PCS power % of rated\r\n' +
+        't0,88.6246,416.896,100\r\n' +
+        't1,86.1,1048.26,76\r\n',
     )
   })
 })

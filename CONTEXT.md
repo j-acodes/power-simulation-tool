@@ -207,7 +207,7 @@ capacity. The cycle closes: the charge leg puts back what the
 discharge leg took out divided by the cell round-trip efficiency. Its result is the **operating** round-trip efficiency at the point of
 connection, a percentage, reported with the PCS power available, as a percentage of rated. Alongside it, each timestamp carries an **idle**
 standby loss: standby auxiliary consumption plus the no-load losses of every station and HV
-transformer, imported at the point of connection, as a percentage of nominal energy per hour. Each interval of a battery's dispatch is charging, discharging or
+transformer, imported at the point of connection, in kWh per idle hour. Each interval of a battery's dispatch is charging, discharging or
 idle, so the downstream model, not the efficiency run, decides which of the two figures applies.
 _Avoid_: hourly RTE (an interval has no round trip of its own), cycle efficiency
 

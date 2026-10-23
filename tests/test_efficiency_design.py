@@ -69,7 +69,7 @@ def test_a_seeded_bess_design_runs(db, bess_design):
     (row,) = result.rows
     # Below the container-only 92.08 % (losses and auxiliaries), well above 80 %.
     assert 80.0 < row.operating_rte_pct < 92.08
-    assert row.idle_loss_pct > 0
+    assert row.idle_loss_kwh_per_h > 0
     assert row.pcs_power_pct == 100.0
 
 
@@ -140,7 +140,7 @@ def test_cli_runs_from_a_design_diagram_file(tmp_path, bess_design, capsys):
     assert code == 0
     with target.open(newline="") as fh:
         rows = list(csv.reader(fh))
-    assert rows[0] == ["timestamp", "operating RTE %", "idle loss %", "PCS power % of rated"]
+    assert rows[0] == ["timestamp", "operating RTE %", "idle loss kWh/h", "PCS power % of rated"]
     assert rows[1][0] == "t0" and rows[1][3] == "100"
 
 
@@ -157,15 +157,15 @@ def test_design_idle_figure_uses_station_and_hv_transformer_no_load(db, bess_des
     design = run_efficiency([("t", 25.0)], DesignConfiguration(bess_design, cycles_per_day=1), db)
     # The same fleet typed in with no no-load loss: the difference is the
     # design's no-load draw, 15 MVS7400-LS x 7.4 kW + the auto-sized 125 MVA
-    # HV transformer's 0.06 % = 75 kW, i.e. 186 kW over 58 x 6904 kWh.
+    # HV transformer's 0.06 % = 75 kW: 186 kWh per idle hour.
     typed = TypedConfiguration(
         solution="sungrow-st6900ux-4h", station_transformer="SUNGROW_MVS7400_LS",
         stations=15, containers=58, poc_capacity_kw=90_000.0,
         load_loss_pct=0.0, no_load_loss_pct=0.0, cycles_per_day=1)
     bare = run_efficiency([("t", 25.0)], typed, db)
 
-    difference = design.rows[0].idle_loss_pct - bare.rows[0].idle_loss_pct
-    assert difference == pytest.approx(186.0 / (58 * 6904) * 100, abs=1e-6)
+    difference = design.rows[0].idle_loss_kwh_per_h - bare.rows[0].idle_loss_kwh_per_h
+    assert difference == pytest.approx(186.0, abs=1e-6)
 
 
 HYBRID_PARAMS = {

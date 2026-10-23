@@ -68,13 +68,13 @@ class DesignConfiguration:
 
 @dataclass(frozen=True)
 class EfficiencyRow:
-    """One output row. ``idle_loss_pct`` is % of nominal energy per hour,
-    imported at the POC; ``pcs_power_pct`` is the PCS power available at the
+    """One output row. ``idle_loss_kwh_per_h`` is the energy imported at the
+    POC per hour the fleet sits idle (numerically its idle draw in kW); ``pcs_power_pct`` is the PCS power available at the
     row's ambient (100 unless derated), a power cap, never a loss."""
 
     timestamp: str
     operating_rte_pct: float
-    idle_loss_pct: float
+    idle_loss_kwh_per_h: float
     pcs_power_pct: float
 
 
@@ -575,12 +575,11 @@ class _AmbientClamp:
 
 
 def _idle_loss(fleet: _Fleet, ambient_c: float) -> float:
-    """Idle draw imported at the POC per hour, as a fraction of the fleet's
-    nominal energy: standby auxiliaries plus no-load losses, with no load
-    losses and no dependence on PCS derating (spec, "The idle figure")."""
-    idle_kw = (fleet.containers * fleet.aux_table.standby_kw_at(ambient_c)
-               + fleet.station_standby_kw_at(ambient_c) + fleet.chain.no_load_kw)
-    return idle_kw / (fleet.containers * fleet.solution.e_nominal_kwh)
+    """Idle energy imported at the POC per idle hour, in kWh: standby
+    auxiliaries plus no-load losses, with no load losses and no dependence on
+    PCS derating (spec, "The idle figure")."""
+    return (fleet.containers * fleet.aux_table.standby_kw_at(ambient_c)
+            + fleet.station_standby_kw_at(ambient_c) + fleet.chain.no_load_kw)
 
 
 def run_efficiency(
@@ -604,7 +603,7 @@ def run_efficiency(
         result.rows.append(EfficiencyRow(
             timestamp=timestamp,
             operating_rte_pct=_operating_rte(fleet, ambient_c) * 100.0,
-            idle_loss_pct=_idle_loss(fleet, ambient_c) * 100.0,
+            idle_loss_kwh_per_h=_idle_loss(fleet, ambient_c),
             pcs_power_pct=fleet.derating_at(ambient_c) * 100.0,
         ))
     clamp_warning = clamp.warning()

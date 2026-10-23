@@ -35,7 +35,7 @@ def test_a_seeded_bess_design_returns_one_row_per_timestamp():
     assert resp.status_code == 200
     body = resp.json()
     assert [r["timestamp"] for r in body["rows"]] == ["t0", "t1"]
-    assert set(body["rows"][0]) == {"timestamp", "operating_rte_pct", "idle_loss_pct",
+    assert set(body["rows"][0]) == {"timestamp", "operating_rte_pct", "idle_loss_kwh_per_h",
                                     "pcs_power_pct"}
     assert body["rows"][0]["pcs_power_pct"] == 100.0
     assert body["rows"][1]["pcs_power_pct"] == 76.0

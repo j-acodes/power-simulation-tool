@@ -62,18 +62,18 @@ describe('summarise', () => {
   const row = (rte: number, idle: number, pcs: number): EfficiencyRow => ({
     timestamp: 't',
     operating_rte_pct: rte,
-    idle_loss_pct: idle,
+    idle_loss_kwh_per_h: idle,
     pcs_power_pct: pcs,
   })
 
   it('gives min, average and max operating RTE, average idle loss and the derated count', () => {
-    const summary = summarise([row(88, 0.2, 100), row(86, 0.3, 76), row(90, 0.1, 100)])
+    const summary = summarise([row(88, 400, 100), row(86, 1000, 76), row(90, 100, 100)])
     expect(summary).toEqual({
       count: 3,
       minRtePct: 86,
       avgRtePct: 88,
       maxRtePct: 90,
-      avgIdleLossPct: expect.closeTo(0.2, 12),
+      avgIdleLossKwhPerH: expect.closeTo(500, 12),
       deratedCount: 1,
     })
   })

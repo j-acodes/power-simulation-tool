@@ -50,3 +50,11 @@ The idle draw at a timestamp's ambient is the sum of:
   `p0`), or the typed-in no-load percentage without a design.
 
 Out-of-range ambient clamps with a warning, as for the operating figure.
+
+## Comments
+
+- 2026-10-23, owner decision while testing the web panel: the idle figure is reported in
+  **kWh imported per idle hour** (numerically the idle draw in kW) instead of a percentage of
+  nominal energy per hour. It replaces the % column (the output stays four columns:
+  `idle loss kWh/h`). Everything else in this answer stands; item 6's denominator is no longer
+  applied. Worked example: 417 kWh/h at 25 °C, 1,048 kWh/h at 48 °C.

@@ -143,7 +143,7 @@ export function EfficiencyPanel() {
               </tr>
               <tr>
                 <th scope="row">Average idle standby loss</th>
-                <td>{pct(summary.avgIdleLossPct, 3)} per hour</td>
+                <td>{summary.avgIdleLossKwhPerH.toFixed(0)} kWh per idle hour</td>
               </tr>
               <tr>
                 <th scope="row">Timestamps with PCS derating</th>

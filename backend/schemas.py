@@ -186,12 +186,12 @@ class EfficiencyRequest(BaseModel):
 
 class EfficiencyRowOut(BaseModel):
     """One timestamp's figures, unrounded (the CLI rounds only when writing
-    its CSV). ``idle_loss_pct`` is % of nominal energy per hour;
+    its CSV). ``idle_loss_kwh_per_h`` is kWh imported per idle hour;
     ``pcs_power_pct`` is the PCS power available at that ambient."""
 
     timestamp: str
     operating_rte_pct: float
-    idle_loss_pct: float
+    idle_loss_kwh_per_h: float
     pcs_power_pct: float
 
 

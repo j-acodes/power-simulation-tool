@@ -8,7 +8,7 @@ import type { EfficiencyRow } from '../types'
 // (the title names it); one crosshair and one readout span all three.
 
 interface Measure {
-  key: 'operating_rte_pct' | 'idle_loss_pct' | 'pcs_power_pct'
+  key: 'operating_rte_pct' | 'idle_loss_kwh_per_h' | 'pcs_power_pct'
   title: string
   unit: string
   digits: number
@@ -18,7 +18,7 @@ interface Measure {
 
 const MEASURES: Measure[] = [
   { key: 'operating_rte_pct', title: 'Operating RTE at the POC (%)', unit: '%', digits: 2, domain: null },
-  { key: 'idle_loss_pct', title: 'Idle standby loss (% per hour)', unit: '% per hour', digits: 3, domain: null },
+  { key: 'idle_loss_kwh_per_h', title: 'Idle standby loss (kWh per idle hour)', unit: 'kWh/h', digits: 0, domain: null },
   { key: 'pcs_power_pct', title: 'PCS power (% of rated)', unit: '%', digits: 0, domain: [0, 100] },
 ]
 

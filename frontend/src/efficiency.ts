@@ -84,7 +84,7 @@ export function parseAmbientCsv(text: string): ParsedAmbient {
 
 // --- writing the CLI's output CSV ---------------------------------------------
 
-export const CLI_HEADER = ['timestamp', 'operating RTE %', 'idle loss %', 'PCS power % of rated']
+export const CLI_HEADER = ['timestamp', 'operating RTE %', 'idle loss kWh/h', 'PCS power % of rated']
 
 /** Python's `round(value, 4)`: nearest, and an exact binary tie to even. */
 function roundHalfEven4(value: number): number {
@@ -126,7 +126,7 @@ export function toCliCsv(rows: EfficiencyRow[]): string {
     lines.push([
       csvField(row.timestamp),
       formatCliNumber(row.operating_rte_pct),
-      formatCliNumber(row.idle_loss_pct),
+      formatCliNumber(row.idle_loss_kwh_per_h),
       formatCliNumber(row.pcs_power_pct),
     ].join(','))
   }
@@ -140,7 +140,7 @@ export interface EfficiencySummary {
   minRtePct: number
   avgRtePct: number
   maxRtePct: number
-  avgIdleLossPct: number
+  avgIdleLossKwhPerH: number
   /** Timestamps where PCS derating applied (PCS power below 100 % of rated). */
   deratedCount: number
 }
@@ -157,7 +157,7 @@ export function summarise(rows: EfficiencyRow[]): EfficiencySummary | null {
     min = Math.min(min, row.operating_rte_pct)
     max = Math.max(max, row.operating_rte_pct)
     rteSum += row.operating_rte_pct
-    idleSum += row.idle_loss_pct
+    idleSum += row.idle_loss_kwh_per_h
     if (row.pcs_power_pct < 100) derated++
   }
   return {
@@ -165,7 +165,7 @@ export function summarise(rows: EfficiencyRow[]): EfficiencySummary | null {
     minRtePct: min,
     avgRtePct: rteSum / rows.length,
     maxRtePct: max,
-    avgIdleLossPct: idleSum / rows.length,
+    avgIdleLossKwhPerH: idleSum / rows.length,
     deratedCount: derated,
   }
 }

@@ -415,7 +415,7 @@ def post_efficiency(req: EfficiencyRequest) -> EfficiencyResponse:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     return EfficiencyResponse(
         rows=[EfficiencyRowOut(timestamp=r.timestamp, operating_rte_pct=r.operating_rte_pct,
-                               idle_loss_pct=r.idle_loss_pct, pcs_power_pct=r.pcs_power_pct)
+                               idle_loss_kwh_per_h=r.idle_loss_kwh_per_h, pcs_power_pct=r.pcs_power_pct)
               for r in result.rows],
         warnings=result.warnings,
     )

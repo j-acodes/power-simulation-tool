@@ -136,10 +136,10 @@ def test_cli_reads_ambients_and_writes_the_four_column_csv(tmp_path, capsys):
     assert exit_code == 0
     with target.open(newline="") as fh:
         rows = list(csv.reader(fh))
-    assert rows[0] == ["timestamp", "operating RTE %", "idle loss %", "PCS power % of rated"]
+    assert rows[0] == ["timestamp", "operating RTE %", "idle loss kWh/h", "PCS power % of rated"]
     assert [r[0] for r in rows[1:]] == ["2026-07-01 00:00", "2026-07-01 01:00"]
     assert float(rows[1][1]) == pytest.approx(88.64, abs=0.01)
-    assert float(rows[1][2]) == pytest.approx(0.0944, abs=0.0001)
+    assert float(rows[1][2]) == pytest.approx(416.896, abs=0.001)
     assert rows[1][3] == "100"
     assert capsys.readouterr().err == ""
 
@@ -362,18 +362,19 @@ def test_cli_does_not_echo_cycles_per_day(tmp_path):
 
     with target.open(newline="") as fh:
         rows = list(csv.reader(fh))
-    assert rows[0] == ["timestamp", "operating RTE %", "idle loss %", "PCS power % of rated"]
+    assert rows[0] == ["timestamp", "operating RTE %", "idle loss kWh/h", "PCS power % of rated"]
     assert len(rows[1]) == 4
 @pytest.mark.parametrize("ambient, expected", [
-    # Hand calculation (spec, Further Notes): 417 kW over 441.9 MWh at 25 °C;
-    # at 48 °C the figure ignores the PCS derating to 76 %.
-    (25.0, 0.0944),
-    (48.0, 0.2372),
+    # Hand calculation (spec, Further Notes), kWh imported per idle hour:
+    # 64 x 4.10 + 16 x 2.76 + 110.336 no-load = 416.896 at 25 °C; at 48 °C
+    # 64 x 13.90 + 16 x 3.02 + 110.336 = 1048.256, ignoring the derating to 76 %.
+    (25.0, 416.896),
+    (48.0, 1048.256),
 ])
 def test_idle_loss_reproduces_the_worked_example(db, ambient, expected):
     result = run_efficiency([("t", ambient)], WORKED, db)
 
-    assert result.rows[0].idle_loss_pct == pytest.approx(expected, abs=0.0001)
+    assert result.rows[0].idle_loss_kwh_per_h == pytest.approx(expected, abs=0.001)
 
 
 def test_idle_loss_carries_no_load_losses(db):
@@ -381,7 +382,7 @@ def test_idle_loss_carries_no_load_losses(db):
 
     result = run_efficiency([("t", 25.0)], heavier_chain, db)
 
-    assert result.rows[0].idle_loss_pct == pytest.approx(0.0944, abs=0.0001)
+    assert result.rows[0].idle_loss_kwh_per_h == pytest.approx(416.896, abs=0.001)
 
 
 @pytest.mark.parametrize("outside, edge", [(-45.0, -30.0), (60.0, 50.0)])
@@ -389,7 +390,7 @@ def test_idle_loss_clamps_out_of_range_ambients_to_the_edge(db, outside, edge):
     result = run_efficiency([("out", outside), ("edge", edge)], WORKED, db)
 
     out_row, edge_row = result.rows
-    assert out_row.idle_loss_pct == edge_row.idle_loss_pct
+    assert out_row.idle_loss_kwh_per_h == edge_row.idle_loss_kwh_per_h
     assert out_row.operating_rte_pct == edge_row.operating_rte_pct
 
 
@@ -408,7 +409,7 @@ def test_a_narrower_station_table_narrows_the_published_range_and_warns(db):
     # 45 °C reads the station table's 40 °C edge for every figure; the
     # container table and derating curve, which do cover 45 °C, clamp with it.
     assert hot.operating_rte_pct == edge.operating_rte_pct
-    assert hot.idle_loss_pct == edge.idle_loss_pct
+    assert hot.idle_loss_kwh_per_h == edge.idle_loss_kwh_per_h
     (warning,) = result.warnings
     assert "2 timestamps" in warning
     assert "-20 to 40" in warning

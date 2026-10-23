@@ -27,7 +27,7 @@ from .database import ComponentDatabase
 from .efficiency import (DesignConfiguration, EfficiencyRunError, TypedConfiguration,
                          run_efficiency)
 
-OUTPUT_HEADER = ["timestamp", "operating RTE %", "idle loss %", "PCS power % of rated"]
+OUTPUT_HEADER = ["timestamp", "operating RTE %", "idle loss kWh/h", "PCS power % of rated"]
 
 
 # Typed-configuration flags (dest names) that a design supplies instead.
@@ -120,7 +120,7 @@ def main(argv: list[str] | None = None) -> int:
         writer.writerow(OUTPUT_HEADER)
         for row in result.rows:
             writer.writerow([row.timestamp, _fmt(row.operating_rte_pct),
-                             _fmt(row.idle_loss_pct), _fmt(row.pcs_power_pct)])
+                             _fmt(row.idle_loss_kwh_per_h), _fmt(row.pcs_power_pct)])
     for warning in result.warnings:
         print(f"warning: {warning}", file=sys.stderr)
     return 0

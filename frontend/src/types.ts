@@ -695,13 +695,13 @@ export interface EfficiencyRequest {
   cell_rte_pct: number | null
 }
 
-/** One timestamp's figures, unrounded. `idle_loss_pct` is % of nominal
- * energy per hour; `pcs_power_pct` is the PCS power available at that
+/** One timestamp's figures, unrounded. `idle_loss_kwh_per_h` is kWh
+ * imported at the POC per idle hour; `pcs_power_pct` is the PCS power available at that
  * ambient (100 unless derated). */
 export interface EfficiencyRow {
   timestamp: string
   operating_rte_pct: number
-  idle_loss_pct: number
+  idle_loss_kwh_per_h: number
   pcs_power_pct: number
 }
 

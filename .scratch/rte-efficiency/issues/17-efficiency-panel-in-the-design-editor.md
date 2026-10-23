@@ -5,7 +5,7 @@ a CSV of `timestamp, ambient °C`, sets cycles per day (and optionally overrides
 round-trip efficiency), and runs the efficiency run against the design currently on the
 canvas. The panel shows:
 
-- a time chart of operating RTE %, idle loss % per hour and PCS power % of rated;
+- a time chart of operating RTE %, idle loss in kWh per idle hour and PCS power % of rated;
 - a summary: minimum, average and maximum operating RTE, average idle loss, and the number of
   timestamps where PCS derating applied;
 - the run's warnings (clamped ambients, nearest cycles-per-day table, missing curves), and a
@@ -31,13 +31,13 @@ Scope:
 
 **Blocked by:** 16
 
-**Status:** ready-for-agent
+**Status:** done
 
-- [ ] Running the panel on a seeded 100 MW / 4 h BESS design with a 25 °C row gives the same
+- [x] Running the panel on a seeded 100 MW / 4 h BESS design with a 25 °C row gives the same
       operating RTE as the CLI's `--diagram` run of that design.
-- [ ] A 48 °C row shows PCS power 76 % and is counted as derated in the summary.
-- [ ] The downloaded CSV is byte-for-byte the CLI's output format (header and rounding).
-- [ ] A design with no BESS fleet shows the run's error message; warnings are listed.
-- [ ] Backend tests for the endpoint (isolated database) and Vitest tests for CSV parsing,
+- [x] A 48 °C row shows PCS power 76 % and is counted as derated in the summary.
+- [x] The downloaded CSV is byte-for-byte the CLI's output format (header and rounding).
+- [x] A design with no BESS fleet shows the run's error message; warnings are listed.
+- [x] Backend tests for the endpoint (isolated database) and Vitest tests for CSV parsing,
       summary and the panel; the README checks pass apart from the known pre-existing
       failures.

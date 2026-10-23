@@ -26,7 +26,7 @@ and writes, per timestamp:
 |---|---|
 | `timestamp` | echoed from the input |
 | `operating RTE %` | round-trip efficiency of one **efficiency run** at that ambient, measured at the point of connection (POC) |
-| `idle loss %` | energy imported at the POC per hour while idle, as a % of the fleet's nominal energy |
+| `idle loss kWh/h` | energy imported at the POC per hour the fleet sits idle, in kWh |
 | `PCS power % of rated` | the power available at that ambient (100 unless hot-ambient derating applies) |
 
 Each interval of a battery's dispatch is charging, discharging or idle; the downstream model,
@@ -38,8 +38,8 @@ cycle/day; derivation under Further Notes):
 
 | Ambient | Operating RTE at POC | Idle loss | PCS power |
 |---|---|---|---|
-| 25 °C | 88.6 % | 0.094 %/h | 100 % |
-| 48 °C | 87.6 % | 0.237 %/h | 76 % |
+| 25 °C | 88.6 % | 417 kWh/h | 100 % |
+| 48 °C | 87.6 % | 1,048 kWh/h | 76 % |
 
 For comparison, the container alone (cells and conversion, no auxiliaries or loss chain) is
 92.1 % at any ambient.
@@ -147,8 +147,10 @@ factor, η conversion efficiency, ρ cell RTE.
 
 ### The idle figure
 
-**Idle loss = (N × container standby kW + S × MVS standby kW + no-load losses of every station
-transformer and the HV transformer) ÷ (N × E) × 100, in % per hour.**
+**Idle loss = N × container standby kW + S × MVS standby kW + no-load losses of every station
+transformer and the HV transformer, in kWh per idle hour** (owner decision, 2026-10-23,
+replacing the earlier % of nominal energy per hour; see
+[ticket 10](issues/10-idle-figure.md)).
 
 - All transformers stay energised (hot standby); in a hybrid the HV transformer counts in full.
 - PCS standby draw is assumed to be inside Sungrow's standby auxiliary consumption.
@@ -208,4 +210,4 @@ real MVS7400-LS load and no-load losses, and the ST6680UX-2H's rated active powe
 | Charge: duration / energy imported | 4.81 h / 481.4 MWh | 5.63 h / 484.2 MWh |
 | **Operating RTE at POC** | **88.6 %** | **87.6 %** |
 | Idle draw (standby aux + no-load) | 417 kW | 1,048 kW |
-| **Idle loss** (÷ 441.9 MWh) | **0.094 %/h** | **0.237 %/h** |
+| **Idle loss** | **417 kWh/h** | **1,048 kWh/h** |
