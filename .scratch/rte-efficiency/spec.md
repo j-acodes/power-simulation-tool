@@ -131,7 +131,7 @@ factor, η conversion efficiency, ρ cell RTE.
    the run starts empty with no rest between legs.
 4. **Auxiliary consumption** over both legs: N × container operating kW + S × MVS operating
    kW, as published (no scaling by power). It is drawn at the MV busbar, so it carries HV
-   transformer and export-cable losses (export cable only for an MV interconnection), but not
+   transformer losses (when the design has one) and export-cable losses, but not
    station-transformer or collection-cable losses.
 5. **Loss chain, with a design:** the existing engine losses, reused, symmetric in direction:
    station transformers (load and no-load), collection cables, HV transformer (load and
