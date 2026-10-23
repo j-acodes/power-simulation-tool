@@ -9,8 +9,7 @@ returned separately from the rows.
 Spec: .scratch/rte-efficiency/spec.md. Curve lookup follows ADR-0009.
 
 This module has no web or UI dependency. Not yet implemented (later tickets):
-the idle figure (``idle_loss_pct`` is None), PCS derating (``pcs_power_pct`` is
-always 100), interpolation between cycles-per-day references, and a run from a
+PCS derating (``pcs_power_pct`` is always 100), interpolation between cycles-per-day references, and a run from a
 solved design.
 """
 
@@ -48,8 +47,8 @@ class TypedConfiguration:
 
 @dataclass(frozen=True)
 class EfficiencyRow:
-    """One output row. ``idle_loss_pct`` is None until the idle figure is
-    implemented; ``pcs_power_pct`` is 100 until derating is."""
+    """One output row. ``idle_loss_pct`` is % of nominal energy per hour,
+    imported at the POC; ``pcs_power_pct`` is 100 until derating is."""
 
     timestamp: str
     operating_rte_pct: float
@@ -199,6 +198,16 @@ def _operating_rte(fleet: _Fleet, ambient_c: float) -> float:
     return (export_kw * discharge_h) / (import_kw * charge_h)
 
 
+def _idle_loss(fleet: _Fleet, ambient_c: float) -> float:
+    """Idle draw imported at the POC per hour, as a fraction of the fleet's
+    nominal energy: standby auxiliaries plus no-load losses, with no load
+    losses and no dependence on PCS derating (spec, "The idle figure")."""
+    idle_kw = fleet.containers * fleet.aux_table.standby_kw_at(ambient_c) + fleet.no_load_kw
+    if fleet.mvs_bands:
+        idle_kw += fleet.stations * mvs_aux_band(fleet.mvs_bands, ambient_c).standby_kw
+    return idle_kw / (fleet.containers * fleet.solution.e_nominal_kwh)
+
+
 def run_efficiency(
     rows: Iterable[tuple[str, float]],
     config: TypedConfiguration,
@@ -215,7 +224,7 @@ def run_efficiency(
         result.rows.append(EfficiencyRow(
             timestamp=timestamp,
             operating_rte_pct=_operating_rte(fleet, float(ambient_c)) * 100.0,
-            idle_loss_pct=None,
+            idle_loss_pct=_idle_loss(fleet, float(ambient_c)) * 100.0,
             pcs_power_pct=100.0,
         ))
     return result
