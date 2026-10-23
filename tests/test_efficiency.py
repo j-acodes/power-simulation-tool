@@ -10,7 +10,7 @@ from dataclasses import replace
 import pytest
 
 from powertool import ComponentDatabase, efficiency_cli
-from powertool.components import MvsAuxBand
+from powertool.components import MvsAuxBand, resolve_container_aux
 from powertool.efficiency import EfficiencyRunError, TypedConfiguration, run_efficiency
 
 
@@ -163,3 +163,62 @@ def test_cli_reports_an_invalid_configuration_and_fails(tmp_path, capsys):
     assert exit_code != 0
     assert "exceed" in capsys.readouterr().err
     assert not (tmp_path / "rte.csv").exists()
+
+
+# --- Cycles per day (ticket 15) ------------------------------------------
+# Sungrow PT3 Tables 7 (1 cycle/day) and 8 (2 cycles/day): at 25 °C operating
+# is 12.90 kW in both, standby 4.10 and 6.20 kW per container.
+
+def test_one_and_a_half_cycles_at_25c_uses_the_midpoint_of_the_two_tables(db):
+    tables = db.bess_solution("sungrow-st6900ux-4h").aux_consumption
+
+    lookup, warnings = resolve_container_aux(tables, 1.5)
+
+    assert lookup.operating_kw_at(25.0) == pytest.approx(12.90)
+    assert lookup.standby_kw_at(25.0) == pytest.approx((4.10 + 6.20) / 2)
+    # 15 °C, where operating differs: 11.15 and 11.40.
+    assert lookup.operating_kw_at(15.0) == pytest.approx((11.15 + 11.40) / 2)
+    assert warnings == []
+
+
+def test_three_cycles_uses_the_two_cycle_table_and_warns(db):
+    result = run_efficiency([("t", 25.0)], replace(WORKED, cycles_per_day=3), db)
+    at_two = run_efficiency([("t", 25.0)], replace(WORKED, cycles_per_day=2), db)
+
+    assert result.rows == at_two.rows
+    assert at_two.warnings == []
+    (warning,) = result.warnings
+    assert "3" in warning and "2 cycles/day" in warning
+
+
+def test_omitting_cycles_per_day_is_an_error_when_two_references_are_published(db):
+    with pytest.raises(EfficiencyRunError, match="cycles per day is required"):
+        run_efficiency([("t", 25.0)], replace(WORKED, cycles_per_day=None), db)
+
+
+def test_single_reference_solution_uses_its_table_and_warns_for_another_value(db):
+    one_table = db.bess_solution("sungrow-st6900ux-4h").aux_consumption[:1]
+    catalogue = _with_solution(db, aux_consumption=one_table)
+
+    without = run_efficiency([("t", 25.0)], replace(WORKED, cycles_per_day=None), catalogue)
+    other = run_efficiency([("t", 25.0)], replace(WORKED, cycles_per_day=1.5), catalogue)
+
+    assert without.warnings == []
+    assert other.rows == without.rows
+    (warning,) = other.warnings
+    assert "1.5" in warning and "1 cycles/day" in warning
+
+
+def test_cli_does_not_echo_cycles_per_day(tmp_path):
+    source = tmp_path / "ambient.csv"
+    source.write_text("timestamp,ambient_c\nt0,25\n")
+    target = tmp_path / "rte.csv"
+    args = [*WORKED_ARGS]
+    args[args.index("--cycles-per-day") + 1] = "1.5"
+
+    assert efficiency_cli.main([str(source), str(target), *args]) == 0
+
+    with target.open(newline="") as fh:
+        rows = list(csv.reader(fh))
+    assert rows[0] == ["timestamp", "operating RTE %", "idle loss %", "PCS power % of rated"]
+    assert len(rows[1]) == 4

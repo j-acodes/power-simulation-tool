@@ -507,6 +507,63 @@ class AuxConsumptionTable:
 
 
 @dataclass(frozen=True)
+class ContainerAuxLookup:
+    """Container auxiliary consumption resolved for one cycles-per-day value:
+    the two bracketing reference tables and the weight of the upper one. Both
+    operating and standby kW come from this one lookup, bilinear in ambient and
+    cycles per day (ADR-0009). Built by :func:`resolve_container_aux`."""
+
+    lower: AuxConsumptionTable
+    upper: AuxConsumptionTable
+    weight: float  # 0: the lower table alone; 1: the upper table alone
+
+    def _blend(self, lo: float, hi: float) -> float:
+        return lo + (hi - lo) * self.weight
+
+    def operating_kw_at(self, ambient_c: float) -> float:
+        return self._blend(self.lower.operating_kw_at(ambient_c),
+                           self.upper.operating_kw_at(ambient_c))
+
+    def standby_kw_at(self, ambient_c: float) -> float:
+        return self._blend(self.lower.standby_kw_at(ambient_c),
+                           self.upper.standby_kw_at(ambient_c))
+
+
+def resolve_container_aux(
+    tables: tuple[AuxConsumptionTable, ...], cycles_per_day: float | None,
+) -> tuple[ContainerAuxLookup, list[str]]:
+    """Resolve a solution's container tables for one cycles-per-day value.
+
+    Between published references the tables interpolate linearly. Outside
+    them, or when only one reference is published, the nearest table applies
+    and a warning names the requested value and the reference used. Raises
+    ValueError when no table is published, or when cycles per day is missing
+    and more than one reference is published.
+    """
+    if not tables:
+        raise ValueError("no auxiliary-consumption table is published")
+    ordered = sorted(tables, key=lambda t: t.cycles_per_day)
+    if cycles_per_day is None:
+        if len(ordered) > 1:
+            refs = ", ".join(f"{t.cycles_per_day:g}" for t in ordered)
+            raise ValueError(
+                f"cycles per day is required: the solution publishes references at {refs}")
+        return ContainerAuxLookup(ordered[0], ordered[0], 0.0), []
+    for lower, upper in zip(ordered, ordered[1:]):
+        if lower.cycles_per_day <= cycles_per_day <= upper.cycles_per_day:
+            span = upper.cycles_per_day - lower.cycles_per_day
+            return ContainerAuxLookup(
+                lower, upper, (cycles_per_day - lower.cycles_per_day) / span), []
+    nearest = min(ordered, key=lambda t: abs(t.cycles_per_day - cycles_per_day))
+    warnings = []
+    if nearest.cycles_per_day != cycles_per_day:
+        warnings.append(
+            f"cycles per day {cycles_per_day:g} is outside the published references; "
+            f"using the {nearest.cycles_per_day:g} cycles/day table")
+    return ContainerAuxLookup(nearest, nearest, 0.0), warnings
+
+
+@dataclass(frozen=True)
 class MvsAuxBand:
     """One ambient band of a station transformer's (MVS) auxiliary consumption:
     operating and standby kW per MVS for ambients in [ambient_min_c,

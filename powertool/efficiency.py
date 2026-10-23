@@ -10,8 +10,7 @@ Spec: .scratch/rte-efficiency/spec.md. Curve lookup follows ADR-0009.
 
 This module has no web or UI dependency. Not yet implemented (later tickets):
 the idle figure (``idle_loss_pct`` is None), PCS derating (``pcs_power_pct`` is
-always 100), interpolation between cycles-per-day references, and a run from a
-solved design.
+always 100), and a run from a solved design.
 """
 
 from __future__ import annotations
@@ -20,7 +19,7 @@ import math
 from dataclasses import dataclass, field
 from typing import Iterable
 
-from .components import AuxConsumptionTable, BessSolution, mvs_aux_band
+from .components import BessSolution, ContainerAuxLookup, mvs_aux_band, resolve_container_aux
 from .database import ComponentDatabase
 
 
@@ -76,7 +75,7 @@ class _Fleet:
     no_load_kw: float
     eta: float                # one-way conversion efficiency
     rho: float                # cell round-trip efficiency
-    aux_table: AuxConsumptionTable
+    aux_table: ContainerAuxLookup  # operating and standby kW per container
     mvs_bands: tuple          # empty: no MVS table, counted as zero
 
 
@@ -128,11 +127,12 @@ def _resolve(config: TypedConfiguration, db: ComponentDatabase) -> tuple[_Fleet,
     if not 0 < rho_pct <= 100:
         raise EfficiencyRunError("cell RTE must be in (0, 100] %")
 
-    # Nearest published cycles-per-day reference (interpolation between
-    # references is a later ticket).
-    cycles = config.cycles_per_day
-    aux_table = min(solution.aux_consumption,
-                    key=lambda t: abs(t.cycles_per_day - cycles) if cycles is not None else 0)
+    try:
+        aux_table, aux_warnings = resolve_container_aux(
+            solution.aux_consumption, config.cycles_per_day)
+    except ValueError as exc:
+        raise EfficiencyRunError(f"BESS solution {config.solution!r}: {exc}") from None
+    warnings.extend(aux_warnings)
 
     if not transformer.mvs_aux_consumption:
         warnings.append(

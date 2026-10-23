@@ -380,8 +380,10 @@ def test_powertitan_carries_its_efficiency_run_parameters(db):
     # Sungrow LV loss items: 99.90 x 99.95 x 98.70 x 99.90 % = 98.45 %.
     assert solution.conversion_efficiency == pytest.approx(0.98454, abs=1e-5)
     assert solution.cell_rte_pct == 95.0
-    (table,) = solution.aux_consumption       # Table 7, 1 cycle/day
+    table, table8 = solution.aux_consumption  # Tables 7 and 8
     assert table.cycles_per_day == 1
+    assert table8.cycles_per_day == 2
+    assert table8.standby_kw_at(25.0) == pytest.approx(6.20)
     assert table.operating_kw_at(25.0) == pytest.approx(12.90)
     assert table.standby_kw_at(25.0) == pytest.approx(4.10)
     # Between published ambients: linear (ADR-0009), 15 C 11.15 -> 25 C 12.90.
