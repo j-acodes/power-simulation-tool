@@ -8,35 +8,56 @@ never into the CSV. Example::
         --solution sungrow-st6900ux-4h --station-transformer SUNGROW_MVS7400_LS \\
         --stations 16 --containers 64 --poc-capacity-kw 100000 \\
         --load-loss-pct 1.0 --no-load-loss-pct 0.1 --cycles-per-day 1
+
+or, from a design's diagram JSON (the design supplies the solution, stations,
+containers, POC capacity and loss chain)::
+
+    python -m powertool.efficiency_cli ambient.csv rte.csv \\
+        --diagram design.json --cycles-per-day 1
 """
 
 from __future__ import annotations
 
 import argparse
 import csv
+import json
 import sys
 
 from .database import ComponentDatabase
-from .efficiency import EfficiencyRunError, TypedConfiguration, run_efficiency
+from .efficiency import (DesignConfiguration, EfficiencyRunError, TypedConfiguration,
+                         run_efficiency)
 
 OUTPUT_HEADER = ["timestamp", "operating RTE %", "idle loss %", "PCS power % of rated"]
+
+
+# Typed-configuration flags (dest names) that a design supplies instead.
+_TYPED_ONLY = ("station_transformer", "stations", "containers", "poc_capacity_kw",
+               "load_loss_pct", "no_load_loss_pct")
+
+
+def _flag(dest: str) -> str:
+    return "--" + dest.replace("_", "-")
 
 
 def _parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(
         prog="python -m powertool.efficiency_cli",
-        description="BESS efficiency run without a design: RTE at the POC per timestamp.")
+        description="BESS efficiency run, typed in or from a design: RTE at the POC "
+                    "per timestamp.")
     p.add_argument("input", help="CSV of timestamp, ambient °C (with a header row)")
     p.add_argument("output", help="CSV to write")
-    p.add_argument("--solution", required=True, help="BESS solution catalogue key")
-    p.add_argument("--station-transformer", required=True,
+    p.add_argument("--diagram",
+                   help="a design's diagram JSON file, instead of the typed configuration")
+    p.add_argument("--solution",
+                   help="BESS solution catalogue key (with --diagram: must match the design)")
+    p.add_argument("--station-transformer",
                    help="paired BESS station transformer catalogue key")
-    p.add_argument("--stations", type=int, required=True)
-    p.add_argument("--containers", type=int, required=True)
-    p.add_argument("--poc-capacity-kw", type=float, required=True)
-    p.add_argument("--load-loss-pct", type=float, required=True,
+    p.add_argument("--stations", type=int)
+    p.add_argument("--containers", type=int)
+    p.add_argument("--poc-capacity-kw", type=float)
+    p.add_argument("--load-loss-pct", type=float,
                    help="load loss at full power, %% of fleet rated active power")
-    p.add_argument("--no-load-loss-pct", type=float, required=True,
+    p.add_argument("--no-load-loss-pct", type=float,
                    help="no-load loss, %% of fleet rated active power")
     p.add_argument("--cycles-per-day", type=float)
     p.add_argument("--cell-rte-pct", type=float,
@@ -49,18 +70,31 @@ def _fmt(value: float | None) -> str:
 
 
 def main(argv: list[str] | None = None) -> int:
-    args = _parser().parse_args(argv)
-    config = TypedConfiguration(
-        solution=args.solution,
-        station_transformer=args.station_transformer,
-        stations=args.stations,
-        containers=args.containers,
-        poc_capacity_kw=args.poc_capacity_kw,
-        load_loss_pct=args.load_loss_pct,
-        no_load_loss_pct=args.no_load_loss_pct,
-        cycles_per_day=args.cycles_per_day,
-        cell_rte_pct=args.cell_rte_pct,
-    )
+    parser = _parser()
+    args = parser.parse_args(argv)
+    if args.diagram is not None:
+        given = [_flag(d) for d in _TYPED_ONLY if getattr(args, d) is not None]
+        if given:
+            parser.error(f"--diagram supplies {', '.join(given)}; do not type them")
+        with open(args.diagram, encoding="utf-8") as fh:
+            config = DesignConfiguration(diagram=json.load(fh), solution=args.solution,
+                                         cycles_per_day=args.cycles_per_day,
+                                         cell_rte_pct=args.cell_rte_pct)
+    else:
+        missing = [_flag(d) for d in ("solution", *_TYPED_ONLY) if getattr(args, d) is None]
+        if missing:
+            parser.error(f"without --diagram, these are required: {', '.join(missing)}")
+        config = TypedConfiguration(
+            solution=args.solution,
+            station_transformer=args.station_transformer,
+            stations=args.stations,
+            containers=args.containers,
+            poc_capacity_kw=args.poc_capacity_kw,
+            load_loss_pct=args.load_loss_pct,
+            no_load_loss_pct=args.no_load_loss_pct,
+            cycles_per_day=args.cycles_per_day,
+            cell_rte_pct=args.cell_rte_pct,
+        )
     with open(args.input, newline="", encoding="utf-8") as fh:
         reader = csv.reader(fh)
         next(reader, None)                     # header
