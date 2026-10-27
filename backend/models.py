@@ -1,18 +1,21 @@
 """SQLAlchemy models + engine/session wiring for Projects/Designs persistence.
 
-No Alembic yet — ``Base.metadata.create_all`` runs at app startup. The engine
-is built by a small factory (``make_engine``) that reads ``DATABASE_URL`` when
-called rather than baking it in at import time, so tests can point it at a
-tmp-file SQLite DB (see ``tests/conftest.py``) before ``backend.main`` (which
-calls the factory once at module load) is ever imported.
+The database is Postgres; its schema is owned by the Alembic migrations in
+``backend/migrations/`` and brought up to date at app startup
+(``upgrade_to_head``). The engine is built by a small factory (``make_engine``)
+that reads ``DATABASE_URL`` when called rather than baking it in at import
+time, so tests can point it at a disposable ``*_test`` database (see
+``tests/conftest.py``) before ``backend.main`` (which calls the factory once at
+module load) is ever imported.
 """
 
 from __future__ import annotations
 
 import os
+from pathlib import Path
 from datetime import datetime, timezone
 
-from sqlalchemy import JSON, DateTime, ForeignKey, Integer, String, create_engine, inspect
+from sqlalchemy import JSON, DateTime, ForeignKey, Integer, String, create_engine
 from sqlalchemy.engine import Engine
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, sessionmaker
 
@@ -30,7 +33,7 @@ class Project(Base):
 
     id: Mapped[int] = mapped_column(primary_key=True)
     name: Mapped[str] = mapped_column(String, nullable=False)
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=_utcnow, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow, nullable=False)
 
 
 class Design(Base):
@@ -46,54 +49,53 @@ class Design(Base):
     payload: Mapped[dict] = mapped_column(JSON, nullable=False)
     version: Mapped[int] = mapped_column(Integer, default=1, nullable=False)
     last_edited_by: Mapped[str] = mapped_column(String, nullable=False)
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=_utcnow, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow, nullable=False)
     updated_at: Mapped[datetime] = mapped_column(
-        DateTime, default=_utcnow, onupdate=_utcnow, nullable=False
+        DateTime(timezone=True), default=_utcnow, onupdate=_utcnow, nullable=False
     )
 
 
 def make_engine(database_url: str | None = None) -> Engine:
     """Build the DB engine. Reads ``DATABASE_URL`` at call time, not import
     time, so tests can set the env var before the first call (see
-    ``backend.main``, which calls this once at module load)."""
-    url = database_url or os.environ.get("DATABASE_URL", "sqlite:///powertool.db")
-    connect_args = {"check_same_thread": False} if url.startswith("sqlite") else {}
-    return create_engine(url, connect_args=connect_args)
+    ``backend.main``, which calls this once at module load).
 
-
-class SchemaOutOfDate(RuntimeError):
-    """An existing database is missing columns the models declare."""
-
-
-def check_schema(engine: Engine) -> None:
-    """Refuse to start against a database whose tables predate the models.
-
-    ``Base.metadata.create_all`` creates missing TABLES but never alters an
-    existing one, and this project has no Alembic. So adding a column leaves
-    an existing database silently short of it: the app reads rows without the
-    column and behaves as though the feature were never built, while the whole
-    test suite stays green because tests build their database from scratch.
-    That failure is invisible to every automated check there is, which is why
-    it is worth a startup check rather than a note telling someone to remember.
-
-    Raising here converts a silent wrong-behaviour bug into a loud refusal that
-    names the fix.
-    """
-    inspector = inspect(engine)
-    missing: list[str] = []
-    for name, table in Base.metadata.tables.items():
-        if not inspector.has_table(name):
-            continue  # create_all will make it; only EXISTING tables can drift.
-        present = {c["name"] for c in inspector.get_columns(name)}
-        missing += [f"{name}.{c.name}" for c in table.columns if c.name not in present]
-    if missing:
-        raise SchemaOutOfDate(
-            "The database is missing columns the models declare: "
-            + ", ".join(sorted(missing))
-            + ". This project has no migrations, so the database has to be "
-            "recreated: run `python scripts/reset_db.py` (it names what it "
-            "will destroy and asks before deleting anything)."
+    There is deliberately no default: a missing ``DATABASE_URL`` is a
+    deployment mistake, and silently falling back to some local database would
+    hide it until someone's work went missing."""
+    url = database_url or os.environ.get("DATABASE_URL")
+    if not url:
+        raise RuntimeError(
+            "DATABASE_URL is not set. Point it at a Postgres database, e.g. "
+            "postgresql+psycopg://user:password@host:5432/powertool"
         )
+    # pre_ping: a managed Postgres closes idle connections; check before use
+    # rather than fail the first request after a quiet spell.
+    return create_engine(url, pool_pre_ping=True)
+
+
+_MIGRATIONS = Path(__file__).resolve().parent / "migrations"
+
+
+def alembic_config(engine: Engine):
+    """Alembic config that runs ``backend/migrations`` against ``engine``."""
+    from alembic.config import Config
+
+    config = Config()
+    config.set_main_option("script_location", str(_MIGRATIONS))
+    config.attributes["engine"] = engine
+    return config
+
+
+def upgrade_to_head(engine: Engine) -> None:
+    """Apply every migration the database has not had yet.
+
+    Runs at startup, so a deploy of new code always meets a schema that matches
+    it — the drift ``create_all`` used to allow (a new model column that an
+    existing database never got) cannot happen."""
+    from alembic import command
+
+    command.upgrade(alembic_config(engine), "head")
 
 
 def make_session_factory(engine: Engine) -> sessionmaker:
