@@ -23,20 +23,22 @@ TypeScript canvas and UI using React Flow and Zustand. Keep these boundaries: en
 must not depend on web or UI modules; API schemas and diagram JSON are contracts; frontend
 changes must preserve the API contract.
 
-Component catalogues are YAML under `data/` and loaded into the in-memory database. SQLite
+Component catalogues are YAML under `data/` and loaded into the in-memory database. Postgres
 stores projects and designs; it is not the catalogue. Preserve the technology, topology,
 declared-parameter, and ambient-rating decisions in the accepted ADRs when changing models.
 
 ## Data and verification
 
-`DATABASE_URL` controls the database. Tests configure an isolated temporary SQLite database
-(`tests/conftest.py`); keep that isolation. Frontend tests are Vitest tests; the existing Vite
+`DATABASE_URL` controls the database. Tests run against the disposable Postgres database
+in `TEST_DATABASE_URL`, which `tests/conftest.py` empties at the start of each run and
+refuses unless its name ends in `_test`; keep that isolation and that guard. Frontend tests are Vitest tests; the existing Vite
 test setup can start the backend, so use a disposable `DATABASE_URL` for verification and
 never point it at a user's database.
 
-`scripts/reset_db.py` deletes the selected SQLite database and all projects/designs. It is a
-destructive schema-reset mechanism: inspect the target and obtain explicit user
-authorization before running it. Do not use it as routine test setup.
+The schema changes only through Alembic migrations in `backend/migrations/versions/`
+(ADR-0010); the app applies pending ones at startup. A model change ships with its
+migration. Never drop tables, downgrade, or run a migration by hand against a database that
+is not a `_test` database without explicit user authorization.
 
 Run the README checks appropriate to the affected behaviour; for docs-only work run link and
 whitespace checks. Check failures are part of the report. Keep documentation aligned with

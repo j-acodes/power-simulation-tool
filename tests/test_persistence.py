@@ -1,6 +1,6 @@
 """Tests for the M4 Projects/Designs persistence API (CRUD, optimistic
-locking 409 conflict path, cascade delete). Uses the tmp-file SQLite DB
-injected by ``tests/conftest.py`` — never touches a real ``powertool.db``.
+locking 409 conflict path, cascade delete). Uses the disposable ``*_test``
+Postgres database injected by ``tests/conftest.py`` — never a real one.
 """
 
 import pytest
@@ -205,25 +205,26 @@ def test_404s_for_missing_ids():
     assert resp.status_code == 404
 
 
-def test_startup_refuses_a_database_missing_a_declared_column(tmp_path):
+def test_migrations_match_the_models():
     """The regression this guards: `technology` was added to the model, the
     existing database never got the column, and the app served pre-feature
-    behaviour while every test stayed green. A start against such a database
-    must fail loudly and name the fix instead."""
-    from sqlalchemy import text
+    behaviour while every test stayed green. The database is now built only
+    by migrations, so a model change without a matching migration must fail
+    here, naming what the migration is missing."""
+    from alembic.autogenerate import compare_metadata
+    from alembic.migration import MigrationContext
 
-    from backend.models import Base, SchemaOutOfDate, check_schema, make_engine
+    from backend.main import engine
+    from backend.models import Base
 
-    db = tmp_path / "stale.db"
-    engine = make_engine(f"sqlite:///{db}")
-    Base.metadata.create_all(engine)
-    check_schema(engine)  # freshly created: nothing missing.
+    with engine.connect() as conn:
+        diff = compare_metadata(MigrationContext.configure(conn), Base.metadata)
+    assert diff == [], f"models and migrations differ; write a migration for: {diff}"
 
-    # Age the database by one column, the way adding a field to a model does.
-    with engine.begin() as conn:
-        conn.execute(text("ALTER TABLE designs DROP COLUMN technology"))
 
-    with pytest.raises(SchemaOutOfDate) as excinfo:
-        check_schema(engine)
-    assert "designs.technology" in str(excinfo.value)
-    assert "scripts/reset_db.py" in str(excinfo.value)
+def test_engine_refuses_a_missing_database_url(monkeypatch):
+    from backend.models import make_engine
+
+    monkeypatch.delenv("DATABASE_URL", raising=False)
+    with pytest.raises(RuntimeError, match="DATABASE_URL"):
+        make_engine()

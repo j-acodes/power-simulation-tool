@@ -7,3 +7,5 @@ fastapi>=0.110         # [server]
 uvicorn[standard]>=0.29  # [server]
 httpx>=0.27
 sqlalchemy>=2.0        # [server]
+psycopg[binary]>=3.2   # [server]
+alembic>=1.13          # [server]

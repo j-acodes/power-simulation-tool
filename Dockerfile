@@ -17,8 +17,10 @@ FROM python:3.12-slim AS runtime
 
 # Unbuffered logs, no .pyc — the container filesystem is disposable.
 ENV PYTHONUNBUFFERED=1 \
-    PYTHONDONTWRITEBYTECODE=1 \
-    DATABASE_URL=sqlite:////data/powertool.db
+    PYTHONDONTWRITEBYTECODE=1
+
+# DATABASE_URL (a Postgres URL) is supplied by the deployment, never baked in:
+# docker run -e DATABASE_URL=postgresql+psycopg://user:pass@host:5432/powertool
 
 WORKDIR /app
 
@@ -31,17 +33,14 @@ RUN pip install --no-cache-dir \
     "reportlab>=4.0" \
     "fastapi>=0.110" \
     "uvicorn[standard]>=0.29" \
-    "sqlalchemy>=2.0"
+    "sqlalchemy>=2.0" \
+    "psycopg[binary]>=3.2" \
+    "alembic>=1.13"
 
 COPY powertool/ ./powertool/
 COPY backend/ ./backend/
 COPY data/ ./data/
 COPY --from=frontend /build/dist ./frontend/dist
-
-# The SQLite file lives on a volume so projects and designs survive the
-# container. Mount it: docker run -v powertool-data:/data
-RUN mkdir -p /data
-VOLUME ["/data"]
 
 EXPOSE 8000
 CMD ["uvicorn", "backend.main:app", "--host", "0.0.0.0", "--port", "8000"]
