@@ -12,9 +12,10 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Iterator
 
-from fastapi import Body, Depends, FastAPI, HTTPException
+from fastapi import Body, Depends, FastAPI, HTTPException, Query
 from fastapi.encoders import jsonable_encoder
 from fastapi.middleware.cors import CORSMiddleware
+from starlette.types import ASGIApp, Message, Receive, Scope, Send
 from fastapi.responses import FileResponse, Response
 from sqlalchemy import delete, func, select, update
 from sqlalchemy.orm import Session
@@ -31,6 +32,7 @@ from .schemas import (
     DesignFull,
     DesignSummary,
     DesignUpdate,
+    MAX_NAME_LENGTH,
     LossItem,
     ProjectCreate,
     ProjectDetail,
@@ -62,8 +64,81 @@ engine = make_engine()
 SessionLocal = make_session_factory(engine)
 upgrade_to_head(engine)
 
+# Largest request body accepted, in bytes. A 240 MW seeded plant (the largest
+# the catalogue allows) is about 23 kB as JSON, so 10 MB leaves wide headroom
+# while stopping one request from exhausting memory or bloating the database.
+MAX_BODY_BYTES = 10 * 1024 * 1024
+
+
+class BodySizeLimitMiddleware:
+    """Pure ASGI middleware: answer 413 to any request body over ``max_bytes``.
+
+    A declared ``Content-Length`` over the limit is rejected before the body is
+    read. Without one (chunked upload), bytes are counted as ``receive()``
+    delivers them; once past the limit the 413 is sent, the app is told the
+    client disconnected, and anything it tries to send afterwards is dropped.
+    """
+
+    def __init__(self, app: ASGIApp, max_bytes: int) -> None:
+        self.app = app
+        self.max_bytes = max_bytes
+
+    async def _reject(self, send: Send) -> None:
+        body = b'{"detail":"Request body too large"}'
+        await send({
+            "type": "http.response.start",
+            "status": 413,
+            "headers": [(b"content-type", b"application/json"),
+                        (b"content-length", str(len(body)).encode())],
+        })
+        await send({"type": "http.response.body", "body": body})
+
+    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+        if scope["type"] != "http":
+            await self.app(scope, receive, send)
+            return
+
+        for key, value in scope["headers"]:
+            if key == b"content-length":
+                try:
+                    declared = int(value)
+                except ValueError:
+                    declared = 0
+                if declared > self.max_bytes:
+                    await self._reject(send)
+                    return
+
+        received = 0
+        rejected = False
+
+        async def limited_receive() -> Message:
+            nonlocal received, rejected
+            if rejected:
+                return {"type": "http.disconnect"}
+            message = await receive()
+            if message["type"] == "http.request":
+                received += len(message.get("body", b""))
+                if received > self.max_bytes:
+                    rejected = True
+                    await self._reject(send)
+                    return {"type": "http.disconnect"}
+            return message
+
+        async def guarded_send(message: Message) -> None:
+            if not rejected:
+                await send(message)
+
+        try:
+            await self.app(scope, limited_receive, guarded_send)
+        except Exception:
+            if not rejected:
+                raise
+
+
 app = FastAPI(title="Plant Sizing API")
 
+# Added before CORS so CORS stays outermost and its headers reach a 413 too.
+app.add_middleware(BodySizeLimitMiddleware, max_bytes=MAX_BODY_BYTES)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["http://localhost:5173"],
@@ -324,7 +399,7 @@ def _project_name(session: Session, project_id: int | None) -> str:
 @app.post("/api/report")
 def post_report(
     diagram: dict = Body(...),
-    name: str = "Plant",
+    name: str = Query("Plant", max_length=MAX_NAME_LENGTH),
     project_id: int | None = None,
     session: Session = Depends(get_session),
 ) -> Response:
@@ -352,7 +427,7 @@ def post_report(
 @app.post("/api/sld")
 def post_sld(
     diagram: dict = Body(...),
-    name: str = "Plant",
+    name: str = Query("Plant", max_length=MAX_NAME_LENGTH),
     project_id: int | None = None,
     session: Session = Depends(get_session),
 ) -> Response:
