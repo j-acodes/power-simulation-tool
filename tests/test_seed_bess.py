@@ -302,3 +302,26 @@ def test_api_now_seeds_hybrid_instead_of_rejecting_it():
     assert resp.status_code == 200
     solve_resp = client.post("/api/solve", json=resp.json())
     assert solve_resp.json()["issues"] == []
+
+
+def test_seeded_hv_fleet_passes_its_own_pcs_active_check():
+    # 100 MW for 4 h needs ceil(400000 / 6904) = 58 containers on energy, but
+    # 58 x 1724 kW of rated active power is below the ~101.7 MW the stations
+    # must deliver through an HV interconnection's losses. The seed must also
+    # floor containers on rated active power (ADR-0008 amendment), or every
+    # station it proposes warns pcs_active_capacity_exceeded.
+    params = dict(BASE_PARAMS)
+    params.update({
+        "interconnection": "HV",
+        "v_mv_kv": 33.0,
+        "v_hv_kv": 132.0,
+        "export_m": 5000.0,
+        "bess_station_model": "SUNGROW_MVS7400_LS",
+        "p_poc_bess_mw": 100.0,
+    })
+    diagram = client.post("/api/seed", json=params).json()
+    result = client.post("/api/solve", json=diagram).json()
+
+    codes = {w["code"] for w in result["results"]["warnings"]}
+    assert "pcs_active_capacity_exceeded" not in codes
+    assert "pcs_apparent_capacity_exceeded" not in codes
