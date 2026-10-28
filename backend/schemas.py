@@ -17,6 +17,11 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 # docs/adr/0002-technology-declared-not-derived.md and CONTEXT.md's Technology entry.
 Technology = Literal["pv", "bess", "hybrid"]
 
+# Longest accepted project/design name or editor name, enforced at the API
+# boundary only (the database columns are unchanged). Also caps the ``name``
+# query parameter on /api/report and /api/sld; see backend/main.py.
+MAX_NAME_LENGTH = 200
+
 
 class TransformerElement(BaseModel):
     type: Literal["Transformer"]
@@ -408,7 +413,7 @@ class CatalogueResponse(BaseModel):
 
 
 class ProjectCreate(BaseModel):
-    name: str
+    name: str = Field(max_length=MAX_NAME_LENGTH)
 
 
 class DesignSummary(BaseModel):
@@ -470,10 +475,10 @@ def _validate_rule_settings(payload: dict) -> None:
 
 
 class DesignCreate(BaseModel):
-    name: str
+    name: str = Field(max_length=MAX_NAME_LENGTH)
     technology: Technology
     payload: dict
-    last_edited_by: str
+    last_edited_by: str = Field(max_length=MAX_NAME_LENGTH)
 
     @model_validator(mode="after")
     def _ambient_temp_c_is_legal(self) -> "DesignCreate":
@@ -500,10 +505,10 @@ class DesignUpdate(BaseModel):
     version or the update is rejected with a 409 (see ``PUT /api/designs/{id}``
     in main.py)."""
 
-    name: str | None = None
+    name: str | None = Field(default=None, max_length=MAX_NAME_LENGTH)
     payload: dict
     version: int
-    last_edited_by: str
+    last_edited_by: str = Field(max_length=MAX_NAME_LENGTH)
 
     @model_validator(mode="after")
     def _ambient_temp_c_is_legal(self) -> "DesignUpdate":
