@@ -24,14 +24,14 @@ class CatalogueDataWarning(UserWarning):
 def load_cables(path: str | Path | None = None) -> dict[str, Cable]:
     """Load cable types from a YAML file, keyed by name."""
     path = Path(path) if path else DATA_DIR / "cables.yaml"
-    raw = yaml.safe_load(path.read_text()) or {}
+    raw = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
     return {name: Cable(name=name, **params) for name, params in (raw.get("cables") or {}).items()}
 
 
 def load_transformers(path: str | Path | None = None) -> dict[str, Transformer]:
     """Load transformer types from a YAML file, keyed by name."""
     path = Path(path) if path else DATA_DIR / "transformers.yaml"
-    raw = yaml.safe_load(path.read_text()) or {}
+    raw = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
     return {
         name: Transformer(name=name, **{k: v for k, v in params.items() if k != "paired_inverters"})
         for name, params in (raw.get("transformers") or {}).items()
@@ -43,7 +43,7 @@ def load_pv_inverter_pairings(
 ) -> dict[str, dict[str, PvInverterPairing]]:
     """Load each PV station's allowed inverter models and count bounds."""
     path = Path(path) if path else DATA_DIR / "transformers.yaml"
-    raw = yaml.safe_load(path.read_text()) or {}
+    raw = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
     return {
         station: {
             inverter: PvInverterPairing(**pairing)
@@ -56,7 +56,7 @@ def load_pv_inverter_pairings(
 def load_bess_solutions(path: str | Path | None = None) -> dict[str, BessSolution]:
     """Load BESS supplier solutions from a YAML file, keyed by name."""
     path = Path(path) if path else DATA_DIR / "bess.yaml"
-    raw = yaml.safe_load(path.read_text()) or {}
+    raw = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
     return {
         name: BessSolution(name=name, **params)
         for name, params in (raw.get("bess_solutions") or {}).items()
@@ -66,7 +66,7 @@ def load_bess_solutions(path: str | Path | None = None) -> dict[str, BessSolutio
 def load_pv_inverters(path: str | Path | None = None) -> dict[str, PvInverter]:
     """Load curated PV inverter products from their dedicated catalogue."""
     path = Path(path) if path else DATA_DIR / "pv_inverters.yaml"
-    raw = yaml.safe_load(path.read_text()) or {}
+    raw = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
     inverters: dict[str, PvInverter] = {}
     for name, params in (raw.get("pv_inverters") or {}).items():
         try:
@@ -98,7 +98,7 @@ def load_bess_transformers(
     ``ComponentDatabase.bess_pairings``.
     """
     path = Path(path) if path else DATA_DIR / "bess_transformers.yaml"
-    raw = yaml.safe_load(path.read_text()) or {}
+    raw = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
     transformers: dict[str, Transformer] = {}
     pairings: dict[str, dict[str, int]] = {}
     for name, params in (raw.get("bess_transformers") or {}).items():

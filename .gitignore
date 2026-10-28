@@ -28,3 +28,7 @@ frontend/dist/
 # URL, not the document (see .scratch/component-datasheets/spec.md). Keeping the
 # PDFs locally is fine; committing them is what this prevents.
 data/datasheets/
+
+# Supplier curves and tables (e.g. Sungrow technical-proposal extracts) are kept
+# locally, not published: the catalogue transcribes the figures with provenance.
+data/manufacturer-curves/

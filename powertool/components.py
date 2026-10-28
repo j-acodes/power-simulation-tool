@@ -471,7 +471,7 @@ class BessSolution:
 
     Choosing a solution fixes everything the sizing of a BESS station depends
     on: the nominal energy, the PCS rating (apparent power per unit and a unit
-    count) and LV voltage, and the worst-case auxiliary draw. The container
+    count), the rated active power, LV voltage, and the worst-case auxiliary draw. The container
     count per station is NOT a property of the solution — it is a property of
     the pairing between a solution and a station transformer (one solution is
     sold behind many station transformer ratings, each serving a different
@@ -492,6 +492,11 @@ class BessSolution:
     aux_q_kvar: float | None = None           # the engine sums it as zero but raises an
                                                # informational notice (see powertool.graph).
                                                # 0.0 means the datasheet states zero.
+    rated_active_power_kw: float | None = None  # Pn of ONE container at its AC terminals:
+                                               # the active limit, where the PCS kVA stays
+                                               # the apparent limit (ADR-0008 amendment).
+                                               # None: unpublished — the solution cannot
+                                               # be sized or seeded (no fallback to kVA).
     datasheet_version: str | None = None
     preliminary: bool = False
     datasheet_url: str | None = None

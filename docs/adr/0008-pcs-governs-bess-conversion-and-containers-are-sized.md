@@ -34,3 +34,17 @@ A fleet of identically populated stations splits exactly as before, because allo
 proportional; only fleets whose stations hold different container counts shift. Every BESS
 station now also reports its PCS loading, and one whose PCS is smaller than its duty warns.
 Saved designs whose container override exceeds the pairing stop solving until corrected.
+
+## Amendment: rated active power is the active limit
+
+On 2026-10-23 the owner replaced the single PCS figure with two. Sungrow's system curve gives
+the ST6900UX-4H a rated active power Pn of 1724 kW against 1800 kVA of apparent power, so
+reading the kVA as kW overstated each container's active capacity by about 4 %. A BESS
+station's active power is now checked against containers × Pn and its apparent power against
+installed PCS kVA, independently and still as a warning; the seed wizard sizes its active-power
+terms on Pn and its apparent-power terms on kVA. Allocation between stations is unchanged.
+
+A BESS solution without a rated active power is an error wherever it is used: there is no
+fallback to the kVA figure, because that fallback is the overstatement this amendment removes.
+Designs using such a solution stop solving until the figure is catalogued. Record:
+[Should sizing use rated active power?](../../.scratch/rte-efficiency/issues/09-rated-active-power-in-sizing.md).

@@ -19,9 +19,9 @@ validate/solve that diagram):
 
 Real catalogue entries (see data/bess.yaml, data/bess_transformers.yaml):
 GENERIC_BESS_TX_4000_LV069 is paired with sungrow-st6900ux-4h at a maximum
-of 2 containers per station (2 x 4 x 450 kVA = 3600 kW installed PCS);
-GENERIC_BESS_TX_2750_LV069 with the same solution at a maximum of 1
-(1 x 4 x 450 kVA = 1800 kW). Both stations' LV (0.69 kV) matches the
+of 2 containers per station (2 x 4 x 450 = 3600 kVA installed PCS, 2 x 1724
+= 3448 kW rated active power); GENERIC_BESS_TX_2750_LV069 with the same
+solution at a maximum of 1 (1800 kVA, 1724 kW). Both stations' LV (0.69 kV) matches the
 solution's PCS voltage, so the plant clears bess_lv_mismatch too.
 """
 
@@ -37,7 +37,7 @@ from powertool.graph import validate_graph
 client = TestClient(app)
 
 # 5 MW BESS-only design, MV interconnection: two GENERIC_BESS_TX_4000_LV069
-# stations size the fleet's power (3600 kW installed PCS each), and 5 MW for
+# stations size the fleet's power (3448 kW rated active power each), and 5 MW for
 # 4 h needs ceil(5000*4/6904) = 3 containers — one full station (2) and the
 # remainder (1) on the second, in circuit order.
 BASE_PARAMS = {
@@ -233,6 +233,20 @@ def test_api_rejects_a_solution_that_does_not_sell_the_requested_duration():
     resp = client.post("/api/seed", json=params)
     assert resp.status_code == 400
     assert "2 h" in resp.json()["detail"] and "4 h" in resp.json()["detail"]
+
+
+def test_api_rejects_a_solution_without_rated_active_power():
+    # sungrow-st6680ux-2h sells 2 h and is paired with SUNGROW_MVS7080_LS, but
+    # has no rated active power, so it cannot be sized (ADR-0008 amendment).
+    params = dict(BASE_PARAMS)
+    params.update({
+        "bess_station_model": "SUNGROW_MVS7080_LS",
+        "bess_solution": "sungrow-st6680ux-2h",
+        "discharge_hours": 2.0,
+    })
+    resp = client.post("/api/seed", json=params)
+    assert resp.status_code == 400
+    assert "rated active power" in resp.json()["detail"]
 
 
 def test_api_rejects_a_station_not_paired_with_the_chosen_solution():

@@ -74,22 +74,25 @@ in kV; P in kW, Q in kvar, S in kVA.
 The diagram builder is one FastAPI process: it serves the `/api` routes and, when
 `frontend/dist` exists, the built React app alongside them.
 
-### Docker (nothing to install)
+### Docker
 
 ```bash
 docker build -t powertool .
-docker run -p 8000:8000 -v powertool-data:/data powertool
+docker run -p 8000:8000 -e DATABASE_URL="postgresql+psycopg://user:password@host:5432/powertool" powertool
 ```
 
-Then open <http://localhost:8000>. The volume holds the SQLite file, so projects and
-designs survive the container; drop `-v` and they don't. The image builds the frontend
+Then open <http://localhost:8000>. Projects and designs live in the Postgres database
+`DATABASE_URL` names, so they survive the container. The image builds the frontend
 with Node in a first stage and ships only Python — see `Dockerfile`.
 
 ### Locally
 
 Work inside a virtualenv, so `python3`, `pytest` and `uvicorn` all resolve to this
 project's Python (3.12, matching the Docker image) rather than whatever is on your
-PATH. Install the dependencies once, then use the root development command:
+PATH. You also need a Postgres server with a database for the app (any recent
+version; the official installer is enough) and `DATABASE_URL` pointing at it — see
+[Configuration](#configuration). Install the dependencies once, then use the root
+development command:
 
 ```bash
 python3.12 -m venv .venv          # once
@@ -108,31 +111,43 @@ stands down and Vite proxies to that process.
 
 | Variable | Default | Notes |
 | --- | --- | --- |
-| `DATABASE_URL` | `sqlite:///powertool.db` | Any SQLAlchemy URL. The Docker image sets `sqlite:////data/powertool.db`. |
+| `DATABASE_URL` | none — required | Postgres URL, e.g. `postgresql+psycopg://user:password@host:5432/powertool`. Add `?sslmode=require` for a managed server. The app refuses to start without it. |
+| `TEST_DATABASE_URL` | none — tests only | A disposable Postgres database whose name ends in `_test`. See [Tests](#tests). |
 
-### Resetting the database
+Keep the password out of the repository: set the variable in the environment or the
+deployment's secret store.
 
-There is no migration mechanism — `backend/models.py` builds the schema wholesale with
-`Base.metadata.create_all` at startup. Incompatible stored contracts, such as a diagram saved
-before PV inverter selection became required, are not inferred or upgraded. Resetting the
-database deletes every project and design in it.
+### Database migrations
+
+The schema is owned by Alembic migrations in `backend/migrations/versions/`. The app
+applies any pending migration itself at startup, so deploying new code is enough to
+bring the database up to date; nothing is ever dropped to change the schema. The
+database user therefore needs permission to create and alter tables in its database.
+
+After changing a model in `backend/models.py`, write the matching migration and review
+it before committing (`tests/test_persistence.py` fails while models and migrations
+differ):
 
 ```bash
-python scripts/reset_db.py
+alembic revision --autogenerate -m "add designs.foo"   # against DATABASE_URL
 ```
 
-The script prints the file path and how many projects/designs it holds, then requires
-you to type `yes` before deleting anything — it never deletes silently. Run it, then
-start the app as usual; the schema is recreated empty on the next startup.
+`alembic downgrade -1` steps back one migration; on a database that holds real
+projects, back it up first. Diagrams saved under an older stored contract, such as one
+saved before PV inverter selection became required, are not inferred or upgraded.
 
 ## Tests
 
+The tests need their own Postgres database. Each run drops every table in it, so the
+test setup refuses any database whose name does not end in `_test`:
+
 ```bash
+export TEST_DATABASE_URL="postgresql+psycopg://user:password@localhost:5432/powertool_test"
 .venv/bin/python -m pytest -q             # engine, API, graph, and seed tests
-DATABASE_URL="sqlite:///$(mktemp -d)/powertool-tests.db" npm --prefix frontend test
+DATABASE_URL="$TEST_DATABASE_URL" npm --prefix frontend test
 npm --prefix frontend run build            # TypeScript check + production build
 npm --prefix frontend run lint             # oxlint
 ```
 
-Vite can start a backend during frontend tests. The temporary SQLite URL isolates any
-backend started by this command from the real database.
+Vite can start a backend during frontend tests. Pointing `DATABASE_URL` at the test
+database isolates any backend started by this command from real data.

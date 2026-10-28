@@ -879,6 +879,14 @@ def _check_props(nodes, tree, db, diagram, issues) -> None:
                             f"Station '{nid}' transformer LV ({tx.lv_kv:g} kV) "
                             f"disagrees with {solution.name}'s PCS voltage "
                             f"({solution.pcs_lv_kv:g} kV).", node_id=nid))
+                    # ADR-0008 amendment: rated active power is the PCS
+                    # active limit, with no fallback to the kVA figure.
+                    if solution.rated_active_power_kw is None:
+                        issues.append(GraphIssue(
+                            "bess_rated_active_power_missing",
+                            f"Station '{nid}' selects {solution.name!r}, which "
+                            f"has no rated active power in the catalogue, so it "
+                            f"cannot be sized.", node_id=nid))
                     # The pairing lives on the station transformer, so it only
                     # applies to a catalogue-mode transformer — a custom,
                     # hand-typed one corresponds to no catalogue entry and so
@@ -1985,22 +1993,25 @@ def map_results(inputs: GraphInputs, stage1s: list[SizingResult],
                     solution, containers = branch_inputs.bess_by_station.get(
                         node_id, (None, None))
                     if solution is not None and containers is not None:
-                        # ADR-0008: the PCS reading is PF-1 (one figure is
-                        # both the active kW limit and apparent kVA limit),
-                        # checked independently at 100% of installed PCS,
-                        # exactly as ADR-0005 reads installed inverter power.
-                        # The PCS publishes no ambient dependence, so there is
-                        # no ambient lookup or fallback notice to mirror here.
-                        capacity = containers * solution.pcs_count * solution.pcs_s_kva
-                        active_ok = station.p_lv_kw <= capacity + 1e-9
-                        apparent_ok = station.s_lv_kva <= capacity + 1e-9
+                        # ADR-0008 (amended): rated active power bounds kW
+                        # and installed PCS kVA bounds apparent power, each
+                        # checked independently at 100% of installed PCS.
+                        # Validation has already refused a solution without
+                        # rated active power. The PCS publishes no ambient
+                        # dependence, so there is no ambient lookup or
+                        # fallback notice to mirror here.
+                        capacity_kw = containers * solution.rated_active_power_kw
+                        capacity_kva = containers * solution.pcs_count * solution.pcs_s_kva
+                        active_ok = station.p_lv_kw <= capacity_kw + 1e-9
+                        apparent_ok = station.s_lv_kva <= capacity_kva + 1e-9
                         station_payload.update({
                             "pcs_model": solution.display_name,
                             "pcs_unit_count": containers * solution.pcs_count,
                             "pcs_unit_power_kva": solution.pcs_s_kva,
-                            "pcs_capacity_kw": capacity,
-                            "pcs_active_loading": station.p_lv_kw / capacity,
-                            "pcs_apparent_loading": station.s_lv_kva / capacity,
+                            "pcs_capacity_kw": capacity_kw,
+                            "pcs_capacity_kva": capacity_kva,
+                            "pcs_active_loading": station.p_lv_kw / capacity_kw,
+                            "pcs_apparent_loading": station.s_lv_kva / capacity_kva,
                             "pcs_active_ok": active_ok,
                             "pcs_apparent_ok": apparent_ok,
                         })
@@ -2008,7 +2019,7 @@ def map_results(inputs: GraphInputs, stage1s: list[SizingResult],
                             warnings.append(GraphIssue(
                                 "pcs_active_capacity_exceeded",
                                 f"Station '{node_id}' needs {station.p_lv_kw:,.0f} kW "
-                                f"from its PCS, above the installed {capacity:,.0f} "
+                                f"from its PCS, above the installed {capacity_kw:,.0f} "
                                 f"kW active-power limit.",
                                 node_id=node_id,
                             ))
@@ -2016,7 +2027,7 @@ def map_results(inputs: GraphInputs, stage1s: list[SizingResult],
                             warnings.append(GraphIssue(
                                 "pcs_apparent_capacity_exceeded",
                                 f"Station '{node_id}' needs {station.s_lv_kva:,.0f} kVA "
-                                f"from its PCS, above the installed {capacity:,.0f} "
+                                f"from its PCS, above the installed {capacity_kva:,.0f} "
                                 f"kVA apparent-power limit.",
                                 node_id=node_id,
                             ))

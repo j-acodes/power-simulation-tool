@@ -11,6 +11,12 @@
 #   e_nominal_kwh          : nominal usable energy of ONE container [kWh]
 #   pcs_s_kva / pcs_count  : apparent power of ONE PCS unit [kVA], and the
 #                            number of PCS units per container
+#   rated_active_power_kw  : rated active power Pn of ONE container at its AC
+#                            terminals [kW] — the active-power limit in sizing,
+#                            where pcs_s_kva x pcs_count stays the apparent
+#                            limit (ADR-0008 amendment). Omitted when the
+#                            supplier has not published it: such a solution
+#                            cannot be sized or seeded until it is added.
 #   pcs_lv_kv              : PCS AC output (line-to-line) voltage [kV] — the
 #                            BESS station transformer paired with this
 #                            solution must carry this same lv_kv (see
@@ -45,6 +51,9 @@ bess_solutions:
     e_nominal_kwh: 6904.0
     pcs_s_kva: 450.0
     pcs_count: 4
+    rated_active_power_kw: 1724.0  # Pn, Sungrow system curve
+                                    # TI_20250915_ST6900UX-4H_System Curve_V1_EN,
+                                    # Tab. 1-1 (1800 kVA apparent)
     pcs_lv_kv: 0.69
     duration_h: 4.0            # from the "4H" in the model number: 6904 kWh /
                                 # (4 x 450 kVA) works out to 3.84 h, but the

@@ -2,7 +2,9 @@
 
 export function fmt(value: number | null | undefined, digits = 0): string {
   if (value === null || value === undefined || !Number.isFinite(value)) return '—'
-  return value.toLocaleString(undefined, { maximumFractionDigits: digits, minimumFractionDigits: 0 })
+  // Fixed to en-US, not the browser's locale: the UI copy is English, and a
+  // Spanish-locale "1.000 kVA" next to "0,99" reads as one kVA to an engineer.
+  return value.toLocaleString('en-US', { maximumFractionDigits: digits, minimumFractionDigits: 0 })
 }
 
 export function pct(value: number | null | undefined, digits = 0): string {
