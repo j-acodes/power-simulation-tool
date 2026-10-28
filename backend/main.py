@@ -2,7 +2,7 @@
 
 M0/M1 scope: catalogue, Stage-1 solve and the diagram solve, plus serving the
 built frontend (``frontend/dist``) when it exists. M4 adds Projects/Designs
-persistence (SQLite by default, no auth yet).
+persistence (Postgres, no auth yet).
 """
 
 from __future__ import annotations
@@ -21,7 +21,7 @@ from sqlalchemy.orm import Session
 
 from powertool import ComponentDatabase, size_generation
 
-from .models import Base, Design, Project, check_schema, make_engine, make_session_factory
+from .models import Design, Project, make_engine, make_session_factory, upgrade_to_head
 from .schemas import (
     BessSolutionInfo,
     CableInfo,
@@ -60,8 +60,7 @@ db = ComponentDatabase.load()
 
 engine = make_engine()
 SessionLocal = make_session_factory(engine)
-Base.metadata.create_all(engine)
-check_schema(engine)
+upgrade_to_head(engine)
 
 app = FastAPI(title="Plant Sizing API")
 

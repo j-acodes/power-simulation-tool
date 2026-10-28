@@ -13,13 +13,26 @@ import type {
 
 const JSON_HEADERS = { 'Content-Type': 'application/json' }
 
+/** The error a failed response carries: FastAPI's `detail` when there is one
+ * (a string from an HTTPException, or a list of validation errors), so the
+ * user reads the server's reason rather than a bare status code. */
+async function httpError(res: Response): Promise<Error> {
+  const body = await res.json().catch(() => null)
+  const detail = body?.detail
+  if (typeof detail === 'string' && detail) return new Error(detail)
+  if (Array.isArray(detail) && detail.length) {
+    return new Error(detail.map((d) => d?.msg ?? String(d)).join('; '))
+  }
+  return new Error(`HTTP ${res.status}`)
+}
+
 async function asJson<T>(res: Response): Promise<T> {
-  if (!res.ok) throw new Error(`HTTP ${res.status}`)
+  if (!res.ok) throw await httpError(res)
   return (await res.json()) as T
 }
 
 async function asVoid(res: Response): Promise<void> {
-  if (!res.ok) throw new Error(`HTTP ${res.status}`)
+  if (!res.ok) throw await httpError(res)
 }
 
 /** Thrown by `updateDesign` on a 409: carries the server's current copy of
