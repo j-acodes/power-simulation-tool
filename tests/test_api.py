@@ -477,3 +477,11 @@ def test_report_project_id_puts_the_real_project_name_on_the_embedded_sld(monkey
                        params={"name": "Test Plant", "project_id": 999999})
     assert resp.status_code == 200
     assert captured["project_name"] == ""
+
+
+def test_report_accepts_a_name_that_looks_like_markup():
+    """The name is plain text in the PDF, so malformed markup is not a 400."""
+    resp = client.post("/api/report", json=_example_diagram(),
+                       params={"name": "A <b B & C"})
+    assert resp.status_code == 200
+    assert resp.content[:5] == b"%PDF-"
