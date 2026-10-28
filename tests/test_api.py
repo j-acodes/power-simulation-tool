@@ -485,3 +485,38 @@ def test_report_accepts_a_name_that_looks_like_markup():
                        params={"name": "A <b B & C"})
     assert resp.status_code == 200
     assert resp.content[:5] == b"%PDF-"
+
+
+# --- Security headers ----------------------------------------------------------
+
+SECURITY_HEADERS = {
+    "x-content-type-options": "nosniff",
+    "x-frame-options": "DENY",
+    "content-security-policy": "frame-ancestors 'none'",
+    "referrer-policy": "strict-origin-when-cross-origin",
+}
+
+
+def _assert_security_headers(resp):
+    for name, value in SECURITY_HEADERS.items():
+        assert resp.headers.get(name) == value, name
+    assert "strict-transport-security" not in resp.headers
+
+
+def test_catalogue_response_carries_security_headers():
+    resp = client.get("/api/catalogue")
+    assert resp.status_code == 200
+    _assert_security_headers(resp)
+
+
+def test_report_pdf_response_carries_security_headers():
+    resp = client.post("/api/report", json=_example_diagram(), params={"name": "Test Plant"})
+    assert resp.status_code == 200
+    assert resp.headers["content-type"] == "application/pdf"
+    _assert_security_headers(resp)
+
+
+def test_error_response_carries_security_headers():
+    resp = client.get("/api/designs/999999")
+    assert resp.status_code == 404
+    _assert_security_headers(resp)

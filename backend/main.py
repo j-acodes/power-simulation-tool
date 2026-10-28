@@ -71,6 +71,38 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# Baseline browser hardening on every response (API, PDFs, errors, SPA files).
+# CSP is frame-ancestors only: a script/style policy would need its own testing
+# (React Flow injects inline styles). No HSTS — TLS terminates in front of the app.
+SECURITY_HEADERS = [
+    (b"x-content-type-options", b"nosniff"),
+    (b"x-frame-options", b"DENY"),
+    (b"content-security-policy", b"frame-ancestors 'none'"),
+    (b"referrer-policy", b"strict-origin-when-cross-origin"),
+]
+
+
+class SecurityHeadersMiddleware:
+    """Pure ASGI middleware: append ``SECURITY_HEADERS`` to each HTTP response."""
+
+    def __init__(self, app):
+        self.app = app
+
+    async def __call__(self, scope, receive, send):
+        if scope["type"] != "http":
+            await self.app(scope, receive, send)
+            return
+
+        async def send_with_headers(message):
+            if message["type"] == "http.response.start":
+                message["headers"] = list(message.get("headers", [])) + SECURITY_HEADERS
+            await send(message)
+
+        await self.app(scope, receive, send_with_headers)
+
+
+app.add_middleware(SecurityHeadersMiddleware)
+
 
 def get_session() -> Iterator[Session]:
     session = SessionLocal()
