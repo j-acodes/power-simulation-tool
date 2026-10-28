@@ -1,11 +1,5 @@
-# Marked [server] are the ones the Docker runtime image installs (see
-# Dockerfile); the rest are the test suite.
-pyyaml>=6.0            # [server]
+# The server set (exact pins; the Docker runtime image installs only this
+# file, see Dockerfile), then the test suite.
+-r requirements-server.txt
 pytest>=7.0
-reportlab>=4.0         # [server]
-fastapi>=0.110         # [server]
-uvicorn[standard]>=0.29  # [server]
 httpx>=0.27
-sqlalchemy>=2.0        # [server]
-psycopg[binary]>=3.2   # [server]
-alembic>=1.13          # [server]

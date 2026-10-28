@@ -24,23 +24,22 @@ ENV PYTHONUNBUFFERED=1 \
 
 WORKDIR /app
 
-# The server's runtime dependencies only — the rest of requirements.txt is
-# the test suite, which the runtime image has no use for.
-# ponytail: versions duplicated from requirements.txt (see the marks there);
-# fold into a requirements-server.txt if this list grows.
-RUN pip install --no-cache-dir \
-    "pyyaml>=6.0" \
-    "reportlab>=4.0" \
-    "fastapi>=0.110" \
-    "uvicorn[standard]>=0.29" \
-    "sqlalchemy>=2.0" \
-    "psycopg[binary]>=3.2" \
-    "alembic>=1.13"
+# The server's runtime dependencies only, exactly pinned — the rest of
+# requirements.txt is the test suite, which the runtime image has no use for.
+COPY requirements-server.txt ./
+RUN pip install --no-cache-dir -r requirements-server.txt
+
+# An unprivileged user runs the app. The files below stay owned by root and
+# world-readable, so the app can read but not change its own code; it writes
+# nothing to the filesystem (the database is remote Postgres).
+RUN useradd --system --uid 10001 --no-create-home --shell /usr/sbin/nologin app
 
 COPY powertool/ ./powertool/
 COPY backend/ ./backend/
 COPY data/ ./data/
 COPY --from=frontend /build/dist ./frontend/dist
+
+USER app
 
 EXPOSE 8000
 CMD ["uvicorn", "backend.main:app", "--host", "0.0.0.0", "--port", "8000"]
