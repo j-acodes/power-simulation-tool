@@ -13,6 +13,7 @@ from __future__ import annotations
 
 from datetime import datetime
 from io import BytesIO
+from xml.sax.saxutils import escape
 
 from reportlab.lib import colors
 from reportlab.lib.enums import TA_CENTER
@@ -83,11 +84,20 @@ def _fmt(x: float, nd: int = 2) -> str:
     return f"{x:,.{nd}f}"
 
 
+def _text(value: object) -> str:
+    """A runtime value as plain Paragraph text. Paragraph reads markup, and
+    its <img src> opens a local file or URL, so names and labels from the
+    request must never reach it unescaped. The module's own literal prose
+    keeps its deliberate markup (&radic;, <sub>, ...) and is not passed here."""
+    return escape(str(value))
+
+
 def _table(headers: list[str], rows: list[list[str]],
            weights: list[float] | None = None) -> Table:
-    """Styled table; cells are Paragraphs so long values wrap inside the page."""
+    """Styled table; cells are Paragraphs so long values wrap inside the page.
+    Body cells are plain text: they carry names and labels from the diagram."""
     head = [Paragraph(h, _CELL_H) for h in headers]
-    body = [[Paragraph(str(c), _CELL) for c in r] for r in rows]
+    body = [[Paragraph(_text(c), _CELL) for c in r] for r in rows]
     n = len(headers)
     w = weights or [1.0] * n
     scale = _USABLE_W / sum(w)
@@ -514,7 +524,7 @@ def _stage2(stage1s: list[SizingResult], arch: PlantArchitecture,
         name = _fleet_name(fleet, n)
         device = conversion_label(_fleet_kind(fleet))
         if name:
-            f.append(Paragraph(name, _H2))
+            f.append(Paragraph(_text(name), _H2))
 
         # The fleet's own maximum is worth stating only where there is a second
         # fleet held to a different one; on a single-fleet report it is noise
@@ -544,7 +554,7 @@ def _stage2(stage1s: list[SizingResult], arch: PlantArchitecture,
         for idx, section in enumerate(branch.sections):
             busbar = (fleet_busbars[idx] if fleet_busbars and idx < len(fleet_busbars)
                      else None)
-            title = ("Busbar switchgear" + (f" — {busbar['busbar_id']}"
+            title = ("Busbar switchgear" + (f" — {_text(busbar['busbar_id'])}"
                      if multi_busbar and busbar else ""))
             f.append(Paragraph(title, _H3))
             f.append(_table(["Equipment", "Rating", "Binding limit"],
@@ -630,7 +640,7 @@ def _sld_section(sheets: list[Sheet], plant_name: str, project_name: str) -> lis
         cont = (f", continued from sheet {sheet.continued_from}"
                 if sheet.continued_from is not None else "")
         out += [drawing, Paragraph(
-            f"Sheet {sheet.number} — busbar {sheet.busbar_tag}{cont}. Reduced from "
+            f"Sheet {sheet.number} — busbar {_text(sheet.busbar_tag)}{cont}. Reduced from "
             "A3; the legible version is the standalone Download SLD file.", _NOTE),
             Spacer(1, 8)]
     return out
@@ -684,7 +694,7 @@ def report_story(
     summary; omit it and that row reads "—".
     """
     story: list = [
-        Paragraph(f"{plant_name} — Sizing Report", _H1),
+        Paragraph(f"{_text(plant_name)} — Sizing Report", _H1),
         Paragraph(f"Generated {when} · plant sizing tool", _SUB),
         HRFlowable(width="100%", thickness=2, color=_GREEN, spaceBefore=4,
                    spaceAfter=10),
@@ -692,7 +702,7 @@ def report_story(
     story += _summary(stage1s, arch, fleets, ambient_c, feeders_per_busbar, pf_target)
     if notices:
         story.append(Paragraph("Notices", _H2))
-        story += [Paragraph(n, _BODY) for n in notices]
+        story += [Paragraph(_text(n), _BODY) for n in notices]
     story += _sld_section(sld_sheets or [], plant_name, project_name)
     story += _methodology()
     for i, stage1 in enumerate(stage1s):

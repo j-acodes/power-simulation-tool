@@ -382,3 +382,59 @@ def test_a_hybrid_summary_states_each_fleets_power_factor_at_its_device():
     rows = _summary_rows(_hybrid_with_drawn_bess(p_target_bess_mw=2.0))
     assert any(k.endswith("Power factor at inverter") for k in rows)
     assert any(k.endswith("Power factor at PCS") for k in rows)
+
+
+# --- runtime text is plain text, never ReportLab markup (security ticket 01) --
+
+_IMG_MARKUP = '<img src="http://127.0.0.1:9/x.png" width="1" height="1"/>'
+
+
+@pytest.fixture
+def no_image_loading(monkeypatch):
+    """Fail the test if ReportLab tries to open an <img> source, as a URL or a
+    local file. That is the request a markup-bearing name would trigger."""
+    import reportlab.platypus.paraparser as paraparser
+
+    def refuse(src, *args, **kwargs):
+        raise AssertionError(f"ReportLab tried to load an image from {src!r}")
+
+    monkeypatch.setattr(paraparser, "ImageReader", refuse)
+
+
+def _plain_texts(flowables) -> list[str]:
+    """The text each Paragraph renders, after its markup is interpreted."""
+    from reportlab.platypus import Paragraph
+    out = []
+    for f in flowables:
+        if isinstance(f, Paragraph):
+            out.append(f.getPlainText())
+        for row in getattr(f, "_cellvalues", None) or []:
+            out += _plain_texts(row)
+    return out
+
+
+def test_a_plant_name_carrying_img_markup_renders_as_literal_text(no_image_loading):
+    stage1s, arch = _render_args(_minimal())
+    story = report_story(stage1s, arch, plant_name=_IMG_MARKUP)
+    assert f"{_IMG_MARKUP} — Sizing Report" in _plain_texts(story)
+    assert build_pdf_report(stage1s, arch, plant_name=_IMG_MARKUP)[:4] == b"%PDF"
+
+
+def test_a_diagram_label_carrying_markup_renders_as_literal_text_in_a_table(
+        no_image_loading):
+    diagram = _minimal()
+    label = f"A <b B & C {_IMG_MARKUP}"
+    diagram["nodes"][2]["props"] = {
+        "mode": "custom", "name": label, "s_rated_kva": 3000.0,
+        "uk_percent": 6.0, "pk_kw": 30.0, "p0_kw": 3.0, "i0_percent": 0.5,
+        "custom_inverter_name": "Custom 3 MW", "custom_inverter_power_kw_at_40c": 3000.0,
+        "custom_inverter_nominal_ac_voltage_kv": 0.8, "inverter_count": 1,
+    }
+    stage1s, arch = _render_args(diagram)
+    assert label in _plain_texts(report_story(stage1s, arch, plant_name="Plant"))
+    assert build_pdf_report(stage1s, arch, plant_name="Plant")[:4] == b"%PDF"
+
+
+def test_the_methodology_still_renders_its_own_markup():
+    stage1s, arch = _render_args(_minimal())
+    assert "I = S / (√3 · V)" in _plain_texts(report_story(stage1s, arch))
