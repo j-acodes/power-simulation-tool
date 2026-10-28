@@ -23,7 +23,7 @@ Notes. Resolution is an ADR.
 ## Answer
 
 Decided with the user on 2026-10-22 and recorded as
-[ADR-0010](../../../docs/adr/0010-network-check-is-own-code-on-pinned-pandapower.md).
+[ADR-0011](../../../docs/adr/0011-network-check-is-own-code-on-pinned-pandapower.md).
 
 - **Where:** a new `powertool/network/` package. It holds a net builder plus one module per
   check. No sizing module imports it.

@@ -6,7 +6,7 @@
 
 ## Question
 
-ADR-0010 has the network check build a pandapower net from the sized `PlantArchitecture`.
+ADR-0011 has the network check build a pandapower net from the sized `PlantArchitecture`.
 Decide the mapping:
 
 - which buses exist (POC/HV, MV busbar per busbar section, one MV bus per station, station LV
